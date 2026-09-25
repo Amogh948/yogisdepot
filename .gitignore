@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Builds
+dist/
+build/
+frontend/dist/
+backend/dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Uploads
+backend/uploads/
+!backend/uploads/.gitkeep
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Coverage / test
+coverage/
+.nyc_output/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/playwright/.cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+.cache/
+.temp/
