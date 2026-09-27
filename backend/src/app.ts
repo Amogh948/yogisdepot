@@ -23,21 +23,33 @@ import { adminRoutes } from "./routes/admin.routes";
 import { vendorRoutes } from "./routes/vendor.routes";
 import { paymentRoutes, uploadRoutes } from "./routes/upload.routes";
 
-function isLocalDevOrigin(origin: string): boolean {
+function hostnameOf(value: string): string | null {
   try {
-    const { hostname } = new URL(origin);
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+    return new URL(value).hostname.toLowerCase();
   } catch {
-    return false;
+    return null;
   }
 }
 
+function isLocalDevOrigin(origin: string): boolean {
+  const hostname = hostnameOf(origin);
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
+/** Storefront may be apex or www; cookies are cross-site when the API is api.yogisdepot.com. */
 function isAllowedOrigin(origin: string): boolean {
-  const configured = env.CLIENT_URL.split(",").map((value) => value.trim()).filter(Boolean);
-  if (configured.includes(origin)) {
-    return true;
+  const hostname = hostnameOf(origin);
+  if (!hostname) return false;
+  if (!isProduction && isLocalDevOrigin(origin)) return true;
+
+  const allowed = new Set<string>(["yogisdepot.com", "www.yogisdepot.com"]);
+  for (const value of env.CLIENT_URL.split(",")) {
+    const configured = hostnameOf(value.trim());
+    if (!configured) continue;
+    allowed.add(configured);
+    allowed.add(configured.startsWith("www.") ? configured.slice(4) : `www.${configured}`);
   }
-  return !isProduction && isLocalDevOrigin(origin);
+  return allowed.has(hostname);
 }
 
 export function createApp() {
