@@ -155,6 +155,8 @@ Backend domains live under `backend/src/{models,controllers,services,routes,sche
 
 ## Deployment notes
 
+Pushes to `main` that change the frontend or backend are built in GitHub Actions and deployed to your machine. Setup, nginx, systemd, and the required secrets are in [`deploy/README.md`](deploy/README.md).
+
 - Serve the API over HTTPS and set `COOKIE_SECURE=true` plus `SameSite=None` for cross-site cookies
 - Set `CLIENT_URL` to the real frontend origin
 - Use a MongoDB replica set in production

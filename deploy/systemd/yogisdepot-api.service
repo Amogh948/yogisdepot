@@ -1,0 +1,19 @@
+[Unit]
+Description=Yogi's Depot API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/yogisdepot/backend
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/yogisdepot/backend/.env
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

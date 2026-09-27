@@ -1,0 +1,150 @@
+name: CI/CD
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "deploy/**"
+      - ".github/workflows/ci-cd.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "deploy/**"
+      - ".github/workflows/ci-cd.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cicd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: backend-release
+          retention-days: 1
+          path: |
+            backend/dist
+            backend/package.json
+            backend/package-lock.json
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build storefront
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: frontend-release
+          retention-days: 1
+          path: frontend/dist
+
+  deploy:
+    name: Deploy
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-release
+          path: release/backend
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-release
+          path: release/frontend/dist
+      - name: Require deploy secrets
+        run: |
+          missing=0
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing GitHub secret $name. See deploy/README.md"
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - name: Sync release and restart services
+        run: |
+          set -euo pipefail
+          PORT="${DEPLOY_PORT:-22}"
+          DEST="${DEPLOY_PATH:-/opt/yogisdepot}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "${DEPLOY_KNOWN_HOSTS}" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$PORT" -H "$DEPLOY_HOST" > ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+          SSH=(ssh -i ~/.ssh/deploy_key -p "$PORT" -o IdentitiesOnly=yes)
+          RSYNC_RSH="ssh -i ~/.ssh/deploy_key -p $PORT -o IdentitiesOnly=yes"
+          TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
+
+          "${SSH[@]}" "$TARGET" "mkdir -p '$DEST/backend/dist' '$DEST/frontend/dist' '$DEST/deploy' '$DEST/backend/uploads'"
+
+          rsync -az -e "$RSYNC_RSH" \
+            release/backend/package.json \
+            release/backend/package-lock.json \
+            "$TARGET:$DEST/backend/"
+          rsync -az --delete -e "$RSYNC_RSH" \
+            release/backend/dist/ \
+            "$TARGET:$DEST/backend/dist/"
+          rsync -az --delete -e "$RSYNC_RSH" \
+            release/frontend/dist/ \
+            "$TARGET:$DEST/frontend/dist/"
+          rsync -az -e "$RSYNC_RSH" \
+            deploy/release.sh \
+            "$TARGET:$DEST/deploy/release.sh"
+
+          "${SSH[@]}" "$TARGET" "DEPLOY_PATH='$DEST' bash '$DEST/deploy/release.sh'"
