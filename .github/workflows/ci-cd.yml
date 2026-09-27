@@ -118,7 +118,7 @@ jobs:
         run: |
           set -euo pipefail
           PORT="${DEPLOY_PORT:-22}"
-          DEST="${DEPLOY_PATH:-/opt/yogisdepot}"
+          DEST="${DEPLOY_PATH:-/home/ec2-user/yogisdepot}"
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
