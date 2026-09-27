@@ -5,5 +5,10 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
     restoreMocks: true,
+    env: {
+      NODE_ENV: "test",
+      MONGODB_URI: "mongodb://127.0.0.1:27017/yogisdepot-test",
+      JWT_SECRET: "test-jwt-secret-16",
+    },
   },
 });

@@ -27,6 +27,7 @@ jobs:
   backend:
     name: Backend
     runs-on: ubuntu-latest
+    environment: Production
     defaults:
       run:
         working-directory: backend
