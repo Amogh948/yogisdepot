@@ -78,20 +78,24 @@ export function createApp() {
     res.json({ success: true, message: "Yogi's Depot API is healthy", data: { uptime: process.uptime() } });
   });
 
-  app.use(`${API_PREFIX}/auth`, authRoutes);
-  app.use(`${API_PREFIX}/products`, productRoutes);
-  app.use(`${API_PREFIX}/categories`, categoryRoutes);
-  app.use(`${API_PREFIX}/cart`, cartRoutes);
-  app.use(`${API_PREFIX}/wishlist`, wishlistRoutes);
-  app.use(`${API_PREFIX}/addresses`, addressRoutes);
-  app.use(`${API_PREFIX}/orders`, orderRoutes);
-  app.use(`${API_PREFIX}/reviews`, reviewRoutes);
-  app.use(`${API_PREFIX}/coupons`, couponRoutes);
-  app.use(`${API_PREFIX}/notifications`, notificationRoutes);
-  app.use(`${API_PREFIX}/admin`, adminRoutes);
-  app.use(`${API_PREFIX}/vendors`, vendorRoutes);
-  app.use(`${API_PREFIX}/uploads`, uploadRoutes);
-  app.use(`${API_PREFIX}/payments`, paymentRoutes);
+  const api = express.Router();
+  api.use("/auth", authRoutes);
+  api.use("/products", productRoutes);
+  api.use("/categories", categoryRoutes);
+  api.use("/cart", cartRoutes);
+  api.use("/wishlist", wishlistRoutes);
+  api.use("/addresses", addressRoutes);
+  api.use("/orders", orderRoutes);
+  api.use("/reviews", reviewRoutes);
+  api.use("/coupons", couponRoutes);
+  api.use("/notifications", notificationRoutes);
+  api.use("/admin", adminRoutes);
+  api.use("/vendors", vendorRoutes);
+  api.use("/uploads", uploadRoutes);
+  api.use("/payments", paymentRoutes);
+  app.use(API_PREFIX, api);
+  // Production storefront calls https://api.yogisdepot.com/products (no /api/v1 prefix).
+  app.use(api);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

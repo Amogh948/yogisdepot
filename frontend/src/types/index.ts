@@ -232,5 +232,10 @@ export function entityId(value: { id?: string; _id?: string } | string): string 
 export function mediaUrl(url?: string): string {
   if (!url) return "";
   if (url.startsWith("http") || url.startsWith("data:")) return url;
-  return `http://localhost:5000${url.startsWith("/") ? url : `/${url}`}`;
+  const path = url.startsWith("/") ? url : `/${url}`;
+  const configured = (import.meta.env.VITE_API_URL || "").trim();
+  if (configured.startsWith("http")) {
+    return `${new URL(configured).origin}${path}`;
+  }
+  return path;
 }

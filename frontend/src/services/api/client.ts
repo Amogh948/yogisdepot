@@ -1,8 +1,15 @@
 import axios, { AxiosError } from "axios";
 import type { ApiSuccess } from "../../types";
 
+/** Accepts `/api/v1`, `https://api.yogisdepot.com`, or `https://api.yogisdepot.com/api/v1`. */
+export function apiBaseUrl(): string {
+  const raw = (import.meta.env.VITE_API_URL || "/api/v1").trim().replace(/\/+$/, "");
+  if (raw.endsWith("/api/v1")) return raw;
+  return `${raw}/api/v1`;
+}
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "/api/v1",
+  baseURL: apiBaseUrl(),
   withCredentials: true,
   headers: { "Content-Type": "application/json" },
 });
