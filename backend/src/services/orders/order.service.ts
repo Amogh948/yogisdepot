@@ -10,78 +10,54 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../../errors/App
 import { Address } from "../../models/Address";
 import { Cart } from "../../models/Cart";
 import { CouponRedemption } from "../../models/CouponRedemption";
-import { InventoryTransaction } from "../../models/InventoryTransaction";
 import { Order, OrderDocument } from "../../models/Order";
-import { getPlatformSettings } from "../../models/PlatformSettings";
 import { Product } from "../../models/Product";
 import { Vendor } from "../../models/Vendor";
+import { nextOrderNumber } from "../../utils/businessIds";
+import { CAD_CURRENCY } from "../../utils/money";
 import { PaymentService } from "../payments/payment.service";
 import { couponService } from "../coupons/coupon.service";
 import { notificationService } from "../notifications/notification.service";
 import { cartService } from "../cart/cart.service";
+import { checkoutPricingService } from "../checkout/checkoutPricing.service";
+import { deliveryLocationService } from "../delivery/deliveryLocation.service";
+import { inventoryReservationService } from "../inventory/inventoryReservation.service";
+import { scratchService } from "../scratch/scratch.service";
 import { buildPagination, parsePagination } from "../../utils/pagination";
 
-function generateOrderNumber(): string {
-  const stamp = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `YD-${stamp}-${rand}`;
-}
-
 export const orderService = {
-  async quote(userId: string, couponCode?: string) {
-    const cart = await Cart.findOne({ userId });
-    if (!cart || cart.items.length === 0) {
-      throw new BadRequestError("Your cart is empty");
+  async quote(
+    userId: string,
+    couponCode?: string,
+    options?: { scratchRewardId?: string; addressId?: string },
+  ) {
+    let shippingDestination: { country: string; state: string; postalCode?: string } | undefined;
+    if (options?.addressId) {
+      const address = await Address.findOne({ _id: options.addressId, customerId: userId });
+      if (address) {
+        shippingDestination = {
+          country: address.country,
+          state: address.state,
+          postalCode: address.postalCode,
+        };
+      }
     }
-    const settings = await getPlatformSettings();
-    const products = await Product.find({ _id: { $in: cart.items.map((i) => i.productId) } });
-    const productMap = new Map(products.map((p) => [p.id, p]));
-    let subtotal = 0;
-    const lines = cart.items.map((item) => {
-      const product = productMap.get(String(item.productId));
-      if (!product || !product.isActive) {
-        throw new BadRequestError("One or more products are no longer available");
-      }
-      if (product.stock < item.quantity) {
-        throw new BadRequestError(`${product.name} does not have enough stock`);
-      }
-      const totalPrice = product.price * item.quantity;
-      subtotal += totalPrice;
-      return { product, quantity: item.quantity, unitPrice: product.price, totalPrice };
+    return checkoutPricingService.quote({
+      userId,
+      couponCode,
+      scratchRewardId: options?.scratchRewardId,
+      shippingDestination,
     });
-    let discount = 0;
-    let couponSnapshot: OrderDocument["coupon"];
-    if (couponCode) {
-      const applied = await couponService.apply(couponCode, userId, subtotal);
-      discount = applied.amount;
-      couponSnapshot = {
-        code: applied.coupon.couponCode,
-        discountType: applied.coupon.discountType,
-        discountValue: applied.coupon.discountValue,
-        amount: applied.amount,
-      };
-    }
-    const taxable = Math.max(0, subtotal - discount);
-    const shippingFee = taxable >= settings.freeShippingThreshold ? 0 : settings.shippingFee;
-    const tax = Math.round(taxable * settings.taxRate * 100) / 100;
-    const total = Math.round((taxable + shippingFee + tax) * 100) / 100;
-    return { lines, subtotal, discount, shippingFee, tax, total, couponSnapshot, settings };
   },
 
   async releaseStock(order: OrderDocument) {
+    if (order.items.some((i) => i.skuId)) {
+      await inventoryReservationService.releaseForOrder(String(order._id));
+      return;
+    }
+    // Legacy product stock path
     for (const item of order.items) {
-      const updated = await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } }, { new: true });
-      if (updated) {
-        await InventoryTransaction.create({
-          productId: item.productId,
-          vendorId: item.vendorId,
-          type: "return",
-          quantity: item.quantity,
-          previousStock: updated.stock - item.quantity,
-          newStock: updated.stock,
-          reason: `Cancelled ${order.orderNumber}`,
-        });
-      }
+      await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
     }
   },
 
@@ -101,7 +77,16 @@ export const orderService = {
     }
   },
 
-  async create(userId: string, input: { addressId: string; paymentMethod: PaymentMethod; couponCode?: string; notes?: string }) {
+  async create(
+    userId: string,
+    input: {
+      addressId: string;
+      paymentMethod: PaymentMethod;
+      couponCode?: string;
+      scratchRewardId?: string;
+      notes?: string;
+    },
+  ) {
     if (!PAYMENT_METHODS.includes(input.paymentMethod)) {
       throw new BadRequestError("Unsupported payment method");
     }
@@ -109,29 +94,56 @@ export const orderService = {
     if (!address) {
       throw new NotFoundError("Shipping address not found");
     }
+    await deliveryLocationService.assertDeliverable({
+      country: address.country,
+      state: address.state,
+      city: address.city,
+      postalCode: address.postalCode,
+    });
     if (input.paymentMethod === "razorpay") {
       await this.abandonUnpaidCheckouts(userId);
     }
-    const quote = await this.quote(userId, input.couponCode);
-    const orderNumber = generateOrderNumber();
+
+    const quote = await checkoutPricingService.quote({
+      userId,
+      couponCode: input.couponCode,
+      scratchRewardId: input.scratchRewardId,
+      shippingDestination: {
+        country: address.country,
+        state: address.state,
+        postalCode: address.postalCode,
+      },
+    });
+
+    const orderNumber = await nextOrderNumber();
     const payment = await PaymentService.createPayment({
       orderNumber,
-      amount: quote.total,
+      amount: quote.totalCents / 100,
+      amountCents: quote.totalCents,
       method: input.paymentMethod,
       customerId: userId,
     });
 
-    const paymentStatus = input.paymentMethod === "cod" ? "pending" : payment.status === "paid" ? "paid" : "pending";
+    const paymentStatus =
+      input.paymentMethod === "cod" ? "pending" : payment.status === "paid" ? "paid" : "pending";
     const orderStatus: OrderStatus = input.paymentMethod === "mock_online" ? "confirmed" : "pending";
 
     const items = quote.lines.map((line) => ({
-      productId: line.product._id,
-      vendorId: line.product.vendorId,
-      productName: line.product.name,
-      productImage: line.product.thumbnail || line.product.images[0],
+      skuId: line.skuId || undefined,
+      productId: line.productId,
+      vendorId: line.vendorId,
+      productName: line.productName,
+      variantName: line.variantName,
+      skuCode: line.skuCode,
+      productImage: line.productImage,
       quantity: line.quantity,
-      unitPrice: line.unitPrice,
-      totalPrice: line.totalPrice,
+      mrpCents: line.mrpCents,
+      unitPriceCents: line.unitPriceCents,
+      unitPrice: line.unitPriceCents / 100,
+      discountCents: line.lineProductDiscountCents,
+      finalUnitPriceCents: line.unitPriceCents,
+      totalAmountCents: line.lineTotalCents,
+      totalPrice: line.lineTotalCents / 100,
       fulfillmentStatus: orderStatus,
     }));
 
@@ -140,43 +152,40 @@ export const orderService = {
 
     const persist = async (useSession: boolean) => {
       const opts = useSession ? { session } : {};
-      for (const line of quote.lines) {
-        const updated = await Product.findOneAndUpdate(
-          { _id: line.product._id, stock: { $gte: line.quantity } },
-          { $inc: { stock: -line.quantity } },
-          { new: true, ...opts },
-        );
-        if (!updated) {
-          throw new BadRequestError(`${line.product.name} went out of stock`);
-        }
-        await InventoryTransaction.create(
-          [
-            {
-              productId: line.product._id,
-              vendorId: line.product.vendorId,
-              type: "sale",
-              quantity: -line.quantity,
-              previousStock: updated.stock + line.quantity,
-              newStock: updated.stock,
-              reason: `Order ${orderNumber}`,
-            },
-          ],
-          useSession ? { session } : {},
-        );
-      }
 
       const created = await Order.create(
         [
           {
             orderNumber,
             customerId: userId,
+            currency: CAD_CURRENCY,
             items,
+            subtotalCents: quote.subtotalCents,
+            productDiscountCents: quote.productDiscountCents,
+            scratchDiscountCents: quote.scratchDiscountCents,
+            couponDiscountCents: quote.couponDiscountCents,
+            deliveryFeeCents: quote.deliveryFeeCents,
+            platformFeeCents: quote.platformFeeCents,
+            handlingFeeCents: quote.handlingFeeCents,
+            taxCents: quote.taxCents,
+            totalCents: quote.totalCents,
             subtotal: quote.subtotal,
             discount: quote.discount,
             shippingFee: quote.shippingFee,
             tax: quote.tax,
             total: quote.total,
-            coupon: quote.couponSnapshot,
+            taxSnapshot: quote.taxSnapshot,
+            coupon: quote.couponSnapshot
+              ? {
+                  code: quote.couponSnapshot.code,
+                  discountType: quote.couponSnapshot.discountType,
+                  discountValue: quote.couponSnapshot.discountValue,
+                  amountCents: quote.couponSnapshot.amountCents,
+                  amount: quote.couponSnapshot.amountCents / 100,
+                }
+              : undefined,
+            scratchRewardId: quote.scratchRewardId,
+            scratchRewardCode: quote.scratchRewardCode,
             shippingAddress: {
               fullName: address.fullName,
               phone: address.phone,
@@ -191,6 +200,7 @@ export const orderService = {
             paymentMethod: input.paymentMethod,
             paymentStatus,
             paymentReference: payment.reference,
+            transactionId: payment.reference,
             orderStatus,
             notes: input.notes,
           },
@@ -199,8 +209,40 @@ export const orderService = {
       );
       order = created[0];
 
+      for (const line of quote.lines) {
+        if (line.skuId) {
+          await inventoryReservationService.reserve({
+            skuId: line.skuId,
+            quantity: line.quantity,
+            orderId: order._id,
+            orderNumber,
+            session: useSession ? session : undefined,
+          });
+        } else {
+          const updated = await Product.findOneAndUpdate(
+            { _id: line.productId, stock: { $gte: line.quantity } },
+            { $inc: { stock: -line.quantity } },
+            { new: true, ...opts },
+          );
+          if (!updated) {
+            throw new BadRequestError(`${line.productName} went out of stock`);
+          }
+        }
+      }
+
+      if (paymentStatus === "paid" || input.paymentMethod === "cod" || input.paymentMethod === "mock_online") {
+        // For COD, keep reserved until delivered; for paid online mark sold immediately
+        if (paymentStatus === "paid") {
+          await inventoryReservationService.markSold(String(order._id), useSession ? session : undefined);
+        }
+      }
+
       if (quote.couponSnapshot) {
-        const coupon = await couponService.apply(quote.couponSnapshot.code, userId, quote.subtotal);
+        const coupon = await couponService.applyCents(
+          quote.couponSnapshot.code,
+          userId,
+          quote.subtotalCents,
+        );
         await CouponRedemption.create(
           [{ couponId: coupon.coupon._id, userId, orderId: order._id }],
           useSession ? { session } : {},
@@ -208,7 +250,10 @@ export const orderService = {
         await coupon.coupon.updateOne({ $inc: { usedCount: 1 } }, opts);
       }
 
-      // Keep the cart until Razorpay payment succeeds so abandoning checkout does not delete items.
+      if (quote.scratchRewardId) {
+        await scratchService.markRedeemed(quote.scratchRewardId, userId, String(order._id));
+      }
+
       if (input.paymentMethod !== "razorpay") {
         await Cart.findOneAndUpdate({ userId }, { items: [] }, opts);
       }
@@ -221,7 +266,10 @@ export const orderService = {
     } catch (error) {
       await session.abortTransaction().catch(() => undefined);
       const message = error instanceof Error ? error.message : "";
-      if (message.includes("Transaction numbers are only allowed on a replica set") || message.includes("replica set")) {
+      if (
+        message.includes("Transaction numbers are only allowed on a replica set") ||
+        message.includes("replica set")
+      ) {
         await persist(false);
       } else {
         session.endSession();
@@ -238,11 +286,16 @@ export const orderService = {
     const createdOrder = order as OrderDocument;
 
     if (input.paymentMethod === "mock_online") {
-      const verified = await PaymentService.verifyPayment("mock_online", payment.reference, quote.total);
+      const verified = await PaymentService.verifyPayment(
+        "mock_online",
+        payment.reference,
+        quote.totalCents / 100,
+      );
       if (verified.success) {
         createdOrder.paymentStatus = "paid";
         createdOrder.orderStatus = "confirmed";
         await createdOrder.save();
+        await inventoryReservationService.markSold(String(createdOrder._id));
       }
     }
 
@@ -287,7 +340,8 @@ export const orderService = {
     if (order.paymentReference !== payload.razorpay_order_id) {
       throw new BadRequestError("Payment does not match this order");
     }
-    const verified = await PaymentService.verifyPayment("razorpay", payload.razorpay_order_id, order.total, {
+    const amount = order.totalCents ? order.totalCents / 100 : order.total || 0;
+    const verified = await PaymentService.verifyPayment("razorpay", payload.razorpay_order_id, amount, {
       paymentId: payload.razorpay_payment_id,
       signature: payload.razorpay_signature,
     });
@@ -298,11 +352,13 @@ export const orderService = {
     }
     order.paymentStatus = "paid";
     order.orderStatus = "confirmed";
+    order.transactionId = payload.razorpay_payment_id;
     order.items = order.items.map((item) => {
       item.fulfillmentStatus = "confirmed";
       return item;
     });
     await order.save();
+    await inventoryReservationService.markSold(String(order._id));
     await Cart.findOneAndUpdate({ userId }, { items: [] });
     return order;
   },
@@ -337,7 +393,8 @@ export const orderService = {
     if (order.paymentStatus === "paid") {
       order.paymentStatus = "refunded";
       if (order.paymentReference) {
-        await PaymentService.refundPayment(order.paymentMethod, order.paymentReference, order.total);
+        const amount = order.totalCents ? order.totalCents / 100 : order.total || 0;
+        await PaymentService.refundPayment(order.paymentMethod, order.paymentReference, amount);
       }
     } else {
       order.paymentStatus = "failed";
@@ -346,7 +403,11 @@ export const orderService = {
     if (wasUnpaid) {
       await cartService.restoreIfEmpty(
         userId,
-        order.items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        order.items.map((item) => ({
+          skuId: item.skuId,
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
       );
     }
     await notificationService.notify({
@@ -409,6 +470,7 @@ export const orderService = {
     });
     if (status === "delivered" && order.paymentMethod === "cod") {
       order.paymentStatus = "paid";
+      await inventoryReservationService.markSold(String(order._id));
     }
     await order.save();
     const notifyType =

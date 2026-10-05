@@ -41,6 +41,14 @@ export const categoryService = {
     return category;
   },
 
+  async getById(id: string) {
+    const category = await Category.findById(id).populate("parentId", "name slug");
+    if (!category) {
+      throw new NotFoundError("Category not found");
+    }
+    return category;
+  },
+
   async getBySlug(slug: string) {
     const category = await Category.findOne({ slug, isActive: true });
     if (!category) {

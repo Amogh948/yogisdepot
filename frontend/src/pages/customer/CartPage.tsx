@@ -11,6 +11,7 @@ import { mediaUrl } from "../../types";
 import { useAuthStore } from "../../store/auth.store";
 import { useToastStore } from "../../store/toast.store";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
+import { formatCad } from "../../utils/money";
 
 export function CartPage() {
   const user = useAuthStore((s) => s.user);
@@ -84,7 +85,7 @@ export function CartPage() {
                 </button>
               </div>
             </div>
-            <p className="shrink-0 text-sm font-semibold">₹{item.lineTotal}</p>
+            <p className="shrink-0 text-sm font-semibold">{formatCad(item.lineTotal)}</p>
           </article>
         ))}
         <div className="min-w-0 pt-2">
@@ -95,9 +96,9 @@ export function CartPage() {
       <aside className="h-fit min-w-0 rounded-[14px] border border-yd-border bg-white p-4 shadow-soft lg:sticky lg:top-28">
         <h2 className="font-display text-xl text-yd-forest">Order summary</h2>
         <dl className="mt-3 space-y-1.5 text-sm">
-          <div className="flex justify-between"><dt className="text-yd-muted">Item total</dt><dd>₹{data.subtotal}</dd></div>
-          <div className="flex justify-between"><dt className="text-yd-muted">Delivery</dt><dd>{data.subtotal >= 499 ? "Free" : "₹40"}</dd></div>
-          <div className="flex justify-between border-t border-yd-border pt-2 text-base font-semibold"><dt>Total</dt><dd>₹{data.subtotal >= 499 ? data.subtotal : data.subtotal + 40}</dd></div>
+          <div className="flex justify-between"><dt className="text-yd-muted">Item total</dt><dd>{formatCad(data.subtotal)}</dd></div>
+          <div className="flex justify-between"><dt className="text-yd-muted">Delivery & tax</dt><dd className="text-yd-muted">At checkout</dd></div>
+          <div className="flex justify-between border-t border-yd-border pt-2 text-base font-semibold"><dt>Subtotal</dt><dd>{formatCad(data.subtotal)}</dd></div>
         </dl>
         <Button className="mt-4 hidden w-full lg:inline-flex" size="lg" onClick={() => navigate("/checkout")}>
           Proceed to checkout
@@ -113,7 +114,7 @@ export function CartPage() {
         <div className="mx-auto flex w-full max-w-store items-center gap-3">
           <div>
             <p className="text-xs text-yd-muted">Total</p>
-            <p className="text-lg font-bold text-yd-ink">₹{data.subtotal}</p>
+            <p className="text-lg font-bold text-yd-ink">{formatCad(data.subtotal)}</p>
           </div>
           <Button variant="accent" className="flex-1" onClick={() => navigate("/checkout")}>
             Checkout →

@@ -1,8 +1,9 @@
 import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Leaf, RefreshCcw, ShieldCheck, Truck } from "lucide-react";
 import { useProducts, useCategories, useWishlist } from "../../hooks/useCatalog";
-import { ProductCarousel } from "../../components/product/ProductCarousel";
+import { merchandisingApi } from "../../services/api/products.api";
 import { CategoryChipCarousel } from "../../components/category/CategoryCard";
 import { mediaUrl, entityId, type Product, type Category } from "../../types";
 import { Skeleton, SectionHeader } from "../../components/ui/Feedback";
@@ -26,6 +27,10 @@ export function HomePage() {
   const popular = useProducts({ sort: "popular", limit: 8 });
   const deals = useProducts({ discount: "true", sort: "discount", limit: 8 });
   const newest = useProducts({ sort: "newest", limit: 8 });
+  const merch = useQuery({
+    queryKey: ["merchandising", "home"],
+    queryFn: () => merchandisingApi.list("home"),
+  });
   const categories = useCategories();
   const { addToCart, toggleWishlist } = useCommerceActions();
   const wishlist = useWishlist();
@@ -164,6 +169,19 @@ export function HomePage() {
         seeAllTo="/products?sort=popular"
       />
 
+      {(merch.data?.data || [])
+        .filter((rail) => rail.products?.length)
+        .map((rail) => (
+          <ProductCarousel
+            key={rail.id}
+            title={rail.name}
+            products={rail.products}
+            wished={wished}
+            onAdd={onAdd}
+            onWishlist={onWish}
+          />
+        ))}
+
       <ProductCarousel
         title="Today's deals"
         loading={deals.isLoading}
@@ -196,7 +214,7 @@ export function HomePage() {
       <div className="rounded-[14px] bg-yd-saffron px-5 py-5 text-center text-white sm:flex sm:items-center sm:justify-between sm:text-left">
         <div>
           <p className="font-display text-xl sm:text-2xl">Wholesome food. Happier homes.</p>
-          <p className="mt-0.5 text-sm text-white/90">Free delivery on orders over ₹499</p>
+          <p className="mt-0.5 text-sm text-white/90">Free delivery on orders over $75</p>
         </div>
         <Link to="/products" className="mt-3 inline-flex min-h-10 items-center rounded-full bg-yd-green px-5 text-sm font-bold text-white hover:bg-yd-green-dark sm:mt-0">
           Shop Now

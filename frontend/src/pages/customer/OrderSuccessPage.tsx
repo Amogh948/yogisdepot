@@ -7,6 +7,7 @@ import { entityId } from "../../types";
 import { useProducts } from "../../hooks/useCatalog";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
+import { formatCad } from "../../utils/money";
 
 export function OrderSuccessPage() {
   const [params] = useSearchParams();
@@ -41,7 +42,7 @@ export function OrderSuccessPage() {
         <div className="mt-5 rounded-[12px] bg-yd-green/10 px-4 py-3 text-left">
           <p className="text-sm font-semibold text-yd-ink">{data.orderNumber}</p>
           <p className="mt-1 text-sm text-yd-muted">
-            Total ₹{data.total} · {data.paymentMethod === "cod" ? "Cash on delivery" : "Paid online"}
+            Total {formatCad(data.total)} · {data.paymentMethod === "cod" ? "Cash on delivery" : "Paid online"}
           </p>
           <p className="mt-1 text-sm text-yd-muted">
             Est. delivery in 2–4 days · {data.shippingAddress?.city}

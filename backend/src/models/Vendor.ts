@@ -51,7 +51,7 @@ const vendorSchema = new Schema<VendorDocument>(
       city: { type: String, required: true },
       state: { type: String, required: true },
       postalCode: { type: String, required: true },
-      country: { type: String, required: true, default: "India" },
+      country: { type: String, required: true, default: "Canada" },
     },
     status: { type: String, enum: VENDOR_STATUSES, default: "pending" },
     approvalStatus: { type: String, enum: VENDOR_APPROVAL_STATUSES, default: "pending" },

@@ -25,16 +25,25 @@ import { AddressesPage, ProfilePage, VendorApplyPage, WishlistPage } from "./pag
 import {
   AdminAnalyticsPage,
   AdminCategoriesPage,
+  AdminCategoryDetailPage,
   AdminCouponsPage,
   AdminCustomersPage,
   AdminDashboardPage,
+  AdminOrderDetailPage,
   AdminOrdersPage,
+  AdminProductEditPage,
   AdminProductsPage,
+  AdminProductWizardPage,
   AdminReviewsPage,
   AdminSettingsPage,
   AdminVendorDetailPage,
   AdminVendorsPage,
 } from "./pages/admin/AdminPages";
+import { AdminMerchandisingFormPage, AdminMerchandisingPage } from "./pages/admin/AdminMerchandisingPages";
+import {
+  AdminDeliveryLocationFormPage,
+  AdminDeliveryLocationsPage,
+} from "./pages/admin/AdminDeliveryLocationsPage";
 import {
   VendorAnalyticsPage,
   VendorDashboardPage,
@@ -96,12 +105,22 @@ export default function App() {
           <Route path="vendors" element={<AdminVendorsPage />} />
           <Route path="vendors/:id" element={<AdminVendorDetailPage />} />
           <Route path="products" element={<AdminProductsPage />} />
+          <Route path="products/new" element={<AdminProductWizardPage />} />
+          <Route path="products/:id/edit" element={<AdminProductEditPage />} />
+          <Route path="merchandising" element={<AdminMerchandisingPage />} />
+          <Route path="merchandising/new" element={<AdminMerchandisingFormPage />} />
+          <Route path="merchandising/:id" element={<AdminMerchandisingFormPage />} />
           <Route path="categories" element={<AdminCategoriesPage />} />
+          <Route path="categories/:id" element={<AdminCategoryDetailPage />} />
           <Route path="orders" element={<AdminOrdersPage />} />
+          <Route path="orders/:id" element={<AdminOrderDetailPage />} />
           <Route path="customers" element={<AdminCustomersPage />} />
           <Route path="coupons" element={<AdminCouponsPage />} />
           <Route path="reviews" element={<AdminReviewsPage />} />
           <Route path="analytics" element={<AdminAnalyticsPage />} />
+          <Route path="delivery-locations" element={<AdminDeliveryLocationsPage />} />
+          <Route path="delivery-locations/new" element={<AdminDeliveryLocationFormPage />} />
+          <Route path="delivery-locations/:id" element={<AdminDeliveryLocationFormPage />} />
           <Route path="settings" element={<AdminSettingsPage />} />
         </Route>
       </Route>

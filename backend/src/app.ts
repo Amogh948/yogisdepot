@@ -22,6 +22,9 @@ import { notificationRoutes } from "./routes/notification.routes";
 import { adminRoutes } from "./routes/admin.routes";
 import { vendorRoutes } from "./routes/vendor.routes";
 import { paymentRoutes, uploadRoutes } from "./routes/upload.routes";
+import { scratchRoutes } from "./routes/scratch.routes";
+import { merchandisingRoutes } from "./routes/merchandising.routes";
+import { deliveryRoutes } from "./routes/delivery.routes";
 
 function hostnameOf(value: string): string | null {
   try {
@@ -100,6 +103,9 @@ export function createApp() {
   api.use("/orders", orderRoutes);
   api.use("/reviews", reviewRoutes);
   api.use("/coupons", couponRoutes);
+  api.use("/scratch", scratchRoutes);
+  api.use("/merchandising", merchandisingRoutes);
+  api.use("/delivery-locations", deliveryRoutes);
   api.use("/notifications", notificationRoutes);
   api.use("/admin", adminRoutes);
   api.use("/vendors", vendorRoutes);

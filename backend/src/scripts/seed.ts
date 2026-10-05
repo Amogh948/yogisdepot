@@ -46,7 +46,7 @@ async function seed(): Promise<void> {
       description: "Crunchy snacks, pantry staples, and everyday groceries.",
       email: "vendor@yogisdepot.local",
       phone: "9000000004",
-      address: { addressLine1: "12 Market Road", city: "Pune", state: "Maharashtra", postalCode: "411001", country: "India" },
+      address: { addressLine1: "12 Market Street", city: "Toronto", state: "ON", postalCode: "M5V 2T6", country: "Canada" },
       status: "active",
       approvalStatus: "approved",
       commissionRate: 10,
@@ -58,7 +58,7 @@ async function seed(): Promise<void> {
       description: "Fresh bakery, cookies, and artisanal breads.",
       email: "bakery@yogisdepot.local",
       phone: "9000000005",
-      address: { addressLine1: "88 Baker Lane", city: "Bengaluru", state: "Karnataka", postalCode: "560001", country: "India" },
+      address: { addressLine1: "88 Baker Lane", city: "Vancouver", state: "BC", postalCode: "V6B 1A1", country: "Canada" },
       status: "active",
       approvalStatus: "approved",
       commissionRate: 12,
@@ -137,13 +137,13 @@ async function seed(): Promise<void> {
 
   await Address.create({
     customerId: customer._id,
-    fullName: "Ravi Sharma",
-    phone: "9000000002",
-    addressLine1: "42 River View",
-    city: "Pune",
-    state: "Maharashtra",
-    postalCode: "411045",
-    country: "India",
+    fullName: "Alex Sharma",
+    phone: "4165550102",
+    addressLine1: "42 River Street",
+    city: "Toronto",
+    state: "ON",
+    postalCode: "M5H 2N2",
+    country: "Canada",
     addressType: "home",
     isDefault: true,
   });
@@ -186,7 +186,23 @@ async function seed(): Promise<void> {
   });
 
   await getPlatformSettings();
-  logger.info("Seed complete");
+  const { Warehouse } = await import("../models/Warehouse");
+  const { DEFAULT_WAREHOUSE_CODE } = await import("../config/constants");
+  const { seedCanadianTaxRates } = await import("./seedCanadianTaxRates");
+  if (!(await Warehouse.findOne({ code: DEFAULT_WAREHOUSE_CODE }))) {
+    await Warehouse.create({
+      name: "Toronto Fulfillment Center",
+      code: DEFAULT_WAREHOUSE_CODE,
+      address: "100 King Street West",
+      city: "Toronto",
+      state: "ON",
+      pincode: "M5X 1A9",
+      country: "Canada",
+      isActive: true,
+    });
+  }
+  await seedCanadianTaxRates();
+  logger.info("Seed complete — run npm run migrate:fmcg to build SKU/pricing/inventory stacks");
   logger.info("Dev accounts (password Password@123): admin@yogisdepot.local, vendor@yogisdepot.local, bakery@yogisdepot.local, customer@yogisdepot.local");
   await disconnectDatabase();
 }

@@ -12,6 +12,22 @@ import { adminOrderController } from "../controllers/orders/order.controller";
 import { adminVendorController } from "../controllers/vendor/vendor.controller";
 import { adminReviewController } from "../controllers/products/review.controller";
 import { adminCouponController } from "../controllers/coupons/coupon.controller";
+import {
+  adminFmcgController,
+  productStackUpdateSchema,
+  productWizardSchema,
+} from "../controllers/fmcg/fmcg.controller";
+import {
+  adminMerchandisingController,
+  merchandisingSchema,
+  merchandisingUpdateSchema,
+  productMerchandisingSchema,
+} from "../controllers/merchandising/merchandising.controller";
+import {
+  adminDeliveryLocationController,
+  deliveryLocationSchema,
+  deliveryLocationUpdateSchema,
+} from "../controllers/delivery/deliveryLocation.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { requireRoles } from "../middleware/role.middleware";
 import { validate } from "../middleware/validation.middleware";
@@ -43,12 +59,33 @@ router.get("/vendors/:id", adminVendorController.get);
 router.patch("/vendors/:id/status", validate(vendorStatusSchema), adminVendorController.setStatus);
 
 router.get("/categories", adminCategoryController.list);
+router.get("/categories/:id", adminCategoryController.get);
 
 router.get("/products", adminProductController.list);
 router.post("/products", validate(createProductSchema), adminProductController.create);
+router.post("/products/wizard", validate(productWizardSchema), adminFmcgController.createProductWizard);
+router.get("/products/:id", adminFmcgController.getProductStack);
+router.get("/products/:id/merchandising", adminMerchandisingController.forProduct);
+router.put("/products/:id/merchandising", validate(productMerchandisingSchema), adminMerchandisingController.setProduct);
+router.put("/products/:id/stack", validate(productStackUpdateSchema), adminFmcgController.updateProductStack);
 router.put("/products/:id", validate(updateProductSchema), adminProductController.update);
 router.patch("/products/:id/status", validate(productStatusSchema), adminProductController.setStatus);
 router.delete("/products/:id", adminProductController.remove);
+
+router.get("/brands", adminFmcgController.brands);
+router.post("/brands", adminFmcgController.createBrand);
+router.get("/tax-categories", adminFmcgController.taxCategories);
+router.post("/tax-categories", adminFmcgController.createTaxCategory);
+router.get("/tax-rates", adminFmcgController.taxRates);
+router.post("/tax-rates", adminFmcgController.createTaxRate);
+router.get("/warehouses", adminFmcgController.warehouses);
+router.post("/warehouses", adminFmcgController.createWarehouse);
+router.get("/skus", adminFmcgController.skus);
+router.get("/inventory", adminFmcgController.inventory);
+router.get("/batches", adminFmcgController.batches);
+router.get("/pricing", adminFmcgController.pricing);
+router.get("/scratch-campaigns", adminFmcgController.scratchCampaigns);
+router.post("/scratch-campaigns", adminFmcgController.createScratchCampaign);
 
 router.get("/orders", adminOrderController.list);
 router.get("/orders/:id", adminOrderController.get);
@@ -63,5 +100,17 @@ router.get("/reviews", adminReviewController.list);
 router.patch("/reviews/:id", validate(reviewModerationSchema), adminReviewController.moderate);
 
 router.post("/uploads", uploadImage.array("files", 8), uploadController.upload);
+
+router.get("/merchandising", adminMerchandisingController.list);
+router.post("/merchandising", validate(merchandisingSchema), adminMerchandisingController.create);
+router.get("/merchandising/:id", adminMerchandisingController.get);
+router.put("/merchandising/:id", validate(merchandisingUpdateSchema), adminMerchandisingController.update);
+router.delete("/merchandising/:id", adminMerchandisingController.remove);
+
+router.get("/delivery-locations", adminDeliveryLocationController.list);
+router.post("/delivery-locations", validate(deliveryLocationSchema), adminDeliveryLocationController.create);
+router.get("/delivery-locations/:id", adminDeliveryLocationController.get);
+router.put("/delivery-locations/:id", validate(deliveryLocationUpdateSchema), adminDeliveryLocationController.update);
+router.delete("/delivery-locations/:id", adminDeliveryLocationController.remove);
 
 export const adminRoutes = router;

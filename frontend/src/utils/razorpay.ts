@@ -39,9 +39,8 @@ const PUBLIC_EMAIL = /^[^\s@]+@[^\s@]+\.(?!local$)[a-z]{2,}$/i;
 export function toRazorpayContact(phone?: string): string | undefined {
   if (!phone) return undefined;
   const digits = phone.replace(/\D/g, "");
-  if (digits.length === 10) return `+91${digits}`;
-  if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
-  if (digits.length === 11 && digits.startsWith("0")) return `+91${digits.slice(1)}`;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
   if (digits.length > 10 && digits.length <= 15) return `+${digits}`;
   return undefined;
 }
@@ -91,7 +90,7 @@ export async function openRazorpayCheckout(options: RazorpayCheckoutOptions): Pr
   const checkout = new window.Razorpay({
     key: options.key,
     amount: Math.round(Number(options.amount)),
-    currency: options.currency || "INR",
+    currency: options.currency || "CAD",
     name: toRazorpayName(options.name) || "Yogis Depot",
     description: options.description?.replace(/[^a-zA-Z0-9 .'-]/g, " ").trim() || "Order payment",
     order_id: options.order_id,

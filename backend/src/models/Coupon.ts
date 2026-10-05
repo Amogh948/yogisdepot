@@ -4,8 +4,12 @@ import { DISCOUNT_TYPES, DiscountType } from "../config/constants";
 export interface CouponDocument extends Document {
   couponCode: string;
   discountType: DiscountType;
+  /** fixed = cents; percentage = percent points */
   discountValue: number;
-  minimumOrderValue: number;
+  minimumOrderValueCents: number;
+  maximumDiscountCents?: number;
+  /** Legacy dollar fields */
+  minimumOrderValue?: number;
   maximumDiscount?: number;
   startDate: Date;
   endDate: Date;
@@ -22,6 +26,8 @@ const couponSchema = new Schema<CouponDocument>(
     couponCode: { type: String, required: true, uppercase: true, trim: true },
     discountType: { type: String, enum: DISCOUNT_TYPES, required: true },
     discountValue: { type: Number, required: true, min: 0 },
+    minimumOrderValueCents: { type: Number, default: 0, min: 0 },
+    maximumDiscountCents: { type: Number, min: 0 },
     minimumOrderValue: { type: Number, default: 0, min: 0 },
     maximumDiscount: { type: Number, min: 0 },
     startDate: { type: Date, required: true },

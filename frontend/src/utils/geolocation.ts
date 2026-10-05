@@ -70,7 +70,7 @@ async function reverseGeocodeNominatim(latitude: number, longitude: number): Pro
     city: city || street,
     state: state || city,
     postalCode: address.postcode || "",
-    country: address.country || "India",
+    country: address.country || "Canada",
     landmark: firstValue(address.suburb, address.neighbourhood) || undefined,
   };
 }
@@ -90,7 +90,7 @@ async function reverseGeocodeBigDataCloud(latitude: number, longitude: number): 
     city: city || firstValue(payload.principalSubdivision),
     state: firstValue(payload.principalSubdivision, city),
     postalCode: payload.postcode || "",
-    country: payload.countryName || "India",
+    country: payload.countryName || "Canada",
   };
 }
 

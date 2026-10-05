@@ -42,7 +42,14 @@ describe("ProductCard", () => {
   it("renders name and price", () => {
     renderCard(<ProductCard product={product} />);
     expect(screen.getByText("Masala Chips")).toBeInTheDocument();
-    expect(screen.getByText("₹49")).toBeInTheDocument();
+    expect(screen.getByText(/\$49\.00/)).toBeInTheDocument();
+  });
+
+  it("renders without crashing when images are missing", () => {
+    const bare = { ...product, images: undefined as unknown as string[], thumbnail: undefined };
+    renderCard(<ProductCard product={bare} />);
+    expect(screen.getByText("Masala Chips")).toBeInTheDocument();
+    expect(screen.getByText("No image")).toBeInTheDocument();
   });
 });
 

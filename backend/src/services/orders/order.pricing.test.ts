@@ -1,24 +1,64 @@
 import { describe, expect, it } from "vitest";
+import { addCents, applyBps, clampNonNegativeCents } from "../../utils/money";
 
-function computeTotals(subtotal: number, discount: number, taxRate: number, shippingFee: number, freeAt: number) {
-  const taxable = Math.max(0, subtotal - discount);
-  const shipping = taxable >= freeAt ? 0 : shippingFee;
-  const tax = Math.round(taxable * taxRate * 100) / 100;
-  const total = Math.round((taxable + shipping + tax) * 100) / 100;
-  return { taxable, shipping, tax, total };
+/** Mirrors checkoutPricing fee + tax assembly in cents. */
+function checkoutTotal(input: {
+  subtotalCents: number;
+  couponDiscountCents: number;
+  scratchDiscountCents: number;
+  deliveryFeeCents: number;
+  platformFeeCents: number;
+  handlingFeeCents: number;
+  taxBps: number;
+  freeShippingThresholdCents: number;
+}) {
+  const afterDiscounts = clampNonNegativeCents(
+    input.subtotalCents - input.couponDiscountCents - input.scratchDiscountCents,
+  );
+  const delivery =
+    afterDiscounts >= input.freeShippingThresholdCents ? 0 : input.deliveryFeeCents;
+  const taxCents = applyBps(afterDiscounts, input.taxBps);
+  const totalCents = addCents(
+    afterDiscounts,
+    delivery,
+    input.platformFeeCents,
+    input.handlingFeeCents,
+    taxCents,
+  );
+  return { afterDiscounts, delivery, taxCents, totalCents };
 }
 
-describe("order pricing", () => {
-  it("computes tax and free shipping on the server", () => {
-    const result = computeTotals(600, 50, 0.05, 40, 499);
-    expect(result.shipping).toBe(0);
-    expect(result.tax).toBe(27.5);
-    expect(result.total).toBe(577.5);
+describe("checkout pricing cents assembly", () => {
+  it("applies product/coupon/scratch/fees/tax in CAD cents", () => {
+    const result = checkoutTotal({
+      subtotalCents: 10000,
+      couponDiscountCents: 500,
+      scratchDiscountCents: 250,
+      deliveryFeeCents: 499,
+      platformFeeCents: 99,
+      handlingFeeCents: 49,
+      taxBps: 1300,
+      freeShippingThresholdCents: 7500,
+    });
+    expect(result.afterDiscounts).toBe(9250);
+    expect(result.delivery).toBe(0);
+    expect(result.taxCents).toBe(1203);
+    expect(result.totalCents).toBe(9250 + 99 + 49 + 1203);
   });
 
-  it("applies shipping below the threshold", () => {
-    const result = computeTotals(200, 0, 0.05, 40, 499);
-    expect(result.shipping).toBe(40);
-    expect(result.total).toBe(250);
+  it("charges delivery below free-shipping threshold", () => {
+    const result = checkoutTotal({
+      subtotalCents: 2000,
+      couponDiscountCents: 0,
+      scratchDiscountCents: 0,
+      deliveryFeeCents: 499,
+      platformFeeCents: 0,
+      handlingFeeCents: 0,
+      taxBps: 500,
+      freeShippingThresholdCents: 7500,
+    });
+    expect(result.delivery).toBe(499);
+    expect(result.taxCents).toBe(100);
+    expect(result.totalCents).toBe(2000 + 499 + 100);
   });
 });

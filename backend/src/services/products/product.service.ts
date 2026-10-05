@@ -1,12 +1,22 @@
 import { FilterQuery } from "mongoose";
 import { ForbiddenError, NotFoundError } from "../../errors/AppError";
+import { Cart } from "../../models/Cart";
 import { Category } from "../../models/Category";
+import { Inventory } from "../../models/Inventory";
+import { InventoryBatch } from "../../models/InventoryBatch";
+import { InventoryReservation } from "../../models/InventoryReservation";
 import { InventoryTransaction } from "../../models/InventoryTransaction";
-import { Product, ProductDocument } from "../../models/Product";
+import { MerchandisingCollection } from "../../models/MerchandisingCollection";
+import { Pricing } from "../../models/Pricing";
+import { Product, ProductDocument, ProductImage } from "../../models/Product";
+import { Review } from "../../models/Review";
+import { Sku } from "../../models/Sku";
+import { Wishlist } from "../../models/Wishlist";
 import { notificationService } from "../notifications/notification.service";
 import { Vendor } from "../../models/Vendor";
 import { buildPagination, parsePagination } from "../../utils/pagination";
-import { uniqueSlug } from "../../utils/slug";
+import { catalogAdminService } from "../catalog/catalogAdmin.service";
+import { dollarsToCents } from "../../utils/money";
 
 export interface ProductListQuery {
   page?: number;
@@ -27,26 +37,54 @@ export interface ProductListQuery {
   discount?: string;
 }
 
-function discountPercent(product: { price: number; compareAtPrice?: number }): number {
-  if (!product.compareAtPrice || product.compareAtPrice <= product.price) {
+function discountPercent(product: { price?: number; compareAtPrice?: number }): number {
+  if (!product.compareAtPrice || !product.price || product.compareAtPrice <= product.price) {
     return 0;
   }
   return Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100);
 }
 
+function coerceImages(images: unknown): ProductImage[] | undefined {
+  if (!Array.isArray(images) || images.length === 0) return undefined;
+  if (typeof images[0] === "string") {
+    return (images as string[]).map((url, index) => ({
+      url,
+      type: "front" as const,
+      displayOrder: index,
+      isPrimary: index === 0,
+    }));
+  }
+  return images as ProductImage[];
+}
+
 export const productService = {
   async create(input: Partial<ProductDocument> & { name: string; sku: string; vendorId: string; categoryId: string }) {
-    const slug = uniqueSlug(input.name);
-    const discount = discountPercent({
-      price: input.price ?? 0,
-      compareAtPrice: input.compareAtPrice,
-    });
-    return Product.create({
-      ...input,
-      slug,
-      sku: input.sku.toUpperCase(),
-      thumbnail: input.thumbnail || input.images?.[0],
-      discount,
+    // Prefer FMCG stack: Product + variant + SKU + pricing + inventory
+    const images = coerceImages(input.images) || [];
+    return catalogAdminService.createProductStack({
+      name: input.name,
+      brandName: input.brand,
+      categoryId: input.categoryId,
+      vendorId: String(input.vendorId),
+      description: input.description || input.name,
+      shortDescription: input.shortDescription,
+      ingredients: input.ingredients,
+      nutritionalInformation: input.nutritionInformation || input.nutritionalInformation,
+      allergenInformation: input.allergens || input.allergenInformation,
+      storageInstructions: input.storageInstructions,
+      tags: input.tags,
+      images,
+      variants: [
+        {
+          name: input.unit || "Default",
+          packQuantity: 1,
+          skuCode: input.sku,
+          mrpCents: dollarsToCents(input.compareAtPrice ?? input.price ?? 0),
+          costPriceCents: dollarsToCents(input.costPrice ?? 0),
+          sellingPriceCents: dollarsToCents(input.price ?? 0),
+          availableQuantity: input.stock ?? 0,
+        },
+      ],
     });
   },
 
@@ -58,23 +96,70 @@ export const productService = {
     if (vendorId && String(product.vendorId) !== vendorId) {
       throw new ForbiddenError("You can only manage your own products");
     }
-    Object.assign(product, input);
+    const images = coerceImages(input.images);
+    Object.assign(product, { ...input, ...(images ? { images } : {}) });
     if (input.price !== undefined || input.compareAtPrice !== undefined) {
       product.discount = discountPercent(product);
     }
-    if (input.images?.length && !input.thumbnail) {
-      product.thumbnail = input.images[0];
+    if (images?.length && !input.thumbnail) {
+      product.thumbnail = images[0].url;
     }
     await product.save();
     return product;
   },
 
   async setStatus(id: string, isActive: boolean, vendorId?: string) {
-    return this.update(id, { isActive }, vendorId);
+    const product = await Product.findById(id);
+    if (!product) {
+      throw new NotFoundError("Product not found");
+    }
+    if (vendorId && String(product.vendorId) !== vendorId) {
+      throw new ForbiddenError("You can only manage your own products");
+    }
+    const updated = await Product.findByIdAndUpdate(
+      id,
+      { isActive, status: isActive ? "active" : "inactive" },
+      { new: true },
+    );
+    if (!updated) {
+      throw new NotFoundError("Product not found");
+    }
+    return updated;
   },
 
   async remove(id: string, vendorId?: string) {
-    return this.setStatus(id, false, vendorId);
+    const product = await Product.findById(id);
+    if (!product) {
+      throw new NotFoundError("Product not found");
+    }
+    if (vendorId && String(product.vendorId) !== vendorId) {
+      throw new ForbiddenError("You can only manage your own products");
+    }
+
+    const skus = await Sku.find({ productId: product._id }).select("_id");
+    const skuIds = skus.map((sku) => sku._id);
+
+    if (skuIds.length) {
+      await Promise.all([
+        Pricing.deleteMany({ skuId: { $in: skuIds } }),
+        Inventory.deleteMany({ skuId: { $in: skuIds } }),
+        InventoryBatch.deleteMany({ skuId: { $in: skuIds } }),
+        InventoryReservation.deleteMany({ skuId: { $in: skuIds } }),
+        Cart.updateMany({}, { $pull: { items: { skuId: { $in: skuIds } } } }),
+      ]);
+      await Sku.deleteMany({ _id: { $in: skuIds } });
+    }
+
+    await Promise.all([
+      MerchandisingCollection.updateMany({ productIds: product._id }, { $pull: { productIds: product._id } }),
+      Wishlist.deleteMany({ productId: product._id }),
+      Review.deleteMany({ productId: product._id }),
+      InventoryTransaction.deleteMany({ productId: product._id }),
+      Cart.updateMany({}, { $pull: { items: { productId: product._id } } }),
+    ]);
+
+    await Product.deleteOne({ _id: product._id });
+    return product;
   },
 
   async getById(id: string) {
@@ -86,7 +171,10 @@ export const productService = {
   },
 
   async getBySlug(slug: string) {
-    const product = await Product.findOne({ slug, isActive: true })
+    const product = await Product.findOne({
+      slug,
+      $or: [{ isActive: true }, { status: "active" }],
+    })
       .populate("vendorId", "businessName slug logo")
       .populate("categoryId", "name slug")
       .populate("subCategoryId", "name slug");
@@ -190,7 +278,7 @@ export const productService = {
       categoryId: product.categoryId,
     })
       .limit(8)
-      .select("name slug thumbnail price compareAtPrice discount rating reviewCount isVegetarian stock");
+      .select("name slug thumbnail images price compareAtPrice discount rating reviewCount isVegetarian stock variants");
   },
 
   async adjustInventory(
@@ -207,7 +295,7 @@ export const productService = {
     if (String(product.vendorId) !== vendorId) {
       throw new ForbiddenError("You can only manage your own inventory");
     }
-    const previousStock = product.stock;
+    const previousStock = product.stock ?? 0;
     let delta = quantity;
     if (type === "sale" || type === "damage") {
       delta = -Math.abs(quantity);
@@ -226,7 +314,7 @@ export const productService = {
       newStock,
       reason,
     });
-    if (newStock <= product.lowStockThreshold) {
+    if (newStock <= (product.lowStockThreshold ?? 10)) {
       const vendor = await Vendor.findById(vendorId);
       if (vendor) {
         await notificationService.notify({

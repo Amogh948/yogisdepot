@@ -19,7 +19,7 @@ export function MobileHeader({ hideSearch = false }: { hideSearch?: boolean }) {
           </Link>
           <p className="mt-1.5 flex min-w-0 items-center gap-1 text-xs text-yd-muted">
             <MapPin className="h-3.5 w-3.5 shrink-0 text-yd-green" aria-hidden />
-            <span className="truncate">Deliver to Bengaluru</span>
+            <span className="truncate">Deliver to Toronto</span>
           </p>
         </div>
         <Link to="/cart" className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-yd-border bg-white" aria-label={`Cart${count ? `, ${count} items` : ""}`}>
@@ -56,7 +56,7 @@ export function DesktopHeader({ hideSearch = false }: { hideSearch?: boolean }) 
         <button type="button" className="flex max-w-[160px] items-center gap-1.5 rounded-full border border-yd-border bg-white px-3 py-2 text-left text-xs">
           <MapPin className="h-3.5 w-3.5 shrink-0 text-yd-green" aria-hidden />
           <span className="truncate text-yd-muted">
-            Deliver to <span className="font-semibold text-yd-ink">Bengaluru</span>
+            Deliver to <span className="font-semibold text-yd-ink">Toronto</span>
           </span>
         </button>
         <div className="min-w-0 flex-1">{hideSearch ? null : <SearchBar />}</div>

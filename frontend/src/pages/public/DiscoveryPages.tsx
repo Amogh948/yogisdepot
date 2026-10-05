@@ -1,14 +1,22 @@
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useProducts } from "../../hooks/useCatalog";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { SectionHeader } from "../../components/ui/Feedback";
+import { Button } from "../../components/ui/Button";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { FESTIVALS, GIFT_BANDS, HELP_FAQS, OFFER_SECTIONS, REGIONS } from "../../content/discovery";
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { ProductGrid } from "../../components/product/ProductCarousel";
+import { scratchApi } from "../../services/api/commerce.api";
+import { merchandisingApi } from "../../services/api/products.api";
+import { useAuthStore } from "../../store/auth.store";
+import { useToastStore } from "../../store/toast.store";
+import { ApiError } from "../../services/api/client";
+import { formatCadFromCents } from "../../utils/money";
 
 function OfferRail({ title, query }: { title: string; query: { discount?: string; sort?: string; limit?: number; maxPrice?: number } }) {
   const list = useProducts(query);
@@ -28,7 +36,65 @@ function OfferRail({ title, query }: { title: string; query: { discount?: string
   );
 }
 
+function ScratchCardPanel() {
+  const user = useAuthStore((s) => s.user);
+  const toast = useToastStore((s) => s.push);
+  const queryClient = useQueryClient();
+  const campaign = useQuery({ queryKey: ["scratch-campaign"], queryFn: () => scratchApi.campaign() });
+  const rewards = useQuery({
+    queryKey: ["scratch-rewards"],
+    queryFn: () => scratchApi.rewards(),
+    enabled: Boolean(user),
+  });
+  const scratch = useMutation({
+    mutationFn: () => scratchApi.scratch(campaign.data?.data?.id),
+    onSuccess: async (result) => {
+      toast(`You won: ${String(result.data.label || "a reward")}`);
+      await queryClient.invalidateQueries({ queryKey: ["scratch-rewards"] });
+    },
+    onError: (error) => toast(error instanceof ApiError ? error.message : "Scratch failed", "error"),
+  });
+  const latest = rewards.data?.data?.[0] as
+    | { id?: string; label?: string; code?: string; discountType?: string; discountValue?: number; status?: string }
+    | undefined;
+
+  return (
+    <div className="rounded-card border border-yd-border bg-white p-5 shadow-soft">
+      <p className="font-display text-2xl text-yd-forest">Scratch &amp; save</p>
+      <p className="mt-1 text-sm text-yd-muted">
+        {campaign.data?.data?.name || "Rewards are selected on the server — refreshing won’t re-roll."}
+      </p>
+      {user ? (
+        <div className="mt-4 space-y-2">
+          <Button disabled={scratch.isPending || !campaign.data?.data} onClick={() => scratch.mutate()}>
+            {latest ? "View your reward" : "Scratch now"}
+          </Button>
+          {latest ? (
+            <p className="text-sm text-yd-ink">
+              {latest.label} · code <span className="font-semibold">{latest.code}</span> · {latest.status}
+              {latest.discountType === "fixed" ? ` · ${formatCadFromCents(Number(latest.discountValue || 0))}` : ""}
+              <span className="mt-1 block text-xs text-yd-muted">Use reward ID at checkout: {latest.id}</span>
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-yd-muted">
+          <Link to="/login" className="font-semibold text-yd-green">
+            Sign in
+          </Link>{" "}
+          to scratch.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function OffersPage() {
+  const merch = useQuery({
+    queryKey: ["merchandising", "offers"],
+    queryFn: () => merchandisingApi.list("offers"),
+  });
+  const { addToCart } = useCommerceActions();
   return (
     <div className="space-y-8">
       <Helmet>
@@ -40,11 +106,18 @@ export function OffersPage() {
           <p className="font-display text-2xl">Today&apos;s deals</p>
           <p className="mt-1 text-sm text-white/85">Snack smarter with seasonal discounts</p>
         </div>
-        <div className="rounded-card border border-yd-border bg-yd-cream/70 p-5">
-          <p className="font-display text-2xl text-yd-forest">Combo picks</p>
-          <p className="mt-1 text-sm text-yd-muted">Pair chai with biscuits or chips with dip</p>
-        </div>
+        <ScratchCardPanel />
       </div>
+      {(merch.data?.data || [])
+        .filter((rail) => rail.products?.length)
+        .map((rail) => (
+          <ProductCarousel
+            key={rail.id}
+            title={rail.name}
+            products={rail.products}
+            onAdd={(p) => addToCart.mutate({ product: p })}
+          />
+        ))}
       {OFFER_SECTIONS.map((section) => (
         <OfferRail key={section.title} title={section.title} query={section.query} />
       ))}
@@ -146,6 +219,10 @@ export function GiftsPage() {
     sort: "popular",
     limit: 12,
   });
+  const merch = useQuery({
+    queryKey: ["merchandising", "gifts"],
+    queryFn: () => merchandisingApi.list("gifts"),
+  });
   const { addToCart } = useCommerceActions();
 
   return (
@@ -154,6 +231,16 @@ export function GiftsPage() {
         <title>Gift hampers | Yogi&apos;s Depot</title>
       </Helmet>
       <SectionHeader title="Gift hampers" subtitle="Office, family, festival and corporate gifting" />
+      {(merch.data?.data || [])
+        .filter((rail) => rail.products?.length)
+        .map((rail) => (
+          <ProductCarousel
+            key={rail.id}
+            title={rail.name}
+            products={rail.products}
+            onAdd={(p) => addToCart.mutate({ product: p })}
+          />
+        ))}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {GIFT_BANDS.map((item) => (
           <button

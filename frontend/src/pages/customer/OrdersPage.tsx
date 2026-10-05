@@ -7,6 +7,7 @@ import { entityId, mediaUrl, type Order, type OrderStatus } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { useMemo, useState } from "react";
+import { formatCad } from "../../utils/money";
 
 const TRACK: OrderStatus[] = ["pending", "confirmed", "packed", "out_for_delivery", "delivered"];
 
@@ -85,7 +86,7 @@ export function OrdersPage() {
                 <div>
                   <p className="font-semibold text-yd-ink">{order.orderNumber}</p>
                   <p className="mt-0.5 text-sm text-yd-muted">
-                    {new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · ₹{order.total}
+                    {new Date(order.createdAt).toLocaleDateString("en-CA", { day: "numeric", month: "short", year: "numeric" })} · {formatCad(order.total)}
                   </p>
                 </div>
                 <Badge tone={statusTone(order.orderStatus)}>{order.orderStatus.replace(/_/g, " ")}</Badge>
@@ -164,7 +165,7 @@ export function OrderDetailPage() {
       <div>
         <h1 className="font-display text-3xl text-yd-forest">{order.orderNumber}</h1>
         <p className="mt-1 capitalize text-yd-muted">
-          {TRACK_LABEL[order.orderStatus] || order.orderStatus.replace(/_/g, " ")} · {order.paymentStatus} · ₹{order.total}
+          {TRACK_LABEL[order.orderStatus] || order.orderStatus.replace(/_/g, " ")} · {order.paymentStatus} · {formatCad(order.total)}
         </p>
       </div>
 
@@ -203,7 +204,7 @@ export function OrderDetailPage() {
             <div className="flex-1">
               <p className="font-semibold">{item.productName}</p>
               <p className="text-sm text-yd-muted">
-                ₹{item.unitPrice} × {item.quantity}
+                {formatCad(item.unitPrice)} × {item.quantity}
               </p>
               {order.orderStatus === "delivered" ? (
                 <button className="mt-1 text-sm font-semibold text-yd-saffron" type="button" onClick={() => setReviewFor(item.productId)}>

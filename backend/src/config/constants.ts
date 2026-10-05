@@ -61,9 +61,21 @@ export const DEFAULT_PAGE = 1;
 export const DEFAULT_LIMIT = 20;
 export const MAX_LIMIT = 100;
 
-export const DEFAULT_TAX_RATE = 0.05;
-export const DEFAULT_SHIPPING_FEE = 40;
-export const FREE_SHIPPING_THRESHOLD = 499;
+/** @deprecated Checkout tax uses CanadianTaxRate — not this flat rate. */
+export const DEFAULT_TAX_RATE = 0;
+/** CAD cents defaults for Canada market */
+export const DEFAULT_DELIVERY_FEE_CENTS = 499; // $4.99
+export const DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS = 7500; // $75.00
+export const DEFAULT_PLATFORM_FEE_CENTS = 99; // $0.99
+export const DEFAULT_HANDLING_FEE_CENTS = 49; // $0.49
+export const DEFAULT_SMALL_CART_FEE_CENTS = 199; // $1.99
+export const DEFAULT_SMALL_CART_THRESHOLD_CENTS = 2500; // $25.00
+/** Legacy aliases (dollars) — prefer *_CENTS */
+export const DEFAULT_SHIPPING_FEE = DEFAULT_DELIVERY_FEE_CENTS / 100;
+export const FREE_SHIPPING_THRESHOLD = DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS / 100;
+export const DEFAULT_CURRENCY = "CAD";
+export const DEFAULT_WAREHOUSE_CODE = "YYZ-WH-01";
+export const DEFAULT_COUNTRY = "Canada";
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const ALLOWED_IMAGE_MIME = ["image/jpeg", "image/png", "image/webp", "image/gif"];

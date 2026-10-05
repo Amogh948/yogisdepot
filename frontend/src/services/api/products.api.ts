@@ -28,6 +28,22 @@ export const productsApi = {
   related: (id: string) => unwrap<Product[]>(api.get(`/products/${id}/related`)),
 };
 
+export type MerchandisingRail = {
+  id: string;
+  name: string;
+  slug: string;
+  subtitle?: string;
+  placement: string;
+  image?: string;
+  sortOrder: number;
+  products: Product[];
+};
+
+export const merchandisingApi = {
+  list: (placement?: string) =>
+    unwrap<MerchandisingRail[]>(api.get("/merchandising", { params: placement ? { placement } : undefined })),
+};
+
 export const categoriesApi = {
   tree: () => unwrap<Category[]>(api.get("/categories")),
   bySlug: (slug: string) => unwrap<Category>(api.get(`/categories/${slug}`)),

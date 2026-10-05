@@ -82,12 +82,14 @@ export function AdminLayout() {
         { to: "/admin/dashboard", label: "Dashboard" },
         { to: "/admin/vendors", label: "Vendors" },
         { to: "/admin/products", label: "Products" },
+        { to: "/admin/merchandising", label: "Merchandising" },
         { to: "/admin/categories", label: "Categories" },
         { to: "/admin/orders", label: "Orders" },
         { to: "/admin/customers", label: "Customers" },
         { to: "/admin/coupons", label: "Coupons" },
         { to: "/admin/reviews", label: "Reviews" },
         { to: "/admin/analytics", label: "Analytics" },
+        { to: "/admin/delivery-locations", label: "Delivery areas" },
         { to: "/admin/settings", label: "Settings" },
       ]}
     />

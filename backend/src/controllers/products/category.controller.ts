@@ -21,6 +21,11 @@ export const adminCategoryController = {
     sendSuccess(res, data, "Categories fetched successfully");
   }),
 
+  get: asyncHandler(async (req: Request, res: Response) => {
+    const category = await categoryService.getById(req.params.id);
+    sendSuccess(res, category, "Category fetched successfully");
+  }),
+
   create: asyncHandler(async (req: Request, res: Response) => {
     const category = await categoryService.create(req.body);
     sendSuccess(res, category, "Category created successfully", 201);

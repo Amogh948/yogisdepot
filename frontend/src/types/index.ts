@@ -88,6 +88,7 @@ export interface Product {
   calories?: number;
   servingSize?: string;
   storageInstructions?: string;
+  usageInstructions?: string;
   rating: number;
   reviewCount: number;
 }
@@ -185,6 +186,7 @@ export interface Vendor {
   description?: string;
   email: string;
   phone: string;
+  logo?: string;
   status: string;
   approvalStatus: string;
   commissionRate: number;

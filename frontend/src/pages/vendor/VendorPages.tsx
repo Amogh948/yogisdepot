@@ -9,6 +9,7 @@ import { entityId } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { useCategories } from "../../hooks/useCatalog";
+import { formatCad } from "../../utils/money";
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
@@ -27,7 +28,7 @@ export function VendorDashboardPage() {
     <div className="space-y-4">
       <PageHeader title="Vendor dashboard" />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Revenue" value={`₹${Number(data.revenue || 0).toFixed(0)}`} />
+        <Stat label="Revenue" value={formatCad(Number(data.revenue || 0))} />
         <Stat label="Orders" value={data.orders || 0} />
         <Stat label="Units sold" value={data.unitsSold || 0} />
         <Stat label="Low stock" value={data.lowStockProducts || 0} />
@@ -46,7 +47,7 @@ export function VendorProductsPage() {
         <article key={product.slug} className="mb-2 flex items-center justify-between rounded-2xl bg-white p-3 shadow-soft">
           <div>
             <p className="font-semibold">{product.name}</p>
-            <p className="text-sm">₹{product.price} · {product.stock} in stock</p>
+            <p className="text-sm">{formatCad(product.price)} · {product.stock} in stock</p>
           </div>
           <div className="flex gap-2">
             <Link className="text-sm font-semibold" to={`/vendor/products/${entityId(product)}/edit`}>Edit</Link>

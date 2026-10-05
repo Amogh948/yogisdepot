@@ -1,7 +1,10 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
 export interface CartItem {
-  productId: Types.ObjectId;
+  /** Preferred purchasable unit. */
+  skuId?: Types.ObjectId;
+  /** Legacy dual-read during migration. */
+  productId?: Types.ObjectId;
   quantity: number;
 }
 
@@ -17,7 +20,8 @@ const cartSchema = new Schema<CartDocument>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     items: [
       {
-        productId: { type: Schema.Types.ObjectId, ref: "Product", required: true },
+        skuId: { type: Schema.Types.ObjectId, ref: "Sku" },
+        productId: { type: Schema.Types.ObjectId, ref: "Product" },
         quantity: { type: Number, required: true, min: 1 },
       },
     ],

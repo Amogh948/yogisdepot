@@ -18,11 +18,12 @@ export function useCommerceActions() {
   const addToCart = useMutation({
     mutationFn: async ({ product, quantity = 1 }: { product: Product; quantity?: number }) => {
       const id = entityId(product);
+      const skuId = (product as Product & { skuId?: string }).skuId;
       if (!user) {
         addGuestItem(id, quantity);
         return;
       }
-      await cartApi.add(id, quantity);
+      await cartApi.add(id, quantity, skuId ? { skuId } : undefined);
     },
     onSuccess: async () => {
       toast("Added to cart");

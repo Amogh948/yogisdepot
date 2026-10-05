@@ -50,16 +50,16 @@ export const FESTIVALS = [
 ] as const;
 
 export const GIFT_BANDS = [
-  { slug: "under-499", name: "Under ₹499", maxPrice: 499, blurb: "Thoughtful small gifts" },
-  { slug: "under-999", name: "Under ₹999", maxPrice: 999, blurb: "Perfect for family" },
-  { slug: "under-1499", name: "Under ₹1499", maxPrice: 1499, blurb: "Premium curated boxes" },
+  { slug: "under-499", name: "Under $75", maxPrice: 499, blurb: "Thoughtful small gifts" },
+  { slug: "under-999", name: "Under $99", maxPrice: 999, blurb: "Perfect for family" },
+  { slug: "under-1499", name: "Under $149", maxPrice: 1499, blurb: "Premium curated boxes" },
   { slug: "premium", name: "Premium", minPrice: 1500, blurb: "Corporate & celebration hampers" },
 ] as const;
 
 export const OFFER_SECTIONS = [
   { title: "Today's deals", query: { discount: "true", sort: "discount", limit: 12 } },
-  { title: "Under ₹99", query: { maxPrice: 99, sort: "price_asc", limit: 12 } },
-  { title: "Under ₹199", query: { maxPrice: 199, sort: "price_asc", limit: 12 } },
+  { title: "Under $9.99", query: { maxPrice: 99, sort: "price_asc", limit: 12 } },
+  { title: "Under $19.99", query: { maxPrice: 199, sort: "price_asc", limit: 12 } },
   { title: "20%+ off", query: { discount: "true", sort: "discount", limit: 12 } },
 ] as const;
 
@@ -68,7 +68,7 @@ export const HELP_FAQS = [
     category: "Orders & delivery",
     items: [
       { q: "How do I track my order?", a: "Open My Orders, select your order, and follow the delivery timeline." },
-      { q: "When is delivery free?", a: "Orders over ₹499 usually qualify for free standard delivery." },
+      { q: "When is delivery free?", a: "Orders over $75 usually qualify for free standard delivery." },
     ],
   },
   {

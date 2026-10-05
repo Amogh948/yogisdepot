@@ -6,7 +6,10 @@ import { assertVendorId } from "../vendor/vendor.controller";
 
 export const customerOrderController = {
   quote: asyncHandler(async (req: Request, res: Response) => {
-    const quote = await orderService.quote(req.user!.id, req.query.coupon as string | undefined);
+    const quote = await orderService.quote(req.user!.id, req.query.coupon as string | undefined, {
+      scratchRewardId: req.query.scratchRewardId as string | undefined,
+      addressId: req.query.addressId as string | undefined,
+    });
     sendSuccess(res, quote, "Order quote calculated");
   }),
 

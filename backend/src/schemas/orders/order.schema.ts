@@ -5,6 +5,7 @@ export const createOrderSchema = z.object({
   addressId: z.string().min(1),
   paymentMethod: z.enum(PAYMENT_METHODS),
   couponCode: z.string().max(40).optional(),
+  scratchRewardId: z.string().min(1).optional(),
   notes: z.string().max(500).optional(),
 });
 

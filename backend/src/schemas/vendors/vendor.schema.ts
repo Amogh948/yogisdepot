@@ -7,7 +7,7 @@ const addressSchema = z.object({
   city: z.string().min(2),
   state: z.string().min(2),
   postalCode: z.string().min(3),
-  country: z.string().min(2).default("India"),
+  country: z.string().min(2).default("Canada"),
 });
 
 export const vendorApplySchema = z.object({

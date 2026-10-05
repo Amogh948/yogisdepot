@@ -22,4 +22,5 @@ export const TRENDING_SEARCHES = [
   "Namkeen",
 ] as const;
 
-export const FREE_DELIVERY_THRESHOLD = 499;
+/** Display fallback only — authoritative threshold comes from server settings/quote. */
+export const FREE_DELIVERY_THRESHOLD = 75;

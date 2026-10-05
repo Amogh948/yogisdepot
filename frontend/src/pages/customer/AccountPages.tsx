@@ -165,13 +165,13 @@ export function AddressesPage() {
   const toast = useToastStore((s) => s.push);
   const form = useForm({
     resolver: zodResolver(addressSchema),
-    defaultValues: { fullName: "", phone: "", addressLine1: "", city: "", state: "", postalCode: "", country: "India", addressType: "home" as const },
+    defaultValues: { fullName: "", phone: "", addressLine1: "", city: "", state: "ON", postalCode: "", country: "Canada", addressType: "home" as const },
   });
   const create = useMutation({
     mutationFn: (values: z.infer<typeof addressSchema>) => addressApi.create(values),
     onSuccess: async () => {
       toast("Address saved");
-      form.reset({ fullName: "", phone: "", addressLine1: "", city: "", state: "", postalCode: "", country: "India", addressType: "home" });
+      form.reset({ fullName: "", phone: "", addressLine1: "", city: "", state: "ON", postalCode: "", country: "Canada", addressType: "home" });
       await queryClient.invalidateQueries({ queryKey: ["addresses"] });
     },
   });
@@ -283,7 +283,7 @@ export function VendorApplyPage() {
                 city: values.city,
                 state: values.state,
                 postalCode: values.postalCode,
-                country: "India",
+                country: "Canada",
               },
             });
             toast("Application submitted");

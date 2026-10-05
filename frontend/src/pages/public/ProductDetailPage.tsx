@@ -96,7 +96,7 @@ export function ProductDetailPage() {
             <Truck className="mt-0.5 h-4 w-4 shrink-0 text-yd-green" />
             <div>
               <p className="font-semibold text-yd-ink">Delivery information</p>
-              <p className="text-yd-muted">Packed fresh from vendor kitchens. Free delivery over ₹499.</p>
+              <p className="text-yd-muted">Packed fresh from vendor kitchens. Free delivery over $75.</p>
             </div>
           </div>
 
@@ -127,7 +127,7 @@ export function ProductDetailPage() {
       </div>
 
       <section className="mt-8 space-y-4">
-        <SectionHeader title="About this food" />
+        <SectionHeader title="About this product" />
         <p className="text-sm leading-6 text-yd-ink">{product.description}</p>
         {product.ingredients ? (
           <p className="text-sm">
@@ -142,6 +142,11 @@ export function ProductDetailPage() {
         {product.storageInstructions ? (
           <p className="text-sm">
             <strong>Storage:</strong> {product.storageInstructions}
+          </p>
+        ) : null}
+        {product.usageInstructions ? (
+          <p className="text-sm">
+            <strong>Usage:</strong> {product.usageInstructions}
           </p>
         ) : null}
         {product.nutritionInformation ? (

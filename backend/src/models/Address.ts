@@ -28,7 +28,7 @@ const addressSchema = new Schema<AddressDocument>(
     city: { type: String, required: true },
     state: { type: String, required: true },
     postalCode: { type: String, required: true },
-    country: { type: String, required: true, default: "India" },
+    country: { type: String, required: true, default: "Canada" },
     landmark: { type: String },
     addressType: { type: String, enum: ADDRESS_TYPES, default: "home" },
     isDefault: { type: Boolean, default: false },

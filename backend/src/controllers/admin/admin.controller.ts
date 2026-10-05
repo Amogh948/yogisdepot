@@ -52,9 +52,16 @@ export const adminCustomerController = {
 
 export const settingsUpdateSchema = z.object({
   siteName: z.string().min(2).optional(),
+  /** @deprecated Not used for checkout tax */
   taxRate: z.number().min(0).max(1).optional(),
   shippingFee: z.number().min(0).optional(),
   freeShippingThreshold: z.number().min(0).optional(),
+  deliveryFeeCents: z.number().int().min(0).optional(),
+  freeShippingThresholdCents: z.number().int().min(0).optional(),
+  platformFeeCents: z.number().int().min(0).optional(),
+  handlingFeeCents: z.number().int().min(0).optional(),
+  smallCartFeeCents: z.number().int().min(0).optional(),
+  smallCartThresholdCents: z.number().int().min(0).optional(),
   supportEmail: z.string().email().optional(),
 });
 

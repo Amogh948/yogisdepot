@@ -10,6 +10,9 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "seed": "tsx src/scripts/seed.ts",
+    "migrate:fmcg": "tsx src/scripts/migrateProductsToFmcg.ts",
+    "import:fmcg:audit": "tsx src/scripts/import/wcCsvAudit.ts",
+    "import:fmcg": "tsx src/scripts/import/wcFmcgImport.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integrations": "tsx src/scripts/test-integrations.ts"
@@ -22,6 +25,7 @@
     "cloudinary": "^2.11.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "csv-parse": "^7.0.3",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-mongo-sanitize": "^2.2.0",

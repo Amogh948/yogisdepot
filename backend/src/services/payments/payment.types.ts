@@ -2,7 +2,9 @@ import { PaymentMethod } from "../../config/constants";
 
 export interface PaymentIntentInput {
   orderNumber: string;
+  /** Dollar amount (compat). Prefer amountCents. */
   amount: number;
+  amountCents?: number;
   method: PaymentMethod;
   customerId: string;
 }

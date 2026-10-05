@@ -3,10 +3,24 @@ import { api, unwrap } from "./client";
 
 export const cartApi = {
   get: () => unwrap<Cart>(api.get("/cart")),
-  add: (productId: string, quantity: number) => unwrap<Cart>(api.post("/cart", { productId, quantity })),
+  add: (productIdOrSku: string, quantity: number, options?: { skuId?: string }) =>
+    unwrap<Cart>(
+      api.post("/cart", {
+        quantity,
+        ...(options?.skuId || productIdOrSku.startsWith("sku:")
+          ? { skuId: options?.skuId || productIdOrSku.replace(/^sku:/, "") }
+          : { productId: productIdOrSku }),
+      }),
+    ),
   update: (productId: string, quantity: number) => unwrap<Cart>(api.patch(`/cart/${productId}`, { quantity })),
   remove: (productId: string) => unwrap<Cart>(api.delete(`/cart/${productId}`)),
   clear: () => unwrap<Cart>(api.delete("/cart")),
+};
+
+export const scratchApi = {
+  campaign: () => unwrap<{ id: string; name: string; description?: string } | null>(api.get("/scratch/campaign")),
+  scratch: (campaignId?: string) => unwrap<Record<string, unknown>>(api.post("/scratch/scratch", { campaignId })),
+  rewards: () => unwrap<Array<Record<string, unknown>>>(api.get("/scratch/rewards")),
 };
 
 export const wishlistApi = {
@@ -22,9 +36,32 @@ export const addressApi = {
   remove: (id: string) => unwrap<null>(api.delete(`/addresses/${id}`)),
 };
 
+export const deliveryApi = {
+  locations: () =>
+    unwrap<
+      Array<{
+        id?: string;
+        _id?: string;
+        name: string;
+        province: string;
+        city?: string;
+        postalCodePrefix?: string;
+      }>
+    >(api.get("/delivery-locations")),
+  check: (payload: { country: string; state: string; city?: string; postalCode?: string }) =>
+    unwrap<{ deliverable: boolean; message: string | null }>(api.post("/delivery-locations/check", payload)),
+};
+
 export const ordersApi = {
-  quote: (coupon?: string) => unwrap<Record<string, unknown>>(api.get("/orders/quote", { params: { coupon } })),
-  create: (payload: { addressId: string; paymentMethod: "cod" | "razorpay" | "mock_online"; couponCode?: string; notes?: string }) =>
+  quote: (params?: { coupon?: string; addressId?: string; scratchRewardId?: string }) =>
+    unwrap<Record<string, unknown>>(api.get("/orders/quote", { params })),
+  create: (payload: {
+    addressId: string;
+    paymentMethod: "cod" | "razorpay" | "mock_online";
+    couponCode?: string;
+    scratchRewardId?: string;
+    notes?: string;
+  }) =>
     unwrap<{ order: Order; payment: { provider: string; reference: string; clientPayload?: Record<string, string | number> } }>(
       api.post("/orders", payload),
     ),
