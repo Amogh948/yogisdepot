@@ -7,7 +7,7 @@ import { Input, Select, Textarea } from "../../components/ui/Input";
 import { Badge, EmptyState, Skeleton } from "../../components/ui/Feedback";
 import { entityId, mediaUrl, type Category, type OrderStatus, type Product } from "../../types";
 import { useToastStore } from "../../store/toast.store";
-import { ConfirmDialog } from "../../components/ui/Overlay";
+import { ConfirmDialog, Modal } from "../../components/ui/Overlay";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../services/api/client";
 import { formatCad, formatCadFromCents } from "../../utils/money";
@@ -806,71 +806,299 @@ export function AdminProductEditPage() {
 export function AdminCategoriesPage() {
   const query = useQuery({ queryKey: ["admin-categories"], queryFn: () => adminApi.categories() });
   const toast = useToastStore((s) => s.push);
-  const items = (query.data?.data || []) as Category[];
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
+  const [saving, setSaving] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    description: "",
+    image: "",
+    parentId: "",
+    sortOrder: 0,
+    isActive: true,
+  });
+
+  const allItems = (query.data?.data || []) as Category[];
+  const needle = search.trim().toLowerCase();
+  const items = allItems.filter((item) => {
+    if (status === "active" && !item.isActive) return false;
+    if (status === "inactive" && item.isActive) return false;
+    if (!needle) return true;
+    return item.name.toLowerCase().includes(needle) || item.slug.toLowerCase().includes(needle);
+  });
+
+  const resetCreateForm = () =>
+    setCreateForm({ name: "", description: "", image: "", parentId: "", sortOrder: 0, isActive: true });
+
+  const createCategory = async () => {
+    setSaving(true);
+    try {
+      await adminApi.createCategory({
+        name: createForm.name,
+        description: createForm.description || undefined,
+        image: createForm.image || undefined,
+        parentId: createForm.parentId || null,
+        sortOrder: Number(createForm.sortOrder),
+        isActive: createForm.isActive,
+      });
+      toast("Category created");
+      setCreateOpen(false);
+      resetCreateForm();
+      await query.refetch();
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not create category", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Categories" />
-      {query.isLoading ? <Skeleton className="h-40" /> : null}
-      {!query.isLoading && !items.length ? <EmptyState title="No categories" body="Create a category to organize the catalog." /> : null}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {items.map((item) => (
-          <Link
-            key={item.slug}
-            to={`/admin/categories/${entityId(item)}`}
-            className="overflow-hidden rounded-2xl border border-yd-border/60 bg-white shadow-soft transition hover:border-yd-green/40"
+      <PageHeader
+        title="Categories"
+        action={
+          <Button
+            size="sm"
+            onClick={() => {
+              resetCreateForm();
+              setCreateOpen(true);
+            }}
           >
-            {adminCardImage(item.image, item.name)}
-            <div className="space-y-1 p-3">
-              <p className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold">{item.name}</p>
-              <p className="truncate text-xs text-yd-muted">{item.slug}</p>
-              <Badge tone={item.isActive ? "sage" : "muted"}>{item.isActive ? "Active" : "Inactive"}</Badge>
-            </div>
-          </Link>
-        ))}
+            Add category
+          </Button>
+        }
+      />
+      <div className="space-y-3">
+        <Input
+          label="Filter categories"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or slug"
+        />
+        <div className="flex gap-2 overflow-x-auto">
+          {(
+            [
+              ["all", "All"],
+              ["active", "Active"],
+              ["inactive", "Inactive"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={`rounded-full px-3 py-1 text-sm ${status === value ? "bg-saffron-600 text-white" : "bg-white"}`}
+              onClick={() => setStatus(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      <form
-        className="max-w-md space-y-3 rounded-2xl bg-white p-4 shadow-soft"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          await adminApi.createCategory({ name: String(form.get("name")), parentId: String(form.get("parentId") || "") || undefined });
-          toast("Category created");
-          query.refetch();
-          event.currentTarget.reset();
+      {query.isLoading ? <Skeleton className="h-40" /> : null}
+      {!query.isLoading && !items.length ? (
+        <EmptyState
+          title={allItems.length ? "No matching categories" : "No categories"}
+          body={allItems.length ? "Try another search or status filter." : "Create a category to organize the catalog."}
+        />
+      ) : null}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {items.map((item) => {
+          const id = entityId(item);
+          return (
+            <article key={item.slug} className="relative overflow-hidden rounded-2xl border border-yd-border/60 bg-white shadow-soft">
+              <Link to={`/admin/categories/${id}`} className="block transition hover:border-yd-green/40">
+                {adminCardImage(item.image, item.name)}
+                <div className="space-y-1 p-3 pr-16">
+                  <p className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold">{item.name}</p>
+                  <p className="truncate text-xs text-yd-muted">{item.slug}</p>
+                  <Badge tone={item.isActive ? "sage" : "muted"}>{item.isActive ? "Active" : "Inactive"}</Badge>
+                </div>
+              </Link>
+              <div className="absolute right-2 top-2 flex flex-col gap-1">
+                <Link
+                  to={`/admin/categories/${id}`}
+                  className="rounded-full bg-white/95 px-2.5 py-1 text-center text-xs font-semibold text-yd-ink shadow-soft"
+                >
+                  Edit
+                </Link>
+                <button
+                  type="button"
+                  className="rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-yd-error shadow-soft"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setDeleteId(id);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <Modal
+        open={createOpen}
+        title="Add category"
+        onClose={() => {
+          if (saving) return;
+          setCreateOpen(false);
         }}
       >
-        <p className="font-semibold">Add category</p>
-        <Input label="Name" name="name" required />
-        <Select label="Parent (optional)" name="parentId">
-          <option value="">None</option>
-          {items.map((item) => (
-            <option key={entityId(item)} value={entityId(item)}>
-              {item.name}
-            </option>
-          ))}
-        </Select>
-        <Button>Create</Button>
-      </form>
+        <div className="space-y-3">
+          <Input
+            label="Name"
+            value={createForm.name}
+            onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))}
+            required
+          />
+          <Textarea
+            label="Description"
+            value={createForm.description}
+            onChange={(e) => setCreateForm((p) => ({ ...p, description: e.target.value }))}
+            rows={3}
+          />
+          <Input
+            label="Image URL"
+            value={createForm.image}
+            onChange={(e) => setCreateForm((p) => ({ ...p, image: e.target.value }))}
+          />
+          <Select
+            label="Parent"
+            value={createForm.parentId}
+            onChange={(e) => setCreateForm((p) => ({ ...p, parentId: e.target.value }))}
+          >
+            <option value="">None</option>
+            {allItems.map((item) => (
+              <option key={entityId(item)} value={entityId(item)}>
+                {item.name}
+              </option>
+            ))}
+          </Select>
+          <Input
+            label="Sort order"
+            type="number"
+            value={createForm.sortOrder}
+            onChange={(e) => setCreateForm((p) => ({ ...p, sortOrder: Number(e.target.value) }))}
+          />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={createForm.isActive}
+              onChange={(e) => setCreateForm((p) => ({ ...p, isActive: e.target.checked }))}
+            />{" "}
+            Active
+          </label>
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" disabled={saving} onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button className="flex-1" disabled={saving || !createForm.name.trim()} onClick={() => void createCategory()}>
+              {saving ? "Creating…" : "Create category"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+      <ConfirmDialog
+        open={Boolean(deleteId)}
+        title="Delete category"
+        body="This permanently removes the category. Categories with products or subcategories cannot be deleted until those are removed."
+        confirmLabel="Delete"
+        onClose={() => setDeleteId(null)}
+        onConfirm={async () => {
+          if (!deleteId) return;
+          try {
+            await adminApi.deleteCategory(deleteId);
+            toast("Category deleted");
+            setDeleteId(null);
+            await query.refetch();
+          } catch (error) {
+            toast(error instanceof ApiError ? error.message : "Could not delete category", "error");
+          }
+        }}
+      />
     </div>
   );
 }
 
-type AdminCategory = Category & { parentId?: { name?: string; slug?: string; id?: string; _id?: string } | string | null };
+type AdminCategory = Category & {
+  parentId?: { name?: string; slug?: string; id?: string; _id?: string } | string | null;
+  sortOrder?: number;
+};
 
 export function AdminCategoryDetailPage() {
-  const { id = "" } = useParams();
+  const { id } = useParams();
+  const isNew = !id || id === "new";
   const navigate = useNavigate();
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    image: "",
+    parentId: "",
+    sortOrder: 0,
+    isActive: true,
+  });
+
   const all = useQuery({ queryKey: ["admin-categories"], queryFn: () => adminApi.categories() });
   const query = useQuery({
     queryKey: ["admin-category", id],
-    queryFn: async () => (await adminApi.category(id)).data as AdminCategory,
-    enabled: Boolean(id),
+    queryFn: async () => (await adminApi.category(id!)).data as AdminCategory,
+    enabled: !isNew,
   });
-  const category = query.data;
-  if (query.isLoading) return <Skeleton className="h-40" />;
-  if (!category) {
+
+  useEffect(() => {
+    const category = query.data;
+    if (!category) return;
+    const parentId =
+      typeof category.parentId === "object" && category.parentId
+        ? entityId(category.parentId)
+        : String(category.parentId || "");
+    setForm({
+      name: category.name || "",
+      description: category.description || "",
+      image: category.image || "",
+      parentId,
+      sortOrder: category.sortOrder ?? 0,
+      isActive: category.isActive !== false,
+    });
+  }, [query.data]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const payload = {
+        name: form.name,
+        description: form.description || undefined,
+        image: form.image || undefined,
+        parentId: form.parentId || null,
+        sortOrder: Number(form.sortOrder),
+        isActive: form.isActive,
+      };
+      if (isNew) {
+        const created = await adminApi.createCategory(payload);
+        const createdId = entityId(created.data as { id?: string; _id?: string });
+        toast("Category created");
+        navigate(createdId ? `/admin/categories/${createdId}` : "/admin/categories");
+      } else {
+        await adminApi.updateCategory(id!, payload);
+        toast("Category saved");
+        await queryClient.invalidateQueries({ queryKey: ["admin-category", id] });
+        await queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
+      }
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not save category", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isNew && query.isLoading) return <Skeleton className="h-40" />;
+  if (!isNew && !query.data) {
     return (
       <EmptyState
         title="Category not found"
@@ -883,57 +1111,85 @@ export function AdminCategoryDetailPage() {
       />
     );
   }
-  const parentId = typeof category.parentId === "object" && category.parentId ? entityId(category.parentId) : String(category.parentId || "");
+
   return (
-    <form
-      className="mx-auto max-w-lg space-y-3"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        try {
-          await adminApi.updateCategory(id, {
-            name: String(form.get("name")),
-            description: String(form.get("description") || "") || undefined,
-            image: String(form.get("image") || "") || undefined,
-            parentId: String(form.get("parentId") || "") || null,
-            isActive: form.get("isActive") === "on",
-          });
-          toast("Category saved");
-          await queryClient.invalidateQueries({ queryKey: ["admin-category", id] });
-          await queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
-        } catch (error) {
-          toast(error instanceof ApiError ? error.message : "Could not save category", "error");
-        }
-      }}
-    >
+    <div className="mx-auto max-w-lg space-y-4 pb-24">
       <PageHeader
-        title={category.name}
+        title={isNew ? "Add category" : form.name || "Edit category"}
         action={
           <Link to="/admin/categories" className="text-sm font-semibold text-yd-muted">
             Back
           </Link>
         }
       />
-      {category.image ? <img src={mediaUrl(category.image)} alt="" className="h-32 w-full rounded-2xl object-cover" /> : null}
-      <Input label="Name" name="name" defaultValue={category.name} required />
-      <Input label="Slug" defaultValue={category.slug} disabled />
-      <Textarea label="Description" name="description" defaultValue={category.description} rows={3} />
-      <Input label="Image URL" name="image" defaultValue={category.image} />
-      <Select label="Parent" name="parentId" defaultValue={parentId}>
-        <option value="">None</option>
-        {((all.data?.data || []) as Category[])
-          .filter((item) => entityId(item) !== id)
-          .map((item) => (
-            <option key={entityId(item)} value={entityId(item)}>
-              {item.name}
-            </option>
-          ))}
-      </Select>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="isActive" defaultChecked={category.isActive !== false} /> Active
-      </label>
-      <Button>Save category</Button>
-    </form>
+      {!isNew && form.image ? <img src={mediaUrl(form.image)} alt="" className="h-32 w-full rounded-2xl object-cover" /> : null}
+      <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
+        <Input label="Name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
+        {!isNew && query.data?.slug ? <Input label="Slug" value={query.data.slug} disabled /> : null}
+        <Textarea
+          label="Description"
+          value={form.description}
+          onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+          rows={3}
+        />
+        <Input label="Image URL" value={form.image} onChange={(e) => setForm((p) => ({ ...p, image: e.target.value }))} />
+        <Select label="Parent" value={form.parentId} onChange={(e) => setForm((p) => ({ ...p, parentId: e.target.value }))}>
+          <option value="">None</option>
+          {((all.data?.data || []) as Category[])
+            .filter((item) => entityId(item) !== id)
+            .map((item) => (
+              <option key={entityId(item)} value={entityId(item)}>
+                {item.name}
+              </option>
+            ))}
+        </Select>
+        <Input
+          label="Sort order"
+          type="number"
+          value={form.sortOrder}
+          onChange={(e) => setForm((p) => ({ ...p, sortOrder: Number(e.target.value) }))}
+        />
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))}
+          />{" "}
+          Active
+        </label>
+      </div>
+      <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
+        <div className="mx-auto flex max-w-lg gap-2">
+          {!isNew ? (
+            <Button variant="danger" disabled={saving} onClick={() => setConfirmDelete(true)}>
+              Delete
+            </Button>
+          ) : null}
+          <Button variant="outline" disabled={saving} onClick={() => navigate("/admin/categories")}>
+            Cancel
+          </Button>
+          <Button className="flex-1" disabled={saving || !form.name.trim()} onClick={() => void save()}>
+            {saving ? "Saving…" : isNew ? "Create category" : "Save changes"}
+          </Button>
+        </div>
+      </div>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete category"
+        body="This permanently removes the category. Categories with products or subcategories cannot be deleted until those are removed."
+        confirmLabel="Delete"
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          try {
+            await adminApi.deleteCategory(id!);
+            toast("Category deleted");
+            navigate("/admin/categories");
+          } catch (error) {
+            toast(error instanceof ApiError ? error.message : "Could not delete category", "error");
+          }
+        }}
+      />
+    </div>
   );
 }
 

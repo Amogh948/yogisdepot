@@ -31,6 +31,7 @@ import {
 import { authenticate } from "../middleware/auth.middleware";
 import { requireRoles } from "../middleware/role.middleware";
 import { validate } from "../middleware/validation.middleware";
+import { categorySchema, categoryUpdateSchema } from "../schemas/categories/category.schema";
 import { vendorStatusSchema, vendorListQuerySchema, adminVendorCreateSchema, vendorUpdateSchema } from "../schemas/vendors/vendor.schema";
 import { createProductSchema, productStatusSchema, updateProductSchema } from "../schemas/products/product.schema";
 import { orderStatusSchema } from "../schemas/orders/order.schema";
@@ -62,7 +63,10 @@ router.patch("/vendors/:id/status", validate(vendorStatusSchema), adminVendorCon
 router.delete("/vendors/:id", adminVendorController.remove);
 
 router.get("/categories", adminCategoryController.list);
+router.post("/categories", validate(categorySchema), adminCategoryController.create);
 router.get("/categories/:id", adminCategoryController.get);
+router.put("/categories/:id", validate(categoryUpdateSchema), adminCategoryController.update);
+router.delete("/categories/:id", adminCategoryController.remove);
 
 router.get("/products", adminProductController.list);
 router.post("/products", validate(createProductSchema), adminProductController.create);

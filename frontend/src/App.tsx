@@ -111,6 +111,7 @@ export default function App() {
           <Route path="merchandising/new" element={<AdminMerchandisingFormPage />} />
           <Route path="merchandising/:id" element={<AdminMerchandisingFormPage />} />
           <Route path="categories" element={<AdminCategoriesPage />} />
+          <Route path="categories/new" element={<AdminCategoryDetailPage />} />
           <Route path="categories/:id" element={<AdminCategoryDetailPage />} />
           <Route path="orders" element={<AdminOrdersPage />} />
           <Route path="orders/:id" element={<AdminOrderDetailPage />} />

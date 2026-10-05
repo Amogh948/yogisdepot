@@ -37,7 +37,7 @@ export const adminCategoryController = {
   }),
 
   remove: asyncHandler(async (req: Request, res: Response) => {
-    const category = await categoryService.remove(req.params.id);
-    sendSuccess(res, category, "Category deactivated successfully");
+    await categoryService.remove(req.params.id);
+    sendSuccess(res, null, "Category deleted successfully");
   }),
 };

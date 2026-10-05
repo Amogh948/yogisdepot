@@ -55,8 +55,9 @@ export const adminApi = {
   vendorStatus: (id: string, payload: Record<string, unknown>) => unwrap<Vendor>(api.patch(`/admin/vendors/${id}/status`, payload)),
   categories: () => unwrap<unknown[]>(api.get("/admin/categories")),
   category: (id: string) => unwrap<unknown>(api.get(`/admin/categories/${id}`)),
-  createCategory: (payload: Record<string, unknown>) => unwrap<unknown>(api.post("/categories", payload)),
-  updateCategory: (id: string, payload: Record<string, unknown>) => unwrap<unknown>(api.put(`/categories/${id}`, payload)),
+  createCategory: (payload: Record<string, unknown>) => unwrap<unknown>(api.post("/admin/categories", payload)),
+  updateCategory: (id: string, payload: Record<string, unknown>) => unwrap<unknown>(api.put(`/admin/categories/${id}`, payload)),
+  deleteCategory: (id: string) => unwrap<null>(api.delete(`/admin/categories/${id}`)),
   products: async (params?: Record<string, unknown>) => {
     const result = await unwrap<Product[]>(api.get("/admin/products", { params }));
     return { items: result.data, pagination: result.pagination as Pagination };
