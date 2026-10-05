@@ -22,7 +22,18 @@ export const vendorApplySchema = z.object({
   banner: z.string().optional(),
 });
 
-export const vendorUpdateSchema = vendorApplySchema.partial();
+export const vendorUpdateSchema = vendorApplySchema.partial().extend({
+  commissionRate: z.number().min(0).max(100).optional(),
+  status: z.enum(VENDOR_STATUSES).optional(),
+});
+
+export const adminVendorCreateSchema = vendorApplySchema.extend({
+  firstName: z.string().min(1).max(60),
+  lastName: z.string().min(1).max(60),
+  password: z.string().min(8).max(72).optional(),
+  commissionRate: z.number().min(0).max(100).optional(),
+  status: z.enum(VENDOR_STATUSES).optional(),
+});
 
 export const vendorStatusSchema = z.object({
   status: z.enum(VENDOR_STATUSES),

@@ -36,14 +36,13 @@ import {
   AdminProductWizardPage,
   AdminReviewsPage,
   AdminSettingsPage,
-  AdminVendorDetailPage,
-  AdminVendorsPage,
 } from "./pages/admin/AdminPages";
 import { AdminMerchandisingFormPage, AdminMerchandisingPage } from "./pages/admin/AdminMerchandisingPages";
 import {
   AdminDeliveryLocationFormPage,
   AdminDeliveryLocationsPage,
 } from "./pages/admin/AdminDeliveryLocationsPage";
+import { AdminVendorFormPage, AdminVendorsPage } from "./pages/admin/AdminVendorPages";
 import {
   VendorAnalyticsPage,
   VendorDashboardPage,
@@ -103,7 +102,8 @@ export default function App() {
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboardPage />} />
           <Route path="vendors" element={<AdminVendorsPage />} />
-          <Route path="vendors/:id" element={<AdminVendorDetailPage />} />
+          <Route path="vendors/new" element={<AdminVendorFormPage />} />
+          <Route path="vendors/:id" element={<AdminVendorFormPage />} />
           <Route path="products" element={<AdminProductsPage />} />
           <Route path="products/new" element={<AdminProductWizardPage />} />
           <Route path="products/:id/edit" element={<AdminProductEditPage />} />

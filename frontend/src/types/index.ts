@@ -192,12 +192,13 @@ export interface Vendor {
   commissionRate: number;
   address: {
     addressLine1: string;
+    addressLine2?: string;
     city: string;
     state: string;
     postalCode: string;
     country: string;
   };
-  userId?: { firstName: string; lastName: string; email: string };
+  userId?: { firstName: string; lastName: string; email: string; phone?: string };
 }
 
 export interface Coupon {

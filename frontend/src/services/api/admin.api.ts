@@ -49,6 +49,9 @@ export const adminApi = {
     return { items: result.data, pagination: result.pagination as Pagination };
   },
   vendor: (id: string) => unwrap<Vendor>(api.get(`/admin/vendors/${id}`)),
+  createVendor: (payload: Record<string, unknown>) => unwrap<Vendor>(api.post("/admin/vendors", payload)),
+  updateVendor: (id: string, payload: Record<string, unknown>) => unwrap<Vendor>(api.put(`/admin/vendors/${id}`, payload)),
+  deleteVendor: (id: string) => unwrap<null>(api.delete(`/admin/vendors/${id}`)),
   vendorStatus: (id: string, payload: Record<string, unknown>) => unwrap<Vendor>(api.patch(`/admin/vendors/${id}/status`, payload)),
   categories: () => unwrap<unknown[]>(api.get("/admin/categories")),
   category: (id: string) => unwrap<unknown>(api.get(`/admin/categories/${id}`)),

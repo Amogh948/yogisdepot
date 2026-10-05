@@ -37,6 +37,21 @@ export const adminVendorController = {
     sendSuccess(res, vendor, "Vendor fetched successfully");
   }),
 
+  create: asyncHandler(async (req: Request, res: Response) => {
+    const vendor = await vendorService.createByAdmin(req.body);
+    sendSuccess(res, vendor, "Vendor created successfully", 201);
+  }),
+
+  update: asyncHandler(async (req: Request, res: Response) => {
+    const vendor = await vendorService.updateByAdmin(req.params.id, req.body);
+    sendSuccess(res, vendor, "Vendor updated successfully");
+  }),
+
+  remove: asyncHandler(async (req: Request, res: Response) => {
+    await vendorService.remove(req.params.id);
+    sendSuccess(res, null, "Vendor deleted successfully");
+  }),
+
   setStatus: asyncHandler(async (req: Request, res: Response) => {
     const vendor = await vendorService.setStatus(req.params.id, req.body);
     sendSuccess(res, vendor, "Vendor status updated successfully");

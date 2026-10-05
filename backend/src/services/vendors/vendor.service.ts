@@ -1,9 +1,42 @@
-import { ConflictError, ForbiddenError, NotFoundError } from "../../errors/AppError";
+import { ConflictError, BadRequestError, ForbiddenError, NotFoundError } from "../../errors/AppError";
+import { Product } from "../../models/Product";
 import { User } from "../../models/User";
 import { Vendor, VendorDocument } from "../../models/Vendor";
+import { hashPassword } from "../../utils/password";
 import { notificationService } from "../notifications/notification.service";
 import { slugify, uniqueSlug } from "../../utils/slug";
 import { buildPagination, parsePagination } from "../../utils/pagination";
+
+export type AdminVendorCreateInput = {
+  businessName: string;
+  description?: string;
+  email: string;
+  phone: string;
+  address: VendorDocument["address"];
+  taxInformation?: string;
+  bankInformation?: string;
+  logo?: string;
+  banner?: string;
+  firstName: string;
+  lastName: string;
+  password?: string;
+  commissionRate?: number;
+  status?: VendorDocument["status"];
+};
+
+export type AdminVendorUpdateInput = Partial<{
+  businessName: string;
+  description: string;
+  email: string;
+  phone: string;
+  address: VendorDocument["address"];
+  taxInformation: string;
+  bankInformation: string;
+  logo: string;
+  banner: string;
+  commissionRate: number;
+  status: VendorDocument["status"];
+}>;
 
 export const vendorService = {
   async apply(userId: string, input: {
@@ -82,6 +115,114 @@ export const vendorService = {
     const vendor = await Vendor.findOne({ slug, status: { $in: ["approved", "active"] } });
     if (!vendor) {
       throw new NotFoundError("Vendor not found");
+    }
+    return vendor;
+  },
+
+  async createByAdmin(input: AdminVendorCreateInput) {
+    const email = input.email.toLowerCase().trim();
+    let user = await User.findOne({ email });
+    if (user) {
+      const existingVendor = await Vendor.findOne({ userId: user._id });
+      if (existingVendor) {
+        throw new ConflictError("A vendor already exists for this account email");
+      }
+      user.role = "vendor";
+      user.firstName = input.firstName;
+      user.lastName = input.lastName;
+      user.phone = input.phone;
+      user.isActive = true;
+      await user.save();
+    } else {
+      const password = await hashPassword(input.password || "Password@123");
+      user = await User.create({
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email,
+        phone: input.phone,
+        password,
+        role: "vendor",
+        isActive: true,
+        isEmailVerified: true,
+      });
+    }
+
+    const status = input.status || "active";
+    const vendor = await Vendor.create({
+      userId: user._id,
+      businessName: input.businessName,
+      slug: uniqueSlug(input.businessName),
+      description: input.description,
+      email,
+      phone: input.phone,
+      address: {
+        ...input.address,
+        country: input.address.country || "Canada",
+      },
+      taxInformation: input.taxInformation,
+      bankInformation: input.bankInformation,
+      logo: input.logo,
+      banner: input.banner,
+      commissionRate: input.commissionRate ?? 10,
+      status: status === "approved" ? "active" : status,
+      approvalStatus: status === "rejected" ? "rejected" : status === "pending" ? "pending" : "approved",
+    });
+
+    return this.getById(String(vendor._id));
+  },
+
+  async updateByAdmin(id: string, input: AdminVendorUpdateInput) {
+    const vendor = await Vendor.findById(id);
+    if (!vendor) {
+      throw new NotFoundError("Vendor not found");
+    }
+
+    if (input.businessName !== undefined && input.businessName !== vendor.businessName) {
+      vendor.businessName = input.businessName;
+      vendor.slug = uniqueSlug(input.businessName);
+    }
+    if (input.description !== undefined) vendor.description = input.description;
+    if (input.email !== undefined) vendor.email = input.email.toLowerCase().trim();
+    if (input.phone !== undefined) vendor.phone = input.phone;
+    if (input.address !== undefined) {
+      vendor.address = {
+        ...input.address,
+        country: input.address.country || "Canada",
+      };
+    }
+    if (input.taxInformation !== undefined) vendor.taxInformation = input.taxInformation;
+    if (input.bankInformation !== undefined) vendor.bankInformation = input.bankInformation;
+    if (input.logo !== undefined) vendor.logo = input.logo;
+    if (input.banner !== undefined) vendor.banner = input.banner;
+    if (input.commissionRate !== undefined) vendor.commissionRate = input.commissionRate;
+
+    if (input.status !== undefined) {
+      vendor.status = input.status === "approved" ? "active" : input.status;
+      if (input.status === "rejected") vendor.approvalStatus = "rejected";
+      else if (input.status === "pending") vendor.approvalStatus = "pending";
+      else vendor.approvalStatus = "approved";
+    }
+
+    await vendor.save();
+    return this.getById(id);
+  },
+
+  async remove(id: string) {
+    const vendor = await Vendor.findById(id);
+    if (!vendor) {
+      throw new NotFoundError("Vendor not found");
+    }
+    const productCount = await Product.countDocuments({ vendorId: vendor._id });
+    if (productCount > 0) {
+      throw new BadRequestError(
+        `Cannot delete vendor with ${productCount} product${productCount === 1 ? "" : "s"}. Remove or reassign products first.`,
+      );
+    }
+    await Vendor.deleteOne({ _id: vendor._id });
+    const user = await User.findById(vendor.userId);
+    if (user && user.role === "vendor") {
+      user.role = "customer";
+      await user.save();
     }
     return vendor;
   },

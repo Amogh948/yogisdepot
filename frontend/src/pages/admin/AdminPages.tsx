@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { adminApi } from "../../services/api/admin.api";
 import { PageHeader } from "../../layouts/DashboardLayout";
@@ -125,90 +125,6 @@ export function AdminDashboardPage() {
         <Stat label="Pending orders" value={Number(data.pendingOrders || 0)} />
       </div>
       <Bars data={(data.salesChart as Array<{ _id: string; revenue?: number }>) || []} />
-    </div>
-  );
-}
-
-export function AdminVendorsPage() {
-  const [status, setStatus] = useState("");
-  const query = useQuery({ queryKey: ["admin-vendors", status], queryFn: () => adminApi.vendors(status ? { status } : undefined) });
-  const items = query.data?.items || [];
-  return (
-    <div>
-      <PageHeader title="Vendors" />
-      <div className="mb-4 flex gap-2 overflow-x-auto">
-        {["", "pending", "active", "rejected", "suspended"].map((value) => (
-          <button key={value} className={`rounded-full px-3 py-1 text-sm ${status === value ? "bg-saffron-600 text-white" : "bg-white"}`} onClick={() => setStatus(value)} type="button">
-            {value || "all"}
-          </button>
-        ))}
-      </div>
-      {query.isLoading ? <Skeleton className="h-40" /> : null}
-      {!query.isLoading && !items.length ? <EmptyState title="No vendors" body="Vendor applications will appear here." /> : null}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {items.map((vendor) => (
-          <Link
-            key={entityId(vendor)}
-            to={`/admin/vendors/${entityId(vendor)}`}
-            className="overflow-hidden rounded-2xl border border-yd-border/60 bg-white shadow-soft transition hover:border-yd-green/40"
-          >
-            {adminCardImage(vendor.logo, vendor.businessName)}
-            <div className="space-y-1 p-3">
-              <p className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold">{vendor.businessName}</p>
-              <p className="truncate text-xs text-yd-muted">{vendor.email}</p>
-              <Badge>{vendor.status}</Badge>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function AdminVendorDetailPage() {
-  const { id = "" } = useParams();
-  const toast = useToastStore((s) => s.push);
-  const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: ["admin-vendor", id], queryFn: () => adminApi.vendor(id) });
-  const [confirm, setConfirm] = useState<string | null>(null);
-  const mutate = useMutation({
-    mutationFn: (status: string) => adminApi.vendorStatus(id, { status }),
-    onSuccess: async () => {
-      toast("Vendor updated");
-      await queryClient.invalidateQueries({ queryKey: ["admin-vendor", id] });
-      setConfirm(null);
-    },
-    onError: (error) => toast(error instanceof ApiError ? error.message : "Update failed", "error"),
-  });
-  const vendor = query.data?.data;
-  if (!vendor) return <Skeleton className="h-40" />;
-  return (
-    <div className="space-y-4">
-      <PageHeader
-        title={vendor.businessName}
-        action={
-          <Link to="/admin/vendors" className="text-sm font-semibold text-yd-muted">
-            Back
-          </Link>
-        }
-      />
-      {vendor.logo ? <img src={mediaUrl(vendor.logo)} alt="" className="h-24 w-24 rounded-2xl object-cover" /> : null}
-      <p className="text-sm">{vendor.email} · {vendor.phone}</p>
-      {vendor.description ? <p className="text-sm text-yd-muted">{vendor.description}</p> : null}
-      {vendor.address ? (
-        <p className="text-sm text-yd-muted">
-          {vendor.address.addressLine1}, {vendor.address.city}, {vendor.address.state} {vendor.address.postalCode}
-        </p>
-      ) : null}
-      <p className="capitalize">{vendor.status} / {vendor.approvalStatus}</p>
-      <p className="text-sm">Commission {vendor.commissionRate}%</p>
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => mutate.mutate("approved")}>Approve</Button>
-        <Button variant="outline" onClick={() => mutate.mutate("rejected")}>Reject</Button>
-        <Button variant="danger" onClick={() => setConfirm("suspended")}>Suspend</Button>
-        <Button variant="secondary" onClick={() => mutate.mutate("active")}>Reactivate</Button>
-      </div>
-      <ConfirmDialog open={Boolean(confirm)} title="Suspend vendor" body="This vendor will not be able to sell until reactivated." onClose={() => setConfirm(null)} onConfirm={() => mutate.mutate("suspended")} />
     </div>
   );
 }
