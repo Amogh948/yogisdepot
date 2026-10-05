@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Leaf, RefreshCcw, ShieldCheck, Truck } from "lucide-react";
 import { useProducts, useCategories, useWishlist } from "../../hooks/useCatalog";
 import { merchandisingApi } from "../../services/api/products.api";
+import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { CategoryChipCarousel } from "../../components/category/CategoryCard";
 import { mediaUrl, entityId, type Product, type Category } from "../../types";
 import { Skeleton, SectionHeader } from "../../components/ui/Feedback";

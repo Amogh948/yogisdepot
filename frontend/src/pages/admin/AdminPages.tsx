@@ -1044,7 +1044,7 @@ export function AdminOrdersPage() {
                 {order.items.length} item{order.items.length === 1 ? "" : "s"}
                 {order.createdAt ? ` · ${new Date(order.createdAt).toLocaleDateString("en-CA")}` : ""}
               </p>
-              <Badge>{order.orderStatus.replaceAll("_", " ")}</Badge>
+              <Badge>{order.orderStatus.replace(/_/g, " ")}</Badge>
             </div>
           </Link>
         ))}
@@ -1076,7 +1076,7 @@ export function AdminOrderDetailPage() {
       />
       <div className="rounded-2xl bg-white p-4 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Badge>{order.orderStatus.replaceAll("_", " ")}</Badge>
+          <Badge>{order.orderStatus.replace(/_/g, " ")}</Badge>
           <p className="font-display text-xl">{formatCad(order.total)}</p>
         </div>
         <p className="mt-2 text-sm text-yd-muted">
@@ -1100,7 +1100,7 @@ export function AdminOrderDetailPage() {
       >
         {["pending", "confirmed", "processing", "packed", "shipped", "out_for_delivery", "delivered", "cancelled"].map((status) => (
           <option key={status} value={status}>
-            {status.replaceAll("_", " ")}
+            {status.replace(/_/g, " ")}
           </option>
         ))}
       </Select>
@@ -1118,7 +1118,7 @@ export function AdminOrderDetailPage() {
               <p className="text-sm text-yd-muted">
                 × {item.quantity} · {formatCad(item.totalPrice)}
               </p>
-              <p className="text-xs capitalize text-yd-muted">{item.fulfillmentStatus.replaceAll("_", " ")}</p>
+              <p className="text-xs capitalize text-yd-muted">{item.fulfillmentStatus.replace(/_/g, " ")}</p>
             </div>
           </article>
         ))}
