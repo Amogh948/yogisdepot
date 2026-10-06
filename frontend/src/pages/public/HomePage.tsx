@@ -1,11 +1,14 @@
 import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Leaf, RefreshCcw, ShieldCheck, Truck } from "lucide-react";
 import { useProducts, useCategories, useWishlist } from "../../hooks/useCatalog";
 import { merchandisingApi } from "../../services/api/products.api";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
+import { MerchandisingCardCarousel } from "../../components/merchandising/MerchandisingCard";
 import { CategoryChipCarousel } from "../../components/category/CategoryCard";
+import { buildHomeHeroSlides, HomeHeroCarousel } from "../../components/home/HomeHeroCarousel";
 import { mediaUrl, entityId, type Product, type Category } from "../../types";
 import { Skeleton, SectionHeader } from "../../components/ui/Feedback";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
@@ -29,9 +32,14 @@ export function HomePage() {
   const deals = useProducts({ discount: "true", sort: "discount", limit: 8 });
   const newest = useProducts({ sort: "newest", limit: 8 });
   const merch = useQuery({
-    queryKey: ["merchandising", "home"],
-    queryFn: () => merchandisingApi.list("home"),
+    queryKey: ["merchandising", "home-rails"],
+    queryFn: () => merchandisingApi.list(),
   });
+  const homeRails = (merch.data?.data || []).filter(
+    (rail) =>
+      rail.products?.length &&
+      (rail.placement === "home" || rail.placement === "offers" || rail.placement === "gifts"),
+  );
   const categories = useCategories();
   const { addToCart, toggleWishlist } = useCommerceActions();
   const wishlist = useWishlist();
@@ -39,6 +47,15 @@ export function HomePage() {
   const parents = (categories.data?.data || []).filter((c) => !c.parentId);
   const heroImage = mediaUrl(popular.data?.items?.[0]?.thumbnail || popular.data?.items?.[0]?.images?.[0]);
   const teaImage = mediaUrl(deals.data?.items?.[0]?.thumbnail || deals.data?.items?.[0]?.images?.[0]);
+  const heroSlides = useMemo(
+    () =>
+      buildHomeHeroSlides({
+        rails: homeRails,
+        categories: parents,
+        fallbackImage: heroImage || teaImage,
+      }),
+    [homeRails, parents, heroImage, teaImage],
+  );
 
   const onAdd = (p: Product) => addToCart.mutate({ product: p });
   const onWish = (p: Product) => toggleWishlist.mutate({ product: p, wished: wished.has(entityId(p)) });
@@ -50,7 +67,6 @@ export function HomePage() {
         <meta name="description" content="Snacks, teas, spices and pantry staples from trusted local kitchens." />
       </Helmet>
 
-      {/* Desktop: sidebar + hero — flex avoids 220px grid trap when aside is hidden */}
       <div className="flex w-full min-w-0 flex-col gap-6 lg:flex-row">
         <aside className="hidden w-[220px] shrink-0 lg:block">
           <nav className="sticky top-28 rounded-[14px] border border-yd-border bg-white p-3 shadow-soft">
@@ -74,30 +90,7 @@ export function HomePage() {
         </aside>
 
         <div className="min-w-0 w-full flex-1 space-y-5">
-          {/* Mobile location already in header; quick category chips on mobile are in header */}
-
-          <section className="relative overflow-hidden rounded-[16px] bg-yd-forest min-h-[220px] sm:min-h-[280px] lg:min-h-[340px]">
-            {heroImage ? (
-              <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
-            ) : null}
-            <div className="absolute inset-0 bg-gradient-to-r from-yd-forest via-yd-forest/75 to-yd-forest/20" />
-            <div className="relative z-10 flex h-full max-w-xl flex-col justify-center p-5 sm:p-8 lg:p-10">
-              <h1 className="font-display text-[28px] leading-[1.15] text-white sm:text-4xl lg:text-[42px]">
-                <span className="lg:hidden">Everyday Indian favourites, delivered with care.</span>
-                <span className="hidden lg:inline">Taste Authentic India Everyday</span>
-              </h1>
-              <p className="mt-2 hidden text-sm text-white/80 sm:text-base lg:block">
-                Snacks, teas, spices and pantry staples from trusted local kitchens.
-              </p>
-              <Link
-                to="/products"
-                className="mt-5 inline-flex min-h-11 w-fit items-center rounded-full bg-yd-saffron px-6 text-sm font-bold text-white shadow-soft hover:bg-yd-terracotta"
-              >
-                <span className="lg:hidden">Shop now →</span>
-                <span className="hidden lg:inline">Shop Now</span>
-              </Link>
-            </div>
-          </section>
+          <HomeHeroCarousel slides={heroSlides} />
 
           <div className="grid grid-cols-3 gap-2 lg:hidden">
             {TRUST_MOBILE.map((item) => (
@@ -115,29 +108,11 @@ export function HomePage() {
               </div>
             ))}
           </div>
-
-          <div className="hidden gap-3 lg:grid lg:grid-cols-2">
-            <Link to="/categories/snacks" className="relative overflow-hidden rounded-[14px] min-h-[120px] bg-yd-cream">
-              {heroImage ? <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" /> : null}
-              <div className="relative z-10 flex h-full flex-col justify-end p-4">
-                <p className="font-display text-xl text-yd-forest">Snacks for Every Mood</p>
-                <span className="mt-2 inline-flex w-fit rounded-full bg-yd-forest px-3 py-1 text-xs font-bold text-white">Shop</span>
-              </div>
-            </Link>
-            <Link to="/categories/beverages" className="relative overflow-hidden rounded-[14px] min-h-[120px] bg-yd-forest">
-              {teaImage ? <img src={teaImage} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" /> : null}
-              <div className="relative z-10 flex h-full flex-col justify-end p-4">
-                <p className="font-display text-xl text-white">Premium Teas from India</p>
-                <span className="mt-2 inline-flex w-fit rounded-full bg-yd-saffron px-3 py-1 text-xs font-bold text-white">Shop</span>
-              </div>
-            </Link>
-          </div>
         </div>
       </div>
 
       <section>
         <SectionHeader title="Shop by category" action={<Link to="/categories" className="text-sm font-semibold text-yd-green">View all</Link>} />
-        {/* Mobile: 2x2 circular grid per wireframe; also horizontal scroll for more */}
         <div className="grid grid-cols-4 gap-3 sm:hidden">
           {(categories.isLoading ? [] : parents.slice(0, 4)).map((cat) => (
             <Link key={cat.slug} to={`/categories/${cat.slug}`} className="flex flex-col items-center gap-1.5 text-center">
@@ -160,6 +135,12 @@ export function HomePage() {
         </div>
       </section>
 
+      <MerchandisingCardCarousel
+        title="Grab It Before It’s Gone!🔥"
+        subtitle="Tap a card to browse the products inside"
+        rails={homeRails}
+      />
+
       <ProductCarousel
         title="Bestsellers"
         loading={popular.isLoading}
@@ -169,19 +150,6 @@ export function HomePage() {
         onWishlist={onWish}
         seeAllTo="/products?sort=popular"
       />
-
-      {(merch.data?.data || [])
-        .filter((rail) => rail.products?.length)
-        .map((rail) => (
-          <ProductCarousel
-            key={rail.id}
-            title={rail.name}
-            products={rail.products}
-            wished={wished}
-            onAdd={onAdd}
-            onWishlist={onWish}
-          />
-        ))}
 
       <ProductCarousel
         title="Today's deals"
@@ -194,6 +162,15 @@ export function HomePage() {
       />
 
       <ProductCarousel
+        title="Featured picks"
+        loading={featured.isLoading}
+        products={featured.data?.items || []}
+        wished={wished}
+        onAdd={onAdd}
+        onWishlist={onWish}
+      />
+
+      <ProductCarousel
         title="New arrivals"
         loading={newest.isLoading}
         products={newest.data?.items || []}
@@ -201,15 +178,6 @@ export function HomePage() {
         onAdd={onAdd}
         onWishlist={onWish}
         seeAllTo="/products?sort=newest"
-      />
-
-      <ProductCarousel
-        title="Featured picks"
-        loading={featured.isLoading}
-        products={featured.data?.items || []}
-        wished={wished}
-        onAdd={onAdd}
-        onWishlist={onWish}
       />
 
       <div className="rounded-[14px] bg-yd-saffron px-5 py-5 text-center text-white sm:flex sm:items-center sm:justify-between sm:text-left">

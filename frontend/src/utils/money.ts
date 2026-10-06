@@ -1,15 +1,32 @@
-const cad = new Intl.NumberFormat("en-CA", {
-  style: "currency",
-  currency: "CAD",
-});
+const formatters = new Map<string, Intl.NumberFormat>();
 
-/** Format a dollar amount (API still returns dollars for many fields). */
-export function formatCad(amount: number | undefined | null): string {
-  if (amount == null || Number.isNaN(Number(amount))) return cad.format(0);
-  return cad.format(Number(amount));
+function formatterFor(currency: string) {
+  const code = (currency || "CAD").toUpperCase();
+  let fmt = formatters.get(code);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat("en-CA", { style: "currency", currency: code });
+    formatters.set(code, fmt);
+  }
+  return fmt;
 }
 
-/** Format integer cents as CAD. */
+/** Format a dollar amount using the given ISO currency (defaults to CAD). */
+export function formatMoney(amount: number | undefined | null, currency = "CAD"): string {
+  if (amount == null || Number.isNaN(Number(amount))) return formatterFor(currency).format(0);
+  return formatterFor(currency).format(Number(amount));
+}
+
+/** Format integer cents using the given ISO currency. */
+export function formatMoneyFromCents(cents: number | undefined | null, currency = "CAD"): string {
+  return formatMoney((cents ?? 0) / 100, currency);
+}
+
+/** @deprecated Prefer formatMoney with configured currency */
+export function formatCad(amount: number | undefined | null): string {
+  return formatMoney(amount, "CAD");
+}
+
+/** @deprecated Prefer formatMoneyFromCents with configured currency */
 export function formatCadFromCents(cents: number | undefined | null): string {
-  return formatCad((cents ?? 0) / 100);
+  return formatMoneyFromCents(cents, "CAD");
 }

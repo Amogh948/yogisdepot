@@ -5,6 +5,7 @@ import { adminApi } from "../../services/api/admin.api";
 import { PageHeader } from "../../layouts/DashboardLayout";
 import { Button } from "../../components/ui/Button";
 import { Input, Select, Textarea } from "../../components/ui/Input";
+import { ImageUpload } from "../../components/ui/ImageUpload";
 import { Badge, EmptyState, Skeleton } from "../../components/ui/Feedback";
 import { ConfirmDialog } from "../../components/ui/Overlay";
 import { entityId, mediaUrl, type Vendor } from "../../types";
@@ -216,19 +217,21 @@ export function AdminVendorFormPage() {
         },
       };
       if (isNew) {
-        const created = await adminApi.createVendor({
+        await adminApi.createVendor({
           ...payload,
           firstName: form.firstName,
           lastName: form.lastName,
           password: form.password || undefined,
         });
         toast("Vendor created");
-        navigate(`/admin/vendors/${entityId(created.data)}`);
+        await queryClient.invalidateQueries({ queryKey: ["admin-vendors"] });
+        navigate("/admin/vendors");
       } else {
         await adminApi.updateVendor(id!, payload);
         toast("Vendor saved");
         await queryClient.invalidateQueries({ queryKey: ["admin-vendor", id] });
         await queryClient.invalidateQueries({ queryKey: ["admin-vendors"] });
+        navigate("/admin/vendors");
       }
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Could not save vendor", "error");
@@ -286,7 +289,7 @@ export function AdminVendorFormPage() {
         <Textarea label="Description" value={form.description} onChange={(e) => setField("description", e.target.value)} rows={3} />
         <Input label="Store email" type="email" value={form.email} onChange={(e) => setField("email", e.target.value)} />
         <Input label="Phone" value={form.phone} onChange={(e) => setField("phone", e.target.value)} />
-        <Input label="Logo URL" value={form.logo} onChange={(e) => setField("logo", e.target.value)} />
+        <ImageUpload label="Store logo" value={form.logo} onChange={(url) => setField("logo", url)} />
         <div className="grid gap-3 sm:grid-cols-2">
           <Input
             label="Commission %"

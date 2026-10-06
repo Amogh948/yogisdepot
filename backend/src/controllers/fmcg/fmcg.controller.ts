@@ -51,6 +51,11 @@ export const productWizardSchema = z.object({
   storageInstructions: z.string().optional(),
   usageInstructions: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  tasteIndiaRegion: z
+    .enum(["north-india", "south-india", "west-india", "east-india", "northeast-india"])
+    .optional()
+    .nullable(),
+  festivalId: z.string().optional().nullable(),
   images: z.array(z.union([z.string(), z.object({ url: z.string(), type: z.string().optional() })])).optional(),
   variants: z.array(wizardVariantSchema).min(1),
 });
@@ -87,6 +92,11 @@ export const productStackUpdateSchema = z.object({
   isActive: z.boolean().optional(),
   isVegetarian: z.boolean().optional(),
   isVegan: z.boolean().optional(),
+  tasteIndiaRegion: z
+    .enum(["north-india", "south-india", "west-india", "east-india", "northeast-india"])
+    .optional()
+    .nullable(),
+  festivalId: z.string().optional().nullable(),
   variants: z.array(stackVariantUpdateSchema).optional(),
 });
 
@@ -122,6 +132,16 @@ export const adminFmcgController = {
   createBrand: asyncHandler(async (req: Request, res: Response) => {
     const brand = await catalogAdminService.createBrand(req.body);
     sendSuccess(res, brand, "Brand created", 201);
+  }),
+
+  updateBrand: asyncHandler(async (req: Request, res: Response) => {
+    const brand = await catalogAdminService.updateBrand(req.params.id, req.body);
+    sendSuccess(res, brand, "Brand updated");
+  }),
+
+  removeBrand: asyncHandler(async (req: Request, res: Response) => {
+    await catalogAdminService.removeBrand(req.params.id);
+    sendSuccess(res, null, "Brand deleted");
   }),
 
   taxCategories: asyncHandler(async (_req: Request, res: Response) => {

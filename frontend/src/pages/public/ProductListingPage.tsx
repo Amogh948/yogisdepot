@@ -9,6 +9,7 @@ import { useCategories, useProducts, useWishlist } from "../../hooks/useCatalog"
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { entityId } from "../../types";
 import { SearchBar } from "../../components/navigation/SearchBar";
+import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
 import { TRENDING_SEARCHES } from "../../content/navigation";
 
 export function ProductListingPage({ mode }: { mode: "all" | "search" | "category" }) {
@@ -119,6 +120,19 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
       <Helmet>
         <title>{`${title} | Yogi's Depot`}</title>
       </Helmet>
+      <Breadcrumbs
+        items={[
+          { label: "Home", to: "/" },
+          ...(mode === "category"
+            ? [
+                { label: "Categories", to: "/categories" },
+                { label: title },
+              ]
+            : mode === "search"
+              ? [{ label: "Search" }, ...(query ? [{ label: query }] : [])]
+              : [{ label: "Products" }]),
+        ]}
+      />
 
       {mode === "search" ? (
         <div className="mb-4 w-full space-y-4">

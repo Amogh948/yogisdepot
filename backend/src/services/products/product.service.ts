@@ -7,6 +7,7 @@ import { InventoryBatch } from "../../models/InventoryBatch";
 import { InventoryReservation } from "../../models/InventoryReservation";
 import { InventoryTransaction } from "../../models/InventoryTransaction";
 import { MerchandisingCollection } from "../../models/MerchandisingCollection";
+import { Brand } from "../../models/Brand";
 import { Pricing } from "../../models/Pricing";
 import { Product, ProductDocument, ProductImage } from "../../models/Product";
 import { Review } from "../../models/Review";
@@ -34,6 +35,10 @@ export interface ProductListQuery {
   featured?: string;
   inStock?: string;
   brand?: string;
+  /** Taste India region collection id or slug */
+  region?: string;
+  /** Festival store collection id or slug */
+  festival?: string;
   discount?: string;
 }
 
@@ -219,15 +224,54 @@ export const productService = {
     if (query.vegan === "true") filter.isVegan = true;
     if (query.featured === "true") filter.isFeatured = true;
     if (query.inStock === "true") filter.stock = { $gt: 0 };
-    if (query.brand) filter.brand = { $regex: query.brand, $options: "i" };
+    if (query.brand) {
+      const brandDoc = await Brand.findOne({
+        $or: [{ slug: query.brand.toLowerCase() }, { name: { $regex: `^${query.brand}$`, $options: "i" } }],
+      }).select("_id name");
+      if (brandDoc) {
+        filter.$or = [{ brandId: brandDoc._id }, { brand: brandDoc.name }];
+      } else {
+        filter.brand = { $regex: query.brand, $options: "i" };
+      }
+    }
+    if (query.region) {
+      const regionSlug = /^[a-f0-9]{24}$/i.test(query.region)
+        ? (
+            await MerchandisingCollection.findOne({ _id: query.region, placement: "region" }).select("slug")
+          )?.slug
+        : query.region;
+      if (regionSlug) {
+        filter.tasteIndiaRegion = regionSlug;
+      } else {
+        filter._id = { $in: [] };
+      }
+    }
+    if (query.festival) {
+      const festivalFilter: Record<string, unknown>[] = [{ slug: query.festival, placement: "festival" }];
+      if (/^[a-f0-9]{24}$/i.test(query.festival)) {
+        festivalFilter.push({ _id: query.festival, placement: "festival" });
+      }
+      const festival = await MerchandisingCollection.findOne({ $or: festivalFilter }).select("_id");
+      if (festival) {
+        filter.festivalId = festival._id;
+      } else {
+        filter._id = { $in: [] };
+      }
+    }
     if (query.discount === "true") filter.discount = { $gt: 0 };
     if (query.search) {
-      filter.$or = [
+      const searchClause = [
         { name: { $regex: query.search, $options: "i" } },
         { brand: { $regex: query.search, $options: "i" } },
         { tags: { $regex: query.search, $options: "i" } },
         { sku: { $regex: query.search, $options: "i" } },
       ];
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchClause }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchClause;
+      }
     }
 
     let sort: Record<string, 1 | -1> = { createdAt: -1 };

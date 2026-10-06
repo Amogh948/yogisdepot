@@ -1,26 +1,48 @@
-import { Link, useLocation } from "react-router-dom";
-import { MapPin, ShoppingBag } from "lucide-react";
+import { useRef } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ShoppingBag } from "lucide-react";
 import { SearchBar } from "./SearchBar";
 import { CategoryNav } from "./CategoryNav";
+import { DeliverToTrigger } from "./DeliverToPicker";
 import { useAuthStore } from "../../store/auth.store";
 import { useCartItemCount } from "../../hooks/useCatalog";
+
+const BRAND_DOUBLE_TAP_MS = 300;
 
 export function MobileHeader({ hideSearch = false }: { hideSearch?: boolean }) {
   const count = useCartItemCount();
   const location = useLocation();
+  const navigate = useNavigate();
   const showCategoryChips = location.pathname === "/";
+  const brandTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onBrandTap = (event: React.MouseEvent | React.PointerEvent) => {
+    event.preventDefault();
+    if (brandTapTimer.current) {
+      clearTimeout(brandTapTimer.current);
+      brandTapTimer.current = null;
+      navigate("/admin/dashboard");
+      return;
+    }
+    brandTapTimer.current = setTimeout(() => {
+      brandTapTimer.current = null;
+      navigate("/");
+    }, BRAND_DOUBLE_TAP_MS);
+  };
 
   return (
     <div className="w-full lg:hidden">
       <div className="flex w-full min-w-0 items-start justify-between gap-3 px-4 pt-3">
         <div className="min-w-0 flex-1">
-          <Link to="/" className="font-display text-[22px] font-semibold leading-none text-yd-saffron">
+          <Link
+            to="/"
+            onClick={onBrandTap}
+            className="inline-block touch-manipulation select-none font-display text-[22px] font-semibold leading-none text-yd-saffron"
+            aria-label="Yogi's Depot home"
+          >
             Yogi&apos;s Depot
           </Link>
-          <p className="mt-1.5 flex min-w-0 items-center gap-1 text-xs text-yd-muted">
-            <MapPin className="h-3.5 w-3.5 shrink-0 text-yd-green" aria-hidden />
-            <span className="truncate">Deliver to Toronto</span>
-          </p>
+          {hideSearch ? <DeliverToTrigger variant="text" /> : null}
         </div>
         <Link to="/cart" className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-yd-border bg-white" aria-label={`Cart${count ? `, ${count} items` : ""}`}>
           <ShoppingBag className="h-5 w-5 text-yd-forest" />
@@ -33,7 +55,12 @@ export function MobileHeader({ hideSearch = false }: { hideSearch?: boolean }) {
       </div>
       {!hideSearch ? (
         <div className="min-w-0 px-4 pb-2 pt-3">
-          <SearchBar size="lg" />
+          <div className="flex min-w-0 items-center gap-2">
+            <DeliverToTrigger variant="pill" className="shrink-0" />
+            <div className="min-w-0 flex-1">
+              <SearchBar size="lg" />
+            </div>
+          </div>
         </div>
       ) : (
         <div className="pb-2" />
@@ -53,12 +80,7 @@ export function DesktopHeader({ hideSearch = false }: { hideSearch?: boolean }) 
         <Link to="/" className="shrink-0 font-display text-2xl font-semibold text-yd-saffron">
           Yogi&apos;s Depot
         </Link>
-        <button type="button" className="flex max-w-[160px] items-center gap-1.5 rounded-full border border-yd-border bg-white px-3 py-2 text-left text-xs">
-          <MapPin className="h-3.5 w-3.5 shrink-0 text-yd-green" aria-hidden />
-          <span className="truncate text-yd-muted">
-            Deliver to <span className="font-semibold text-yd-ink">Toronto</span>
-          </span>
-        </button>
+        <DeliverToTrigger variant="pill" />
         <div className="min-w-0 flex-1">{hideSearch ? null : <SearchBar />}</div>
         <nav className="flex items-center gap-5 text-sm font-semibold text-yd-ink">
           <Link to="/products" className="hover:text-yd-green">

@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   adminAnalyticsController,
   adminCustomerController,
+  adminCustomerUpdateSchema,
   adminSettingsController,
   settingsUpdateSchema,
   uploadController,
@@ -49,6 +50,8 @@ router.get("/settings", adminSettingsController.get);
 router.patch("/settings", validate(settingsUpdateSchema), adminSettingsController.update);
 
 router.get("/customers", adminCustomerController.list);
+router.get("/customers/:id", adminCustomerController.get);
+router.put("/customers/:id", validate(adminCustomerUpdateSchema), adminCustomerController.update);
 router.patch(
   "/customers/:id",
   validate(z.object({ isActive: z.boolean() })),
@@ -81,6 +84,8 @@ router.delete("/products/:id", adminProductController.remove);
 
 router.get("/brands", adminFmcgController.brands);
 router.post("/brands", adminFmcgController.createBrand);
+router.put("/brands/:id", adminFmcgController.updateBrand);
+router.delete("/brands/:id", adminFmcgController.removeBrand);
 router.get("/tax-categories", adminFmcgController.taxCategories);
 router.post("/tax-categories", adminFmcgController.createTaxCategory);
 router.get("/tax-rates", adminFmcgController.taxRates);

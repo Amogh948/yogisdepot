@@ -11,6 +11,8 @@ import {
 
 export interface PlatformSettingsDocument extends Document {
   siteName: string;
+  /** Display / checkout currency code (ISO 4217). Prices remain stored in minor units. */
+  currency: string;
   /** @deprecated Not used for checkout tax — CanadianTaxRate + canadianTax.service */
   taxRate?: number;
   deliveryFeeCents: number;
@@ -30,6 +32,7 @@ export interface PlatformSettingsDocument extends Document {
 const platformSettingsSchema = new Schema<PlatformSettingsDocument>(
   {
     siteName: { type: String, default: APP_NAME },
+    currency: { type: String, default: "CAD", uppercase: true, trim: true },
     taxRate: { type: Number, min: 0, max: 1 },
     deliveryFeeCents: { type: Number, default: DEFAULT_DELIVERY_FEE_CENTS, min: 0 },
     freeShippingThresholdCents: {

@@ -1,4 +1,4 @@
-import type { Coupon, Order, Pagination, Product, User, Vendor } from "../../types";
+import type { Address, Coupon, Order, Pagination, Product, User, Vendor } from "../../types";
 import { api, unwrap } from "./client";
 
 export type AdminMerchandising = {
@@ -7,10 +7,13 @@ export type AdminMerchandising = {
   name: string;
   slug: string;
   subtitle?: string;
-  placement: "home" | "offers" | "gifts";
+  placement: "home" | "offers" | "gifts" | "region" | "festival";
+  tasteIndiaRegion?: string | null;
   image?: string;
   sortOrder: number;
   isActive: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
   productIds: string[];
   productCount?: number;
   products?: Array<{
@@ -21,6 +24,16 @@ export type AdminMerchandising = {
     isActive?: boolean;
     price?: number;
   }>;
+};
+
+export type AdminBrand = {
+  id?: string;
+  _id?: string;
+  name: string;
+  slug: string;
+  description?: string;
+  logoUrl?: string;
+  isActive: boolean;
 };
 
 export type AdminDeliveryLocation = {
@@ -43,6 +56,9 @@ export const adminApi = {
     const result = await unwrap<User[]>(api.get("/admin/customers", { params: { search } }));
     return { items: result.data, pagination: result.pagination as Pagination };
   },
+  customer: (id: string) => unwrap<User & { addresses?: Address[] }>(api.get(`/admin/customers/${id}`)),
+  updateCustomer: (id: string, payload: Record<string, unknown>) =>
+    unwrap<User & { addresses?: Address[] }>(api.put(`/admin/customers/${id}`, payload)),
   setCustomerActive: (id: string, isActive: boolean) => unwrap<User>(api.patch(`/admin/customers/${id}`, { isActive })),
   vendors: async (params?: Record<string, string>) => {
     const result = await unwrap<Vendor[]>(api.get("/admin/vendors", { params }));
@@ -70,8 +86,10 @@ export const adminApi = {
   updateProduct: (id: string, payload: Record<string, unknown>) => unwrap<Product>(api.put(`/admin/products/${id}`, payload)),
   productStatus: (id: string, isActive: boolean) => unwrap<Product>(api.patch(`/admin/products/${id}/status`, { isActive })),
   deleteProduct: (id: string) => unwrap<Product>(api.delete(`/admin/products/${id}`)),
-  brands: () => unwrap<unknown[]>(api.get("/admin/brands")),
-  createBrand: (payload: Record<string, unknown>) => unwrap<unknown>(api.post("/admin/brands", payload)),
+  brands: () => unwrap<AdminBrand[]>(api.get("/admin/brands")),
+  createBrand: (payload: Record<string, unknown>) => unwrap<AdminBrand>(api.post("/admin/brands", payload)),
+  updateBrand: (id: string, payload: Record<string, unknown>) => unwrap<AdminBrand>(api.put(`/admin/brands/${id}`, payload)),
+  deleteBrand: (id: string) => unwrap<null>(api.delete(`/admin/brands/${id}`)),
   taxCategories: () => unwrap<unknown[]>(api.get("/admin/tax-categories")),
   taxRates: () => unwrap<unknown[]>(api.get("/admin/tax-rates")),
   createTaxRate: (payload: Record<string, unknown>) => unwrap<unknown>(api.post("/admin/tax-rates", payload)),

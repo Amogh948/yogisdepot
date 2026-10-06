@@ -24,6 +24,16 @@ export type VendorStatus = (typeof VENDOR_STATUSES)[number];
 export const ADDRESS_TYPES = ["home", "work", "other"] as const;
 export type AddressType = (typeof ADDRESS_TYPES)[number];
 
+/** Fixed Taste India regions shown when a product is tagged for Taste India. */
+export const TASTE_INDIA_REGIONS = [
+  "north-india",
+  "south-india",
+  "west-india",
+  "east-india",
+  "northeast-india",
+] as const;
+export type TasteIndiaRegion = (typeof TASTE_INDIA_REGIONS)[number];
+
 export const ORDER_STATUSES = [
   "pending",
   "confirmed",

@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { BadRequestError, ConflictError, NotFoundError } from "../../errors/AppError";
 import { Category } from "../../models/Category";
 import { Product } from "../../models/Product";
@@ -72,26 +73,32 @@ export const categoryService = {
       throw new NotFoundError("Category not found");
     }
 
-    const [childCount, productCount] = await Promise.all([
-      Category.countDocuments({ parentId: category._id }),
-      Product.countDocuments({
-        $or: [{ categoryId: category._id }, { subCategoryId: category._id }],
-      }),
-    ]);
+    const descendantIds = await this.collectDescendantIds(String(category._id));
+    const categoryIds = [category._id, ...descendantIds];
 
-    if (childCount > 0) {
-      throw new BadRequestError(
-        `Cannot delete category with ${childCount} subcategory${childCount === 1 ? "" : "ies"}. Remove or reassign them first.`,
-      );
-    }
+    const productCount = await Product.countDocuments({
+      $or: [{ categoryId: { $in: categoryIds } }, { subCategoryId: { $in: categoryIds } }],
+    });
+
     if (productCount > 0) {
       throw new BadRequestError(
-        `Cannot delete category with ${productCount} product${productCount === 1 ? "" : "s"}. Remove or reassign products first.`,
+        `Cannot delete category with ${productCount} product${productCount === 1 ? "" : "s"} in it or its subcategories. Remove or reassign products first.`,
       );
     }
 
-    await Category.deleteOne({ _id: category._id });
+    await Category.deleteMany({ _id: { $in: categoryIds } });
     return category;
+  },
+
+  async collectDescendantIds(parentId: string) {
+    const ids: Types.ObjectId[] = [];
+    let frontier = [new Types.ObjectId(parentId)];
+    while (frontier.length) {
+      const children = await Category.find({ parentId: { $in: frontier } }).select("_id");
+      frontier = children.map((child) => child._id as Types.ObjectId);
+      ids.push(...frontier);
+    }
+    return ids;
   },
 
   async getById(id: string) {

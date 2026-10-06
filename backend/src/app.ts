@@ -25,6 +25,7 @@ import { paymentRoutes, uploadRoutes } from "./routes/upload.routes";
 import { scratchRoutes } from "./routes/scratch.routes";
 import { merchandisingRoutes } from "./routes/merchandising.routes";
 import { deliveryRoutes } from "./routes/delivery.routes";
+import { brandRoutes, settingsRoutes } from "./routes/publicCatalog.routes";
 
 function hostnameOf(value: string): string | null {
   try {
@@ -106,6 +107,8 @@ export function createApp() {
   api.use("/scratch", scratchRoutes);
   api.use("/merchandising", merchandisingRoutes);
   api.use("/delivery-locations", deliveryRoutes);
+  api.use("/brands", brandRoutes);
+  api.use("/settings", settingsRoutes);
   api.use("/notifications", notificationRoutes);
   api.use("/admin", adminRoutes);
   api.use("/vendors", vendorRoutes);

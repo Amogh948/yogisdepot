@@ -16,6 +16,8 @@ export interface ProductQuery {
   featured?: string;
   inStock?: string;
   brand?: string;
+  region?: string;
+  festival?: string;
   discount?: string;
 }
 
@@ -34,14 +36,34 @@ export type MerchandisingRail = {
   slug: string;
   subtitle?: string;
   placement: string;
+  tasteIndiaRegion?: string | null;
   image?: string;
   sortOrder: number;
+  startDate?: string | null;
+  endDate?: string | null;
   products: Product[];
 };
 
 export const merchandisingApi = {
-  list: (placement?: string) =>
-    unwrap<MerchandisingRail[]>(api.get("/merchandising", { params: placement ? { placement } : undefined })),
+  list: (placement?: string, opts?: { region?: string }) =>
+    unwrap<MerchandisingRail[]>(
+      api.get("/merchandising", { params: { placement, region: opts?.region } }),
+    ),
+  bySlug: (slug: string) => unwrap<MerchandisingRail>(api.get(`/merchandising/${slug}`)),
+};
+
+export type PublicBrand = {
+  id?: string;
+  _id?: string;
+  name: string;
+  slug: string;
+  description?: string;
+  logoUrl?: string;
+};
+
+export const brandsApi = {
+  list: () => unwrap<PublicBrand[]>(api.get("/brands")),
+  bySlug: (slug: string) => unwrap<PublicBrand>(api.get(`/brands/${slug}`)),
 };
 
 export const categoriesApi = {

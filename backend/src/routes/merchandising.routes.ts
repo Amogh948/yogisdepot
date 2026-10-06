@@ -3,5 +3,6 @@ import { publicMerchandisingController } from "../controllers/merchandising/merc
 
 const router = Router();
 router.get("/", publicMerchandisingController.list);
+router.get("/:slug", publicMerchandisingController.getBySlug);
 
 export const merchandisingRoutes = router;

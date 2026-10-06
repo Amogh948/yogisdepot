@@ -4,11 +4,38 @@ import { sendSuccess } from "../../utils/apiResponse";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { assertVendorId } from "../vendor/vendor.controller";
 import { User } from "../../models/User";
+import { Address } from "../../models/Address";
 import { getPlatformSettings } from "../../models/PlatformSettings";
 import { buildPagination, parsePagination } from "../../utils/pagination";
 import { retrieveUploadedFile, saveUploadedFiles } from "../../services/storage/storage.service";
-import { BadRequestError } from "../../errors/AppError";
+import { BadRequestError, ConflictError, NotFoundError } from "../../errors/AppError";
+import { ADDRESS_TYPES } from "../../config/constants";
 import { z } from "zod";
+
+export const adminCustomerUpdateSchema = z.object({
+  firstName: z.string().trim().min(1).max(60).optional(),
+  lastName: z.string().trim().min(1).max(60).optional(),
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().max(40).optional().or(z.literal("")),
+  isActive: z.boolean().optional(),
+  isEmailVerified: z.boolean().optional(),
+  defaultAddress: z
+    .object({
+      id: z.string().optional(),
+      fullName: z.string().trim().min(1),
+      phone: z.string().trim().min(1),
+      addressLine1: z.string().trim().min(1),
+      addressLine2: z.string().trim().optional().or(z.literal("")),
+      city: z.string().trim().min(1),
+      state: z.string().trim().min(1),
+      postalCode: z.string().trim().min(1),
+      country: z.string().trim().min(1).default("Canada"),
+      landmark: z.string().trim().optional().or(z.literal("")),
+      addressType: z.enum(ADDRESS_TYPES).optional(),
+    })
+    .optional()
+    .nullable(),
+});
 
 export const adminAnalyticsController = {
   overview: asyncHandler(async (_req: Request, res: Response) => {
@@ -44,14 +71,92 @@ export const adminCustomerController = {
     sendSuccess(res, data, "Customers fetched successfully", 200, buildPagination(page, limit, total));
   }),
 
+  get: asyncHandler(async (req: Request, res: Response) => {
+    const user = await User.findOne({ _id: req.params.id, role: "customer" });
+    if (!user) {
+      throw new NotFoundError("Customer not found");
+    }
+    const addresses = await Address.find({ customerId: user._id }).sort({ isDefault: -1, createdAt: -1 });
+    sendSuccess(res, { ...user.toJSON(), addresses }, "Customer fetched successfully");
+  }),
+
+  update: asyncHandler(async (req: Request, res: Response) => {
+    const user = await User.findOne({ _id: req.params.id, role: "customer" });
+    if (!user) {
+      throw new NotFoundError("Customer not found");
+    }
+
+    const { defaultAddress, ...profile } = req.body as z.infer<typeof adminCustomerUpdateSchema>;
+
+    if (profile.email && profile.email.toLowerCase() !== user.email) {
+      const existing = await User.findOne({ email: profile.email.toLowerCase(), _id: { $ne: user._id } });
+      if (existing) {
+        throw new ConflictError("An account with this email already exists");
+      }
+      user.email = profile.email.toLowerCase();
+    }
+    if (profile.firstName !== undefined) user.firstName = profile.firstName;
+    if (profile.lastName !== undefined) user.lastName = profile.lastName;
+    if (profile.phone !== undefined) user.phone = profile.phone || undefined;
+    if (profile.isActive !== undefined) user.isActive = profile.isActive;
+    if (profile.isEmailVerified !== undefined) user.isEmailVerified = profile.isEmailVerified;
+    await user.save();
+
+    if (defaultAddress) {
+      const payload = {
+        fullName: defaultAddress.fullName,
+        phone: defaultAddress.phone,
+        addressLine1: defaultAddress.addressLine1,
+        addressLine2: defaultAddress.addressLine2 || undefined,
+        city: defaultAddress.city,
+        state: defaultAddress.state,
+        postalCode: defaultAddress.postalCode,
+        country: defaultAddress.country || "Canada",
+        landmark: defaultAddress.landmark || undefined,
+        addressType: defaultAddress.addressType || "home",
+        isDefault: true,
+      };
+      await Address.updateMany({ customerId: user._id }, { isDefault: false });
+      if (defaultAddress.id) {
+        const updated = await Address.findOneAndUpdate(
+          { _id: defaultAddress.id, customerId: user._id },
+          payload,
+          { new: true },
+        );
+        if (!updated) {
+          throw new NotFoundError("Address not found");
+        }
+      } else {
+        const existingDefault = await Address.findOne({ customerId: user._id }).sort({ isDefault: -1, createdAt: -1 });
+        if (existingDefault) {
+          Object.assign(existingDefault, payload);
+          await existingDefault.save();
+        } else {
+          await Address.create({ ...payload, customerId: user._id });
+        }
+      }
+    }
+
+    const addresses = await Address.find({ customerId: user._id }).sort({ isDefault: -1, createdAt: -1 });
+    sendSuccess(res, { ...user.toJSON(), addresses }, "Customer updated successfully");
+  }),
+
   setActive: asyncHandler(async (req: Request, res: Response) => {
-    const user = await User.findByIdAndUpdate(req.params.id, { isActive: req.body.isActive }, { new: true });
+    const user = await User.findOneAndUpdate(
+      { _id: req.params.id, role: "customer" },
+      { isActive: req.body.isActive },
+      { new: true },
+    );
+    if (!user) {
+      throw new NotFoundError("Customer not found");
+    }
     sendSuccess(res, user, "Customer updated successfully");
   }),
 };
 
 export const settingsUpdateSchema = z.object({
   siteName: z.string().min(2).optional(),
+  currency: z.enum(["CAD", "USD", "INR", "GBP", "EUR", "AUD"]).optional(),
   /** @deprecated Not used for checkout tax */
   taxRate: z.number().min(0).max(1).optional(),
   shippingFee: z.number().min(0).optional(),

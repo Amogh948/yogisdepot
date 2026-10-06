@@ -1,4 +1,5 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
+import { TASTE_INDIA_REGIONS } from "../config/constants";
 
 export interface NutritionInformation {
   calories?: number;
@@ -50,6 +51,10 @@ export interface ProductDocument extends Document {
   brandId?: Types.ObjectId;
   /** Legacy string brand kept for dual-read / migration. */
   brand?: string;
+  /** Optional Taste India region slug (north-india, south-india, …). */
+  tasteIndiaRegion?: string;
+  /** Optional Festival Store collection (MerchandisingCollection with placement "festival"). */
+  festivalId?: Types.ObjectId;
   categoryId: Types.ObjectId;
   subCategoryId?: Types.ObjectId;
   vendorId: Types.ObjectId;
@@ -145,6 +150,11 @@ const productSchema = new Schema<ProductDocument>(
     },
     brandId: { type: Schema.Types.ObjectId, ref: "Brand" },
     brand: { type: String, trim: true },
+    tasteIndiaRegion: {
+      type: String,
+      enum: TASTE_INDIA_REGIONS,
+    },
+    festivalId: { type: Schema.Types.ObjectId, ref: "MerchandisingCollection" },
     categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
     subCategoryId: { type: Schema.Types.ObjectId, ref: "Category" },
     vendorId: { type: Schema.Types.ObjectId, ref: "Vendor", required: true },
@@ -216,6 +226,8 @@ productSchema.index({ productCode: 1 }, { unique: true, sparse: true });
 productSchema.index({ sku: 1 }, { unique: true, sparse: true });
 productSchema.index({ "source.system": 1, "source.sourceId": 1 }, { unique: true, sparse: true });
 productSchema.index({ brandId: 1 });
+productSchema.index({ tasteIndiaRegion: 1 });
+productSchema.index({ festivalId: 1 });
 productSchema.index({ categoryId: 1, status: 1 });
 productSchema.index({ vendorId: 1, status: 1 });
 productSchema.index({ status: 1 });

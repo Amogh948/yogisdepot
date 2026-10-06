@@ -11,6 +11,7 @@ import { Badge, EmptyState, ErrorState, Price, QuantitySelector, Rating, Skeleto
 import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { entityId, mediaUrl } from "../../types";
+import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
 
 export function ProductDetailPage() {
   const { slug = "" } = useParams();
@@ -41,11 +42,22 @@ export function ProductDetailPage() {
   const weight = (product as typeof product & { weight?: number }).weight;
 
   return (
-    <div className="min-w-0 pb-28 lg:pb-8">
+      <div className="min-w-0 pb-28 lg:pb-8">
       <Helmet>
         <title>{`${product.name} | Yogi's Depot`}</title>
         <meta name="description" content={product.shortDescription || product.description.slice(0, 140)} />
       </Helmet>
+
+      <Breadcrumbs
+        items={[
+          { label: "Home", to: "/" },
+          { label: "Products", to: "/products" },
+          ...(typeof product.categoryId === "object" && product.categoryId?.slug
+            ? [{ label: product.categoryId.name || "Category", to: `/categories/${product.categoryId.slug}` }]
+            : []),
+          { label: product.name },
+        ]}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
         <div>

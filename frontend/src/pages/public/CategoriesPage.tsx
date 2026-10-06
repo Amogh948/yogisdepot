@@ -2,6 +2,7 @@ import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 import { useCategories } from "../../hooks/useCatalog";
 import { EmptyState, ErrorState, Skeleton } from "../../components/ui/Feedback";
+import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
 import { mediaUrl } from "../../types";
 
 export function CategoriesPage() {
@@ -13,6 +14,7 @@ export function CategoriesPage() {
       <Helmet>
         <title>All Categories | Yogi&apos;s Depot</title>
       </Helmet>
+      <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: "Categories" }]} />
       <h1 className="mb-5 font-display text-3xl text-yd-forest">All Categories</h1>
       {categories.isLoading ? (
         <div className="grid grid-cols-3 gap-4 md:grid-cols-4 lg:grid-cols-6">

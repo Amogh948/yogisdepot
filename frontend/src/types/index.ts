@@ -60,6 +60,8 @@ export interface Product {
   vendorId: VendorSummary | string;
   categoryId: { name: string; slug: string } | string;
   brand?: string;
+  tasteIndiaRegion?: string | null;
+  festivalId?: string | null;
   images: string[];
   thumbnail?: string;
   price: number;

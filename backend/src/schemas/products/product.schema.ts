@@ -19,6 +19,11 @@ export const createProductSchema = z.object({
   categoryId: z.string().min(1),
   subCategoryId: z.string().optional(),
   brand: z.string().optional(),
+  tasteIndiaRegion: z
+    .enum(["north-india", "south-india", "west-india", "east-india", "northeast-india"])
+    .optional()
+    .nullable(),
+  festivalId: z.string().optional().nullable(),
   images: z.array(z.string()).default([]),
   thumbnail: z.string().optional(),
   price: z.number().min(0),
@@ -75,5 +80,7 @@ export const productQuerySchema = z.object({
   featured: z.enum(["true", "false"]).optional(),
   inStock: z.enum(["true", "false"]).optional(),
   brand: z.string().optional(),
+  region: z.string().optional(),
+  festival: z.string().optional(),
   discount: z.enum(["true", "false"]).optional(),
 });

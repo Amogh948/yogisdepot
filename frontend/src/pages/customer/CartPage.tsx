@@ -51,9 +51,9 @@ export function CartPage() {
   if (!data?.items.length) {
     return (
       <EmptyState
-        title="Your cart is waiting for something delicious"
-        body="Add snacks, sweets, or pantry staples to get started."
-        action={<Button variant="accent" onClick={() => navigate("/products")}>Explore snacks →</Button>}
+        title="Your cart is empty"
+        body="Looks like you haven't added anything yet. Browse our products and find something you love."
+        action={<Button variant="accent" onClick={() => navigate("/products")}>Start shopping →</Button>}
       />
     );
   }

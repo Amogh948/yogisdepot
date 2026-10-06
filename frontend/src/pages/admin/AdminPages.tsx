@@ -4,6 +4,7 @@ import { adminApi } from "../../services/api/admin.api";
 import { PageHeader } from "../../layouts/DashboardLayout";
 import { Button } from "../../components/ui/Button";
 import { Input, Select, Textarea } from "../../components/ui/Input";
+import { ImageUpload } from "../../components/ui/ImageUpload";
 import { Badge, EmptyState, Skeleton } from "../../components/ui/Feedback";
 import { entityId, mediaUrl, type Category, type OrderStatus, type Product } from "../../types";
 import { useToastStore } from "../../store/toast.store";
@@ -11,6 +12,7 @@ import { ConfirmDialog, Modal } from "../../components/ui/Overlay";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../services/api/client";
 import { formatCad, formatCadFromCents } from "../../utils/money";
+import { TASTE_INDIA_REGION_OPTIONS } from "../../content/discovery";
 
 type AdminStackVariant = {
   variantId: string;
@@ -38,11 +40,16 @@ type AdminProductStack = {
   id?: string;
   _id?: string;
   name: string;
-  slug: string;
   productCode?: string;
-  brandName?: string;
+  slug?: string;
   brand?: string;
-  description: string;
+  brandName?: string;
+  brandId?: { name?: string; slug?: string; id?: string; _id?: string } | string;
+  tasteIndiaRegion?: string | null;
+  festivalId?: string | null;
+  categoryId?: { name?: string; slug?: string; id?: string; _id?: string } | string;
+  vendorId?: { businessName?: string; id?: string; _id?: string } | string;
+  description?: string;
   shortDescription?: string;
   ingredients?: string;
   storageInstructions?: string;
@@ -55,10 +62,8 @@ type AdminProductStack = {
   isActive?: boolean;
   isVegetarian?: boolean;
   isVegan?: boolean;
-  categoryId?: { name?: string; slug?: string; id?: string; _id?: string } | string;
-  vendorId?: { businessName?: string; id?: string; _id?: string } | string;
-  variants: AdminStackVariant[];
   source?: { system?: string; sourceId?: string };
+  variants?: AdminStackVariant[];
 };
 
 function Stat({ label, value }: { label: string; value: string | number }) {
@@ -244,13 +249,19 @@ export function AdminProductWizardPage() {
   const toast = useToastStore((s) => s.push);
   const vendors = useQuery({ queryKey: ["admin-vendors"], queryFn: () => adminApi.vendors() });
   const categories = useQuery({ queryKey: ["admin-categories"], queryFn: () => adminApi.categories() });
+  const brands = useQuery({ queryKey: ["admin-brands"], queryFn: () => adminApi.brands() });
+  const festivals = useQuery({ queryKey: ["admin-merchandising"], queryFn: () => adminApi.merchandising() });
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: "",
+    brandId: "",
     brandName: "",
     categoryId: "",
     vendorId: "",
+    inTasteIndia: false,
+    tasteIndiaRegion: "",
+    festivalId: "",
     description: "",
     ingredients: "",
     storageInstructions: "",
@@ -265,16 +276,23 @@ export function AdminProductWizardPage() {
     batchQty: 50,
   });
 
-  const set = (key: keyof typeof form, value: string | number) => setForm((prev) => ({ ...prev, [key]: value }));
+  const set = (key: keyof typeof form, value: string | number | boolean) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const submit = async () => {
+    if (form.inTasteIndia && !form.tasteIndiaRegion) {
+      toast("Select a Taste India region", "error");
+      return;
+    }
     setSaving(true);
     try {
       await adminApi.createProductWizard({
         name: form.name,
+        brandId: form.brandId || undefined,
         brandName: form.brandName || undefined,
         categoryId: form.categoryId,
         vendorId: form.vendorId,
+        tasteIndiaRegion: form.inTasteIndia ? form.tasteIndiaRegion || null : null,
+        festivalId: form.festivalId || null,
         description: form.description || form.name,
         ingredients: form.ingredients || undefined,
         storageInstructions: form.storageInstructions || undefined,
@@ -312,7 +330,29 @@ export function AdminProductWizardPage() {
       {step === 1 ? (
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
           <Input label="Product name" value={form.name} onChange={(e) => set("name", e.target.value)} />
-          <Input label="Brand" value={form.brandName} onChange={(e) => set("brandName", e.target.value)} />
+          <Select
+            label="Brand"
+            value={form.brandId}
+            onChange={(e) => {
+              const brandId = e.target.value;
+              const brand = ((brands.data?.data || []) as Array<{ name: string; id?: string; _id?: string }>).find(
+                (item) => entityId(item) === brandId,
+              );
+              setForm((prev) => ({ ...prev, brandId, brandName: brand?.name || prev.brandName }));
+            }}
+          >
+            <option value="">Select brand</option>
+            {((brands.data?.data || []) as Array<{ name: string; id?: string; _id?: string }>).map((brand) => (
+              <option key={entityId(brand)} value={entityId(brand)}>
+                {brand.name}
+              </option>
+            ))}
+          </Select>
+          <Input
+            label="Or new brand name"
+            value={form.brandName}
+            onChange={(e) => setForm((prev) => ({ ...prev, brandName: e.target.value, brandId: "" }))}
+          />
           <Select label="Vendor" value={form.vendorId} onChange={(e) => set("vendorId", e.target.value)}>
             <option value="">Select vendor</option>
             {(vendors.data?.items || []).map((v) => (
@@ -328,6 +368,46 @@ export function AdminProductWizardPage() {
                 {c.name}
               </option>
             ))}
+          </Select>
+          <Select
+            label="Taste India"
+            value={form.inTasteIndia ? "yes" : "no"}
+            onChange={(e) => {
+              const enabled = e.target.value === "yes";
+              setForm((prev) => ({
+                ...prev,
+                inTasteIndia: enabled,
+                tasteIndiaRegion: enabled ? prev.tasteIndiaRegion : "",
+              }));
+            }}
+          >
+            <option value="no">Not in Taste India</option>
+            <option value="yes">Taste India</option>
+          </Select>
+          {form.inTasteIndia ? (
+            <Select
+              label="Region"
+              value={form.tasteIndiaRegion}
+              onChange={(e) => set("tasteIndiaRegion", e.target.value)}
+              required
+            >
+              <option value="">Select region</option>
+              {TASTE_INDIA_REGION_OPTIONS.map((region) => (
+                <option key={region.slug} value={region.slug}>
+                  {region.name}
+                </option>
+              ))}
+            </Select>
+          ) : null}
+          <Select label="Festival (optional)" value={form.festivalId} onChange={(e) => set("festivalId", e.target.value)}>
+            <option value="">None</option>
+            {(festivals.data?.data || [])
+              .filter((c) => c.placement === "festival")
+              .map((festival) => (
+                <option key={entityId(festival)} value={entityId(festival)}>
+                  {festival.name}
+                </option>
+              ))}
           </Select>
           <Input label="Description" value={form.description} onChange={(e) => set("description", e.target.value)} />
           <Input label="Ingredients" value={form.ingredients} onChange={(e) => set("ingredients", e.target.value)} />
@@ -405,6 +485,7 @@ export function AdminProductEditPage() {
   const queryClient = useQueryClient();
   const vendors = useQuery({ queryKey: ["admin-vendors"], queryFn: () => adminApi.vendors({ limit: "100" }) });
   const categories = useQuery({ queryKey: ["admin-categories"], queryFn: () => adminApi.categories() });
+  const brands = useQuery({ queryKey: ["admin-brands"], queryFn: () => adminApi.brands() });
   const taxCategories = useQuery({ queryKey: ["admin-tax-categories"], queryFn: () => adminApi.taxCategories() });
   const collectionsQuery = useQuery({ queryKey: ["admin-merchandising"], queryFn: () => adminApi.merchandising() });
   const membershipQuery = useQuery({
@@ -424,9 +505,13 @@ export function AdminProductEditPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: "",
+    brandId: "",
     brandName: "",
     categoryId: "",
     vendorId: "",
+    inTasteIndia: false,
+    tasteIndiaRegion: "",
+    festivalId: "",
     description: "",
     shortDescription: "",
     ingredients: "",
@@ -435,7 +520,7 @@ export function AdminProductEditPage() {
     manufacturer: "",
     countryOfOrigin: "",
     tags: "",
-    images: "",
+    images: [] as string[],
     isFeatured: false,
     isActive: true,
     isVegetarian: true,
@@ -469,9 +554,13 @@ export function AdminProductEditPage() {
     if (!product) return;
     setForm({
       name: product.name || "",
+      brandId: refId(product.brandId),
       brandName: product.brandName || product.brand || "",
       categoryId: refId(product.categoryId),
       vendorId: refId(product.vendorId),
+      inTasteIndia: Boolean(product.tasteIndiaRegion),
+      tasteIndiaRegion: product.tasteIndiaRegion || "",
+      festivalId: product.festivalId || "",
       description: product.description || "",
       shortDescription: product.shortDescription || "",
       ingredients: product.ingredients || "",
@@ -480,7 +569,7 @@ export function AdminProductEditPage() {
       manufacturer: product.manufacturer || "",
       countryOfOrigin: product.countryOfOrigin || "",
       tags: (product.tags || []).join(", "),
-      images: (product.imageUrls || []).join(", "),
+      images: product.imageUrls || [],
       isFeatured: Boolean(product.isFeatured),
       isActive: product.isActive !== false,
       isVegetarian: product.isVegetarian !== false,
@@ -516,11 +605,19 @@ export function AdminProductEditPage() {
   const save = async () => {
     setSaving(true);
     try {
+      if (form.inTasteIndia && !form.tasteIndiaRegion) {
+        toast("Select a Taste India region", "error");
+        setSaving(false);
+        return;
+      }
       await adminApi.updateProductStack(id, {
         name: form.name,
+        brandId: form.brandId || undefined,
         brandName: form.brandName || undefined,
         categoryId: form.categoryId,
         vendorId: form.vendorId,
+        tasteIndiaRegion: form.inTasteIndia ? form.tasteIndiaRegion || null : null,
+        festivalId: form.festivalId || null,
         description: form.description || form.name,
         shortDescription: form.shortDescription || undefined,
         ingredients: form.ingredients || undefined,
@@ -532,10 +629,7 @@ export function AdminProductEditPage() {
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean),
-        images: form.images
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
+        images: form.images,
         isFeatured: form.isFeatured,
         isActive: form.isActive,
         isVegetarian: form.isVegetarian,
@@ -558,6 +652,7 @@ export function AdminProductEditPage() {
       await queryClient.invalidateQueries({ queryKey: ["admin-product-stack", id] });
       await queryClient.invalidateQueries({ queryKey: ["admin-products"] });
       await queryClient.invalidateQueries({ queryKey: ["admin-product-merchandising", id] });
+      navigate("/admin/products");
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Could not save product", "error");
     } finally {
@@ -604,7 +699,29 @@ export function AdminProductEditPage() {
       <section className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
         <h2 className="font-display text-lg">Basics</h2>
         <Input label="Product name" value={form.name} onChange={(e) => setField("name", e.target.value)} />
-        <Input label="Brand" value={form.brandName} onChange={(e) => setField("brandName", e.target.value)} />
+        <Select
+          label="Brand"
+          value={form.brandId}
+          onChange={(e) => {
+            const brandId = e.target.value;
+            const brand = ((brands.data?.data || []) as Array<{ name: string; id?: string; _id?: string }>).find(
+              (item) => entityId(item) === brandId,
+            );
+            setForm((prev) => ({ ...prev, brandId, brandName: brand?.name || prev.brandName }));
+          }}
+        >
+          <option value="">Select brand</option>
+          {((brands.data?.data || []) as Array<{ name: string; id?: string; _id?: string }>).map((brand) => (
+            <option key={entityId(brand)} value={entityId(brand)}>
+              {brand.name}
+            </option>
+          ))}
+        </Select>
+        <Input
+          label="Or new brand name"
+          value={form.brandName}
+          onChange={(e) => setForm((prev) => ({ ...prev, brandName: e.target.value, brandId: "" }))}
+        />
         <Select label="Vendor" value={form.vendorId} onChange={(e) => setField("vendorId", e.target.value)}>
           <option value="">Select vendor</option>
           {(vendors.data?.items || []).map((v) => (
@@ -620,6 +737,50 @@ export function AdminProductEditPage() {
               {c.name}
             </option>
           ))}
+        </Select>
+        <Select
+          label="Taste India"
+          value={form.inTasteIndia ? "yes" : "no"}
+          onChange={(e) => {
+            const enabled = e.target.value === "yes";
+            setForm((prev) => ({
+              ...prev,
+              inTasteIndia: enabled,
+              tasteIndiaRegion: enabled ? prev.tasteIndiaRegion : "",
+            }));
+          }}
+        >
+          <option value="no">Not in Taste India</option>
+          <option value="yes">Taste India</option>
+        </Select>
+        {form.inTasteIndia ? (
+          <Select
+            label="Region"
+            value={form.tasteIndiaRegion}
+            onChange={(e) => setField("tasteIndiaRegion", e.target.value)}
+            required
+          >
+            <option value="">Select region</option>
+            {TASTE_INDIA_REGION_OPTIONS.map((region) => (
+              <option key={region.slug} value={region.slug}>
+                {region.name}
+              </option>
+            ))}
+          </Select>
+        ) : null}
+        <Select
+          label="Festival (optional)"
+          value={form.festivalId}
+          onChange={(e) => setField("festivalId", e.target.value)}
+        >
+          <option value="">None</option>
+          {(collectionsQuery.data?.data || [])
+            .filter((c) => c.placement === "festival")
+            .map((festival) => (
+              <option key={entityId(festival)} value={entityId(festival)}>
+                {festival.name}
+              </option>
+            ))}
         </Select>
         <Textarea label="Description" value={form.description} onChange={(e) => setField("description", e.target.value)} rows={4} />
         <Input
@@ -639,11 +800,13 @@ export function AdminProductEditPage() {
           />
         </div>
         <Input label="Tags (comma separated)" value={form.tags} onChange={(e) => setField("tags", e.target.value)} />
-        <Textarea
-          label="Image URLs (comma separated)"
+        <ImageUpload
+          label="Product images"
+          multiple
+          maxFiles={8}
           value={form.images}
-          onChange={(e) => setField("images", e.target.value)}
-          rows={2}
+          onChange={(urls) => setField("images", urls)}
+          hint="Uploads to Cloudinary when configured"
         />
       </section>
 
@@ -959,10 +1122,10 @@ export function AdminCategoriesPage() {
             onChange={(e) => setCreateForm((p) => ({ ...p, description: e.target.value }))}
             rows={3}
           />
-          <Input
-            label="Image URL"
+          <ImageUpload
+            label="Category image"
             value={createForm.image}
-            onChange={(e) => setCreateForm((p) => ({ ...p, image: e.target.value }))}
+            onChange={(url) => setCreateForm((p) => ({ ...p, image: url }))}
           />
           <Select
             label="Parent"
@@ -1003,7 +1166,7 @@ export function AdminCategoriesPage() {
       <ConfirmDialog
         open={Boolean(deleteId)}
         title="Delete category"
-        body="This permanently removes the category. Categories with products or subcategories cannot be deleted until those are removed."
+        body="This permanently removes the category and any empty subcategories. Categories with products cannot be deleted until those products are removed or reassigned."
         confirmLabel="Delete"
         onClose={() => setDeleteId(null)}
         onConfirm={async () => {
@@ -1080,15 +1243,16 @@ export function AdminCategoryDetailPage() {
         isActive: form.isActive,
       };
       if (isNew) {
-        const created = await adminApi.createCategory(payload);
-        const createdId = entityId(created.data as { id?: string; _id?: string });
+        await adminApi.createCategory(payload);
         toast("Category created");
-        navigate(createdId ? `/admin/categories/${createdId}` : "/admin/categories");
+        await queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
+        navigate("/admin/categories");
       } else {
         await adminApi.updateCategory(id!, payload);
         toast("Category saved");
         await queryClient.invalidateQueries({ queryKey: ["admin-category", id] });
         await queryClient.invalidateQueries({ queryKey: ["admin-categories"] });
+        navigate("/admin/categories");
       }
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Could not save category", "error");
@@ -1132,7 +1296,7 @@ export function AdminCategoryDetailPage() {
           onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
           rows={3}
         />
-        <Input label="Image URL" value={form.image} onChange={(e) => setForm((p) => ({ ...p, image: e.target.value }))} />
+        <ImageUpload label="Category image" value={form.image} onChange={(url) => setForm((p) => ({ ...p, image: url }))} />
         <Select label="Parent" value={form.parentId} onChange={(e) => setForm((p) => ({ ...p, parentId: e.target.value }))}>
           <option value="">None</option>
           {((all.data?.data || []) as Category[])
@@ -1176,7 +1340,7 @@ export function AdminCategoryDetailPage() {
       <ConfirmDialog
         open={confirmDelete}
         title="Delete category"
-        body="This permanently removes the category. Categories with products or subcategories cannot be deleted until those are removed."
+        body="This permanently removes the category and any empty subcategories. Categories with products cannot be deleted until those products are removed or reassigned."
         confirmLabel="Delete"
         onClose={() => setConfirmDelete(false)}
         onConfirm={async () => {
@@ -1314,19 +1478,268 @@ export function AdminOrderDetailPage() {
 }
 
 export function AdminCustomersPage() {
+  const queryClient = useQueryClient();
+  const toast = useToastStore((s) => s.push);
   const query = useQuery({ queryKey: ["admin-customers"], queryFn: () => adminApi.customers() });
+
+  const toggleActive = async (id: string, isActive: boolean) => {
+    try {
+      await adminApi.setCustomerActive(id, isActive);
+      toast(isActive ? "Customer enabled" : "Customer disabled");
+      await queryClient.invalidateQueries({ queryKey: ["admin-customers"] });
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not update customer", "error");
+    }
+  };
+
   return (
     <div>
       <PageHeader title="Customers" />
+      {query.isLoading ? <Skeleton className="h-32" /> : null}
+      {!query.isLoading && !(query.data?.items || []).length ? (
+        <EmptyState title="No customers" body="Registered customers will appear here." />
+      ) : null}
       {(query.data?.items || []).map((user) => (
-        <article key={user.id} className="mb-2 flex items-center justify-between rounded-2xl bg-white p-3 shadow-soft">
-          <div>
-            <p className="font-semibold">{user.firstName} {user.lastName}</p>
-            <p className="text-sm">{user.email}</p>
+        <article key={user.id} className="mb-2 flex items-center justify-between gap-3 rounded-2xl bg-white p-3 shadow-soft">
+          <div className="min-w-0">
+            <p className="font-semibold">
+              {user.firstName} {user.lastName}
+            </p>
+            <p className="truncate text-sm text-yd-muted">{user.email}</p>
+            {user.phone ? <p className="text-xs text-yd-muted">{user.phone}</p> : null}
           </div>
-          <Button size="sm" variant="outline" onClick={() => adminApi.setCustomerActive(user.id, !user.isActive)}>{user.isActive ? "Disable" : "Enable"}</Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge tone={user.isActive ? "sage" : "muted"}>{user.isActive ? "Active" : "Disabled"}</Badge>
+            <Link to={`/admin/customers/${user.id}`}>
+              <Button size="sm" variant="outline">
+                Edit
+              </Button>
+            </Link>
+            <Button size="sm" variant="outline" onClick={() => toggleActive(user.id, !user.isActive)}>
+              {user.isActive ? "Disable" : "Enable"}
+            </Button>
+          </div>
         </article>
       ))}
+    </div>
+  );
+}
+
+type CustomerFormState = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  isActive: boolean;
+  isEmailVerified: boolean;
+  addressId: string;
+  fullName: string;
+  addressPhone: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  landmark: string;
+  addressType: "home" | "work" | "other";
+};
+
+const emptyCustomerForm: CustomerFormState = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  isActive: true,
+  isEmailVerified: false,
+  addressId: "",
+  fullName: "",
+  addressPhone: "",
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  state: "ON",
+  postalCode: "",
+  country: "Canada",
+  landmark: "",
+  addressType: "home",
+};
+
+export function AdminCustomerFormPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const toast = useToastStore((s) => s.push);
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<CustomerFormState>(emptyCustomerForm);
+
+  const existing = useQuery({
+    queryKey: ["admin-customer", id],
+    queryFn: () => adminApi.customer(id!),
+    enabled: Boolean(id),
+  });
+
+  useEffect(() => {
+    const user = existing.data?.data;
+    if (!user) return;
+    const addresses = user.addresses || [];
+    const address = addresses.find((a) => a.isDefault) || addresses[0];
+    setForm({
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      isActive: user.isActive ?? true,
+      isEmailVerified: user.isEmailVerified ?? false,
+      addressId: address?.id || address?._id || "",
+      fullName: address?.fullName || `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+      addressPhone: address?.phone || user.phone || "",
+      addressLine1: address?.addressLine1 || "",
+      addressLine2: address?.addressLine2 || "",
+      city: address?.city || "",
+      state: address?.state || "ON",
+      postalCode: address?.postalCode || "",
+      country: address?.country || "Canada",
+      landmark: address?.landmark || "",
+      addressType: address?.addressType || "home",
+    });
+  }, [existing.data]);
+
+  const setField = <K extends keyof CustomerFormState>(key: K, value: CustomerFormState[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const save = async () => {
+    if (!id) return;
+    if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
+      toast("First name, last name, and email are required", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const hasAddress = Boolean(form.addressLine1.trim() && form.city.trim() && form.postalCode.trim());
+      await adminApi.updateCustomer(id, {
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        isActive: form.isActive,
+        isEmailVerified: form.isEmailVerified,
+        ...(hasAddress
+          ? {
+              defaultAddress: {
+                ...(form.addressId ? { id: form.addressId } : {}),
+                fullName: form.fullName.trim() || `${form.firstName} ${form.lastName}`.trim(),
+                phone: form.addressPhone.trim() || form.phone.trim() || "0000000000",
+                addressLine1: form.addressLine1.trim(),
+                addressLine2: form.addressLine2.trim() || undefined,
+                city: form.city.trim(),
+                state: form.state.trim() || "ON",
+                postalCode: form.postalCode.trim(),
+                country: form.country.trim() || "Canada",
+                landmark: form.landmark.trim() || undefined,
+                addressType: form.addressType,
+              },
+            }
+          : {}),
+      });
+      toast("Customer saved");
+      await queryClient.invalidateQueries({ queryKey: ["admin-customers"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-customer", id] });
+      navigate("/admin/customers");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not save customer", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (existing.isLoading) return <Skeleton className="h-48" />;
+  if (existing.isError || !existing.data?.data) {
+    return (
+      <div>
+        <PageHeader title="Customer" />
+        <EmptyState title="Customer not found" body="This customer may have been removed." />
+        <Button className="mt-4" variant="outline" onClick={() => navigate("/admin/customers")}>
+          Back to customers
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-4">
+      <PageHeader
+        title="Edit customer"
+        action={
+          <Button variant="outline" onClick={() => navigate("/admin/customers")}>
+            Back
+          </Button>
+        }
+      />
+      <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
+        <p className="text-sm font-semibold">Profile</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input label="First name" value={form.firstName} onChange={(e) => setField("firstName", e.target.value)} required />
+          <Input label="Last name" value={form.lastName} onChange={(e) => setField("lastName", e.target.value)} required />
+        </div>
+        <Input label="Email" type="email" value={form.email} onChange={(e) => setField("email", e.target.value)} required />
+        <Input label="Phone" value={form.phone} onChange={(e) => setField("phone", e.target.value)} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Select
+            label="Status"
+            value={form.isActive ? "active" : "disabled"}
+            onChange={(e) => setField("isActive", e.target.value === "active")}
+          >
+            <option value="active">Active</option>
+            <option value="disabled">Disabled</option>
+          </Select>
+          <Select
+            label="Email verified"
+            value={form.isEmailVerified ? "yes" : "no"}
+            onChange={(e) => setField("isEmailVerified", e.target.value === "yes")}
+          >
+            <option value="yes">Verified</option>
+            <option value="no">Not verified</option>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
+        <p className="text-sm font-semibold">Default address</p>
+        <p className="text-xs text-yd-muted">Leave blank to keep existing addresses unchanged.</p>
+        <Input label="Full name" value={form.fullName} onChange={(e) => setField("fullName", e.target.value)} />
+        <Input label="Phone" value={form.addressPhone} onChange={(e) => setField("addressPhone", e.target.value)} />
+        <Input label="Address line 1" value={form.addressLine1} onChange={(e) => setField("addressLine1", e.target.value)} />
+        <Input label="Address line 2" value={form.addressLine2} onChange={(e) => setField("addressLine2", e.target.value)} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input label="City" value={form.city} onChange={(e) => setField("city", e.target.value)} />
+          <Input label="Province / State" value={form.state} onChange={(e) => setField("state", e.target.value)} />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input label="Postal code" value={form.postalCode} onChange={(e) => setField("postalCode", e.target.value)} />
+          <Input label="Country" value={form.country} onChange={(e) => setField("country", e.target.value)} />
+        </div>
+        <Input label="Landmark" value={form.landmark} onChange={(e) => setField("landmark", e.target.value)} />
+        <Select
+          label="Address type"
+          value={form.addressType}
+          onChange={(e) => setField("addressType", e.target.value as CustomerFormState["addressType"])}
+        >
+          <option value="home">Home</option>
+          <option value="work">Work</option>
+          <option value="other">Other</option>
+        </Select>
+      </div>
+
+      <div className="flex gap-2">
+        <Button onClick={save} disabled={saving}>
+          {saving ? "Saving…" : "Save changes"}
+        </Button>
+        <Button variant="outline" onClick={() => navigate("/admin/customers")}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1413,6 +1826,7 @@ export function AdminSettingsPage() {
         const form = new FormData(event.currentTarget);
         await adminApi.updateSettings({
           siteName: String(form.get("siteName")),
+          currency: String(form.get("currency")),
           deliveryFeeCents: Number(form.get("deliveryFeeCents")),
           freeShippingThresholdCents: Number(form.get("freeShippingThresholdCents")),
           platformFeeCents: Number(form.get("platformFeeCents")),
@@ -1425,8 +1839,18 @@ export function AdminSettingsPage() {
       }}
     >
       <PageHeader title="Settings" />
-      <p className="text-sm text-yd-muted">Fees are CAD cents. Sales tax is configured via versioned Canadian tax rates — not a flat taxRate.</p>
+      <p className="text-sm text-yd-muted">
+        Fees are stored in minor units (cents). Currency controls storefront display formatting. Sales tax uses Canadian tax
+        rates — not a flat taxRate.
+      </p>
       <Input label="Site name" name="siteName" defaultValue={String(settings.siteName || "")} />
+      <Select label="Currency" name="currency" defaultValue={String(settings.currency || "CAD")}>
+        {["CAD", "USD", "INR", "GBP", "EUR", "AUD"].map((code) => (
+          <option key={code} value={code}>
+            {code}
+          </option>
+        ))}
+      </Select>
       <Input label="Delivery fee (cents)" name="deliveryFeeCents" type="number" defaultValue={String(settings.deliveryFeeCents ?? 499)} />
       <Input label="Free shipping threshold (cents)" name="freeShippingThresholdCents" type="number" defaultValue={String(settings.freeShippingThresholdCents ?? 7500)} />
       <Input label="Platform fee (cents)" name="platformFeeCents" type="number" defaultValue={String(settings.platformFeeCents ?? 99)} />

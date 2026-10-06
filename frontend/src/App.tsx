@@ -10,9 +10,11 @@ import { LoginPage, RegisterPage } from "./pages/public/AuthPages";
 import {
   BrandDetailPage,
   BrandsPage,
+  FestivalDetailPage,
   FestivalPage,
   GiftsPage,
   HelpPage,
+  MerchandisingCollectionPage,
   OffersPage,
   RegionDetailPage,
   RegionsPage,
@@ -27,6 +29,7 @@ import {
   AdminCategoriesPage,
   AdminCategoryDetailPage,
   AdminCouponsPage,
+  AdminCustomerFormPage,
   AdminCustomersPage,
   AdminDashboardPage,
   AdminOrderDetailPage,
@@ -37,7 +40,8 @@ import {
   AdminReviewsPage,
   AdminSettingsPage,
 } from "./pages/admin/AdminPages";
-import { AdminMerchandisingFormPage, AdminMerchandisingPage } from "./pages/admin/AdminMerchandisingPages";
+import { AdminMerchandisingFormPage, AdminMerchandisingPage, AdminFestivalFormPage, AdminFestivalsPage } from "./pages/admin/AdminMerchandisingPages";
+import { AdminBrandFormPage, AdminBrandsPage } from "./pages/admin/AdminBrandPages";
 import {
   AdminDeliveryLocationFormPage,
   AdminDeliveryLocationsPage,
@@ -65,9 +69,11 @@ export default function App() {
         <Route path="categories/:slug" element={<ProductListingPage mode="category" />} />
         <Route path="search" element={<ProductListingPage mode="search" />} />
         <Route path="offers" element={<OffersPage />} />
+        <Route path="collections/:slug" element={<MerchandisingCollectionPage />} />
         <Route path="discover/regions" element={<RegionsPage />} />
         <Route path="discover/regions/:slug" element={<RegionDetailPage />} />
         <Route path="festival" element={<FestivalPage />} />
+        <Route path="festival/:slug" element={<FestivalDetailPage />} />
         <Route path="gifts" element={<GiftsPage />} />
         <Route path="brands" element={<BrandsPage />} />
         <Route path="brands/:slug" element={<BrandDetailPage />} />
@@ -110,12 +116,19 @@ export default function App() {
           <Route path="merchandising" element={<AdminMerchandisingPage />} />
           <Route path="merchandising/new" element={<AdminMerchandisingFormPage />} />
           <Route path="merchandising/:id" element={<AdminMerchandisingFormPage />} />
+          <Route path="festivals" element={<AdminFestivalsPage />} />
+          <Route path="festivals/new" element={<AdminFestivalFormPage />} />
+          <Route path="festivals/:id" element={<AdminFestivalFormPage />} />
+          <Route path="brands" element={<AdminBrandsPage />} />
+          <Route path="brands/new" element={<AdminBrandFormPage />} />
+          <Route path="brands/:id" element={<AdminBrandFormPage />} />
           <Route path="categories" element={<AdminCategoriesPage />} />
           <Route path="categories/new" element={<AdminCategoryDetailPage />} />
           <Route path="categories/:id" element={<AdminCategoryDetailPage />} />
           <Route path="orders" element={<AdminOrdersPage />} />
           <Route path="orders/:id" element={<AdminOrderDetailPage />} />
           <Route path="customers" element={<AdminCustomersPage />} />
+          <Route path="customers/:id" element={<AdminCustomerFormPage />} />
           <Route path="coupons" element={<AdminCouponsPage />} />
           <Route path="reviews" element={<AdminReviewsPage />} />
           <Route path="analytics" element={<AdminAnalyticsPage />} />

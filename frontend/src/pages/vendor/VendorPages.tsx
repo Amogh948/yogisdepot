@@ -1,9 +1,11 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { vendorApi } from "../../services/api/admin.api";
 import { PageHeader } from "../../layouts/DashboardLayout";
 import { Button } from "../../components/ui/Button";
 import { Input, Select, Textarea } from "../../components/ui/Input";
+import { ImageUpload } from "../../components/ui/ImageUpload";
 import { Badge, EmptyState, Skeleton } from "../../components/ui/Feedback";
 import { entityId } from "../../types";
 import { useToastStore } from "../../store/toast.store";
@@ -73,6 +75,11 @@ export function VendorProductFormPage() {
   });
   const product = existing.data?.items.find((item) => entityId(item) === id);
   const parents = categories.data?.data || [];
+  const [images, setImages] = useState<string[]>([]);
+
+  useEffect(() => {
+    setImages(product?.images || []);
+  }, [product]);
 
   return (
     <form
@@ -88,7 +95,7 @@ export function VendorProductFormPage() {
           price: Number(form.get("price")),
           compareAtPrice: Number(form.get("compareAtPrice") || 0) || undefined,
           stock: Number(form.get("stock")),
-          images: String(form.get("images") || "").split(",").map((s) => s.trim()).filter(Boolean),
+          images,
           ingredients: String(form.get("ingredients") || "") || undefined,
           isVegetarian: form.get("isVegetarian") === "on",
           isVegan: form.get("isVegan") === "on",
@@ -117,7 +124,7 @@ export function VendorProductFormPage() {
       <Input label="Compare at price" name="compareAtPrice" type="number" defaultValue={product?.compareAtPrice} />
       <Input label="Stock" name="stock" type="number" defaultValue={product?.stock} required />
       <Input label="Brand" name="brand" defaultValue={product?.brand} />
-      <Input label="Image URLs (comma separated)" name="images" defaultValue={product?.images.join(", ")} />
+      <ImageUpload label="Product images" multiple maxFiles={8} value={images} onChange={setImages} />
       <Textarea label="Ingredients" name="ingredients" defaultValue={product?.ingredients} />
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="isVegetarian" defaultChecked={product?.isVegetarian ?? true} /> Vegetarian</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="isVegan" defaultChecked={product?.isVegan} /> Vegan</label>

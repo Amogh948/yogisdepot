@@ -1,19 +1,30 @@
 /** Curated discovery mappings → real product/category API queries. No fake product data. */
 
+/** Fixed Taste India regions for product categorization (admin cascading dropdown). */
+export const TASTE_INDIA_REGION_OPTIONS = [
+  { slug: "north-india", name: "North India" },
+  { slug: "south-india", name: "South India" },
+  { slug: "west-india", name: "West India" },
+  { slug: "east-india", name: "East India" },
+  { slug: "northeast-india", name: "Northeast India" },
+] as const;
+
+export type TasteIndiaRegionSlug = (typeof TASTE_INDIA_REGION_OPTIONS)[number]["slug"];
+
 export const REGIONS = [
-  {
-    slug: "south-india",
-    name: "South India",
-    description: "Crisp banana chips, filter coffee, and coastal spice classics.",
-    search: "chips",
-    specialties: ["Banana Chips", "Filter Coffee", "Mixture"],
-  },
   {
     slug: "north-india",
     name: "North India",
     description: "Warm namkeen, chai blends, and festive mithai favourites.",
     search: "namkeen",
     specialties: ["Namkeen", "Masala Chai", "Mathri"],
+  },
+  {
+    slug: "south-india",
+    name: "South India",
+    description: "Crisp banana chips, filter coffee, and coastal spice classics.",
+    search: "chips",
+    specialties: ["Banana Chips", "Filter Coffee", "Mixture"],
   },
   {
     slug: "west-india",

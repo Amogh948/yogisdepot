@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
-import { formatCad } from "../../utils/money";
+import { formatMoney } from "../../utils/money";
+import { useCurrencyCode } from "../../hooks/useSettings";
 
 export function Badge({
   children,
@@ -68,11 +69,12 @@ export function ProductCardSkeleton() {
 }
 
 export function Price({ price, compareAt }: { price: number; compareAt?: number }) {
+  const currency = useCurrencyCode();
   return (
     <div className="flex items-baseline gap-1.5">
-      <span className="text-base font-semibold text-yd-ink">{formatCad(price)}</span>
+      <span className="text-base font-semibold text-yd-ink">{formatMoney(price, currency)}</span>
       {compareAt && compareAt > price ? (
-        <span className="text-xs text-yd-muted line-through">{formatCad(compareAt)}</span>
+        <span className="text-xs text-yd-muted line-through">{formatMoney(compareAt, currency)}</span>
       ) : null}
     </div>
   );

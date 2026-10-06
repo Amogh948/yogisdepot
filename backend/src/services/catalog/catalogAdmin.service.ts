@@ -4,6 +4,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../../errors/App
 import { Brand } from "../../models/Brand";
 import { Inventory } from "../../models/Inventory";
 import { InventoryBatch } from "../../models/InventoryBatch";
+import { MerchandisingCollection } from "../../models/MerchandisingCollection";
 import { Pricing } from "../../models/Pricing";
 import { Product, ProductDocument, ProductImage, ProductVariant } from "../../models/Product";
 import { Sku } from "../../models/Sku";
@@ -13,7 +14,7 @@ import { buildSkuCode, nextProductCode, nextVariantCode } from "../../utils/busi
 import { uniqueSlug } from "../../utils/slug";
 import { inventoryReservationService } from "../inventory/inventoryReservation.service";
 import { skuOfferService } from "./skuOffer.service";
-import { DEFAULT_WAREHOUSE_CODE } from "../../config/constants";
+import { DEFAULT_WAREHOUSE_CODE, TASTE_INDIA_REGIONS, TasteIndiaRegion } from "../../config/constants";
 
 export interface WizardVariantInput {
   name: string;
@@ -55,6 +56,10 @@ export interface ProductWizardInput {
   usageInstructions?: string;
   tags?: string[];
   images?: Array<string | ProductImage>;
+  /** Optional Taste India region slug. */
+  tasteIndiaRegion?: TasteIndiaRegion | null;
+  /** Optional Festival Store merchandising collection id. */
+  festivalId?: string | null;
   variants: WizardVariantInput[];
 }
 
@@ -90,6 +95,10 @@ export interface ProductStackUpdateInput {
   isActive?: boolean;
   isVegetarian?: boolean;
   isVegan?: boolean;
+  /** Pass null or "" to clear. */
+  tasteIndiaRegion?: TasteIndiaRegion | null | "";
+  /** Pass null or "" to clear. */
+  festivalId?: string | null;
   variants?: ProductStackVariantUpdate[];
 }
 
@@ -114,6 +123,34 @@ async function resolveBrandId(input: ProductWizardInput): Promise<Types.ObjectId
   return brand._id;
 }
 
+/** Returns slug to set, null to clear, undefined to leave unchanged. */
+function resolveTasteIndiaRegion(
+  value: string | null | undefined,
+): TasteIndiaRegion | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (!(TASTE_INDIA_REGIONS as readonly string[]).includes(value)) {
+    throw new BadRequestError("Invalid Taste India region");
+  }
+  return value as TasteIndiaRegion;
+}
+
+/** Returns ObjectId to set, null to clear, undefined to leave unchanged. */
+async function resolveFestivalId(
+  value: string | null | undefined,
+): Promise<Types.ObjectId | null | undefined> {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (!Types.ObjectId.isValid(value)) {
+    throw new BadRequestError("Invalid festival");
+  }
+  const festival = await MerchandisingCollection.findOne({ _id: value, placement: "festival" });
+  if (!festival) {
+    throw new BadRequestError("Festival not found — create one under Festivals / Merchandising with Festival store placement");
+  }
+  return festival._id;
+}
+
 export const catalogAdminService = {
   async createProductStack(input: ProductWizardInput, options?: { asVendorId?: string }) {
     if (options?.asVendorId && options.asVendorId !== input.vendorId) {
@@ -124,6 +161,8 @@ export const catalogAdminService = {
     }
 
     const brandId = await resolveBrandId(input);
+    const tasteIndiaRegion = resolveTasteIndiaRegion(input.tasteIndiaRegion);
+    const festivalId = await resolveFestivalId(input.festivalId);
     const productCode = await nextProductCode();
     const images = normalizeImages(input.images);
     const taxCategoryId = input.variants[0].taxCategoryId || (await skuOfferService.ensureTaxCategory());
@@ -152,6 +191,8 @@ export const catalogAdminService = {
       slug: uniqueSlug(input.name),
       brandId,
       brand: input.brandName,
+      tasteIndiaRegion: tasteIndiaRegion || undefined,
+      festivalId: festivalId || undefined,
       categoryId: input.categoryId,
       vendorId: input.vendorId,
       description: input.description,
@@ -254,7 +295,8 @@ export const catalogAdminService = {
     const product = await Product.findById(productId)
       .populate("vendorId", "businessName slug logo")
       .populate("categoryId", "name slug")
-      .populate("brandId", "name slug");
+      .populate("brandId", "name slug")
+      .populate("festivalId", "name slug placement");
     if (!product) {
       throw new NotFoundError("Product not found");
     }
@@ -334,6 +376,15 @@ export const catalogAdminService = {
     return {
       ...productJson,
       brandName,
+      tasteIndiaRegion: product.tasteIndiaRegion || null,
+      festivalId:
+        product.festivalId != null
+          ? String(
+              typeof product.festivalId === "object" && "_id" in (product.festivalId as object)
+                ? (product.festivalId as { _id: Types.ObjectId })._id
+                : product.festivalId,
+            )
+          : null,
       imageUrls,
       variants,
     };
@@ -362,6 +413,24 @@ export const catalogAdminService = {
     if (input.isActive !== undefined) {
       product.isActive = input.isActive;
       product.status = input.isActive ? "active" : "inactive";
+    }
+
+    if (input.tasteIndiaRegion !== undefined) {
+      const region = resolveTasteIndiaRegion(input.tasteIndiaRegion);
+      if (region === null) {
+        product.set("tasteIndiaRegion", undefined);
+      } else if (region) {
+        product.tasteIndiaRegion = region;
+      }
+    }
+
+    if (input.festivalId !== undefined) {
+      const festivalId = await resolveFestivalId(input.festivalId);
+      if (festivalId === null) {
+        product.set("festivalId", undefined);
+      } else if (festivalId) {
+        product.festivalId = festivalId;
+      }
     }
 
     if (input.brandId || input.brandName) {
@@ -491,14 +560,52 @@ export const catalogAdminService = {
     return Brand.find().sort({ name: 1 });
   },
 
-  async createBrand(input: { name: string; description?: string; logoUrl?: string }) {
+  async createBrand(input: { name: string; description?: string; logoUrl?: string; isActive?: boolean }) {
     return Brand.create({
       name: input.name,
       slug: uniqueSlug(input.name),
       description: input.description,
       logoUrl: input.logoUrl,
-      isActive: true,
+      isActive: input.isActive ?? true,
     });
+  },
+
+  async updateBrand(
+    id: string,
+    input: { name?: string; description?: string; logoUrl?: string; isActive?: boolean },
+  ) {
+    const brand = await Brand.findById(id);
+    if (!brand) throw new NotFoundError("Brand not found");
+    if (input.name !== undefined && input.name !== brand.name) {
+      brand.name = input.name;
+      brand.slug = uniqueSlug(input.name);
+    }
+    if (input.description !== undefined) brand.description = input.description;
+    if (input.logoUrl !== undefined) brand.logoUrl = input.logoUrl;
+    if (input.isActive !== undefined) brand.isActive = input.isActive;
+    await brand.save();
+    return brand;
+  },
+
+  async removeBrand(id: string) {
+    const brand = await Brand.findById(id);
+    if (!brand) throw new NotFoundError("Brand not found");
+    const linked = await Product.countDocuments({ brandId: brand._id });
+    if (linked > 0) {
+      throw new BadRequestError("Remove or reassign products from this brand before deleting it");
+    }
+    await brand.deleteOne();
+    return brand;
+  },
+
+  async listPublicBrands() {
+    return Brand.find({ isActive: true }).sort({ name: 1 });
+  },
+
+  async getPublicBrand(slug: string) {
+    const brand = await Brand.findOne({ slug, isActive: true });
+    if (!brand) throw new NotFoundError("Brand not found");
+    return brand;
   },
 
   async listTaxCategories() {
