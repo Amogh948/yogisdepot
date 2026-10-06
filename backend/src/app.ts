@@ -24,6 +24,7 @@ import { vendorRoutes } from "./routes/vendor.routes";
 import { paymentRoutes, uploadRoutes } from "./routes/upload.routes";
 import { scratchRoutes } from "./routes/scratch.routes";
 import { merchandisingRoutes } from "./routes/merchandising.routes";
+import { homeSectionRoutes } from "./routes/homeSection.routes";
 import { deliveryRoutes } from "./routes/delivery.routes";
 import { brandRoutes, settingsRoutes } from "./routes/publicCatalog.routes";
 
@@ -106,6 +107,7 @@ export function createApp() {
   api.use("/coupons", couponRoutes);
   api.use("/scratch", scratchRoutes);
   api.use("/merchandising", merchandisingRoutes);
+  api.use("/home-sections", homeSectionRoutes);
   api.use("/delivery-locations", deliveryRoutes);
   api.use("/brands", brandRoutes);
   api.use("/settings", settingsRoutes);

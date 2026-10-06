@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Leaf, RefreshCcw, ShieldCheck, Truck } from "lucide-react";
 import { useProducts, useCategories, useWishlist } from "../../hooks/useCatalog";
-import { merchandisingApi } from "../../services/api/products.api";
+import { homeSectionsApi, merchandisingApi } from "../../services/api/products.api";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { MerchandisingCardCarousel } from "../../components/merchandising/MerchandisingCard";
 import { CategoryChipCarousel } from "../../components/category/CategoryCard";
@@ -26,11 +26,19 @@ const TRUST_MOBILE = [
   { icon: ShieldCheck, label: "Secure Payments" },
 ];
 
+const SECTION_SEE_ALL: Partial<Record<"bestsellers" | "deals" | "featured" | "new_arrivals", string>> = {
+  bestsellers: "/products?sort=popular",
+  deals: "/offers",
+  new_arrivals: "/products?sort=newest",
+};
+
 export function HomePage() {
-  const featured = useProducts({ featured: "true", limit: 8 });
-  const popular = useProducts({ sort: "popular", limit: 8 });
-  const deals = useProducts({ discount: "true", sort: "discount", limit: 8 });
-  const newest = useProducts({ sort: "newest", limit: 8 });
+  const homeSections = useQuery({
+    queryKey: ["home-sections"],
+    queryFn: () => homeSectionsApi.list(),
+  });
+  const popularFallback = useProducts({ sort: "popular", limit: 1 });
+  const dealsFallback = useProducts({ discount: "true", sort: "discount", limit: 1 });
   const merch = useQuery({
     queryKey: ["merchandising", "home-rails"],
     queryFn: () => merchandisingApi.list(),
@@ -45,8 +53,10 @@ export function HomePage() {
   const wishlist = useWishlist();
   const wished = new Set((wishlist.data?.data || []).map((p: Product) => entityId(p)));
   const parents = (categories.data?.data || []).filter((c) => !c.parentId);
-  const heroImage = mediaUrl(popular.data?.items?.[0]?.thumbnail || popular.data?.items?.[0]?.images?.[0]);
-  const teaImage = mediaUrl(deals.data?.items?.[0]?.thumbnail || deals.data?.items?.[0]?.images?.[0]);
+  const heroImage = mediaUrl(
+    popularFallback.data?.items?.[0]?.thumbnail || popularFallback.data?.items?.[0]?.images?.[0],
+  );
+  const teaImage = mediaUrl(dealsFallback.data?.items?.[0]?.thumbnail || dealsFallback.data?.items?.[0]?.images?.[0]);
   const heroSlides = useMemo(
     () =>
       buildHomeHeroSlides({
@@ -57,6 +67,7 @@ export function HomePage() {
     [homeRails, parents, heroImage, teaImage],
   );
 
+  const sections = homeSections.data?.data || [];
   const onAdd = (p: Product) => addToCart.mutate({ product: p });
   const onWish = (p: Product) => toggleWishlist.mutate({ product: p, wished: wished.has(entityId(p)) });
 
@@ -141,44 +152,35 @@ export function HomePage() {
         rails={homeRails}
       />
 
-      <ProductCarousel
-        title="Bestsellers"
-        loading={popular.isLoading}
-        products={popular.data?.items || []}
-        wished={wished}
-        onAdd={onAdd}
-        onWishlist={onWish}
-        seeAllTo="/products?sort=popular"
-      />
+      {homeSections.isLoading
+        ? Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="space-y-3">
+              <Skeleton className="h-7 w-40" />
+              <div className="flex gap-3 overflow-hidden">
+                {Array.from({ length: 4 }).map((__, j) => (
+                  <Skeleton key={j} className="h-56 w-40 shrink-0 rounded-2xl" />
+                ))}
+              </div>
+            </div>
+          ))
+        : null}
 
-      <ProductCarousel
-        title="Today's deals"
-        loading={deals.isLoading}
-        products={deals.data?.items || []}
-        wished={wished}
-        onAdd={onAdd}
-        onWishlist={onWish}
-        seeAllTo="/offers"
-      />
-
-      <ProductCarousel
-        title="Featured picks"
-        loading={featured.isLoading}
-        products={featured.data?.items || []}
-        wished={wished}
-        onAdd={onAdd}
-        onWishlist={onWish}
-      />
-
-      <ProductCarousel
-        title="New arrivals"
-        loading={newest.isLoading}
-        products={newest.data?.items || []}
-        wished={wished}
-        onAdd={onAdd}
-        onWishlist={onWish}
-        seeAllTo="/products?sort=newest"
-      />
+      {!homeSections.isLoading
+        ? sections
+            .filter((section) => section.products?.length)
+            .map((section) => (
+              <ProductCarousel
+                key={section.key}
+                title={section.title}
+                subtitle={section.subtitle}
+                products={section.products}
+                wished={wished}
+                onAdd={onAdd}
+                onWishlist={onWish}
+                seeAllTo={SECTION_SEE_ALL[section.key]}
+              />
+            ))
+        : null}
 
       <div className="rounded-[14px] bg-yd-saffron px-5 py-5 text-center text-white sm:flex sm:items-center sm:justify-between sm:text-left">
         <div>

@@ -48,6 +48,7 @@ type AdminProductStack = {
   tasteIndiaRegion?: string | null;
   festivalId?: string | null;
   categoryId?: { name?: string; slug?: string; id?: string; _id?: string } | string;
+  categoryIds?: Array<{ name?: string; slug?: string; id?: string; _id?: string } | string>;
   vendorId?: { businessName?: string; id?: string; _id?: string } | string;
   description?: string;
   shortDescription?: string;
@@ -258,6 +259,7 @@ export function AdminProductWizardPage() {
     brandId: "",
     brandName: "",
     categoryId: "",
+    categoryIds: [] as string[],
     vendorId: "",
     inTasteIndia: false,
     tasteIndiaRegion: "",
@@ -276,11 +278,15 @@ export function AdminProductWizardPage() {
     batchQty: 50,
   });
 
-  const set = (key: keyof typeof form, value: string | number | boolean) => setForm((prev) => ({ ...prev, [key]: value }));
+  const set = (key: keyof typeof form, value: string | number | boolean | string[]) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const submit = async () => {
     if (form.inTasteIndia && !form.tasteIndiaRegion) {
       toast("Select a Taste India region", "error");
+      return;
+    }
+    if (!form.categoryIds.length) {
+      toast("Select at least one category", "error");
       return;
     }
     setSaving(true);
@@ -289,7 +295,8 @@ export function AdminProductWizardPage() {
         name: form.name,
         brandId: form.brandId || undefined,
         brandName: form.brandName || undefined,
-        categoryId: form.categoryId,
+        categoryId: form.categoryIds[0],
+        categoryIds: form.categoryIds,
         vendorId: form.vendorId,
         tasteIndiaRegion: form.inTasteIndia ? form.tasteIndiaRegion || null : null,
         festivalId: form.festivalId || null,
@@ -361,14 +368,33 @@ export function AdminProductWizardPage() {
               </option>
             ))}
           </Select>
-          <Select label="Category" value={form.categoryId} onChange={(e) => set("categoryId", e.target.value)}>
-            <option value="">Select category</option>
-            {((categories.data?.data || []) as Array<{ name: string; id?: string; _id?: string }>).map((c) => (
-              <option key={String(c.id || c._id)} value={String(c.id || c._id || "")}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
+          <div>
+            <p className="mb-2 text-sm font-medium">Categories</p>
+            <p className="mb-2 text-xs text-yd-muted">Select one or more categories</p>
+            <div className="max-h-40 space-y-2 overflow-y-auto rounded-xl border border-yd-border p-3">
+              {((categories.data?.data || []) as Array<{ name: string; id?: string; _id?: string }>).map((c) => {
+                const cid = String(c.id || c._id || "");
+                const checked = form.categoryIds.includes(cid);
+                return (
+                  <label key={cid} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        set(
+                          "categoryIds",
+                          e.target.checked
+                            ? [...form.categoryIds, cid]
+                            : form.categoryIds.filter((id) => id !== cid),
+                        );
+                      }}
+                    />
+                    {c.name}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
           <Select
             label="Taste India"
             value={form.inTasteIndia ? "yes" : "no"}
@@ -458,7 +484,7 @@ export function AdminProductWizardPage() {
               Next
             </Button>
           ) : (
-            <Button className="flex-1" disabled={saving || !form.name || !form.vendorId || !form.categoryId} onClick={() => void submit()}>
+            <Button className="flex-1" disabled={saving || !form.name || !form.vendorId || !form.categoryIds.length} onClick={() => void submit()}>
               {saving ? "Saving…" : "Create product"}
             </Button>
           )}
@@ -508,6 +534,7 @@ export function AdminProductEditPage() {
     brandId: "",
     brandName: "",
     categoryId: "",
+    categoryIds: [] as string[],
     vendorId: "",
     inTasteIndia: false,
     tasteIndiaRegion: "",
@@ -552,11 +579,14 @@ export function AdminProductEditPage() {
   useEffect(() => {
     const product = stackQuery.data;
     if (!product) return;
+    const fromIds = (product.categoryIds || []).map((item) => refId(item)).filter(Boolean);
+    const fallback = refId(product.categoryId);
     setForm({
       name: product.name || "",
       brandId: refId(product.brandId),
       brandName: product.brandName || product.brand || "",
-      categoryId: refId(product.categoryId),
+      categoryId: fallback,
+      categoryIds: fromIds.length ? fromIds : fallback ? [fallback] : [],
       vendorId: refId(product.vendorId),
       inTasteIndia: Boolean(product.tasteIndiaRegion),
       tasteIndiaRegion: product.tasteIndiaRegion || "",
@@ -610,11 +640,17 @@ export function AdminProductEditPage() {
         setSaving(false);
         return;
       }
+      if (!form.categoryIds.length) {
+        toast("Select at least one category", "error");
+        setSaving(false);
+        return;
+      }
       await adminApi.updateProductStack(id, {
         name: form.name,
         brandId: form.brandId || undefined,
         brandName: form.brandName || undefined,
-        categoryId: form.categoryId,
+        categoryId: form.categoryIds[0],
+        categoryIds: form.categoryIds,
         vendorId: form.vendorId,
         tasteIndiaRegion: form.inTasteIndia ? form.tasteIndiaRegion || null : null,
         festivalId: form.festivalId || null,
@@ -730,14 +766,33 @@ export function AdminProductEditPage() {
             </option>
           ))}
         </Select>
-        <Select label="Category" value={form.categoryId} onChange={(e) => setField("categoryId", e.target.value)}>
-          <option value="">Select category</option>
-          {((categories.data?.data || []) as Array<{ name: string; id?: string; _id?: string }>).map((c) => (
-            <option key={String(c.id || c._id)} value={String(c.id || c._id || "")}>
-              {c.name}
-            </option>
-          ))}
-        </Select>
+        <div>
+          <p className="mb-2 text-sm font-medium">Categories</p>
+          <p className="mb-2 text-xs text-yd-muted">Select one or more categories</p>
+          <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl border border-yd-border p-3">
+            {((categories.data?.data || []) as Array<{ name: string; id?: string; _id?: string }>).map((c) => {
+              const cid = String(c.id || c._id || "");
+              const checked = form.categoryIds.includes(cid);
+              return (
+                <label key={cid} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      setField(
+                        "categoryIds",
+                        e.target.checked
+                          ? [...form.categoryIds, cid]
+                          : form.categoryIds.filter((item) => item !== cid),
+                      );
+                    }}
+                  />
+                  {c.name}
+                </label>
+              );
+            })}
+          </div>
+        </div>
         <Select
           label="Taste India"
           value={form.inTasteIndia ? "yes" : "no"}
@@ -957,7 +1012,7 @@ export function AdminProductEditPage() {
           <Button variant="outline" disabled={saving} onClick={() => navigate("/admin/products")}>
             Cancel
           </Button>
-          <Button className="flex-1" disabled={saving || !form.name || !form.categoryId || !form.vendorId} onClick={() => void save()}>
+          <Button className="flex-1" disabled={saving || !form.name || !form.categoryIds.length || !form.vendorId} onClick={() => void save()}>
             {saving ? "Saving…" : "Save changes"}
           </Button>
         </div>

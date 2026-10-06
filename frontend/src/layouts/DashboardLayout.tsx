@@ -83,6 +83,7 @@ export function AdminLayout() {
         { to: "/admin/vendors", label: "Vendors" },
         { to: "/admin/products", label: "Products" },
         { to: "/admin/merchandising", label: "Merchandising" },
+        { to: "/admin/home-sections", label: "Home sections" },
         { to: "/admin/festivals", label: "Festivals" },
         { to: "/admin/brands", label: "Brands" },
         { to: "/admin/categories", label: "Categories" },

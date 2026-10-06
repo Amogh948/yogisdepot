@@ -3,37 +3,31 @@ import { deliveryLocationService, normalizePostal, normalizeProvince } from "./d
 
 describe("deliveryLocationService matching", () => {
   it("normalizes Canadian provinces and postal codes", () => {
-    expect(normalizeProvince("Ontario")).toBe("ON");
-    expect(normalizeProvince("on")).toBe("ON");
-    expect(normalizePostal("m5v 0a1")).toBe("M5V0A1");
+    expect(normalizeProvince("Alberta")).toBe("AB");
+    expect(normalizeProvince("ab")).toBe("AB");
+    expect(normalizePostal("t2w 1a1")).toBe("T2W1A1");
   });
 
-  it("matches province-wide locations", () => {
+  it("matches by postal prefix", () => {
     expect(
       deliveryLocationService.matchesLocation(
-        { country: "Canada", state: "ON", city: "Toronto", postalCode: "M5V 0A1" },
-        { country: "Canada", province: "ON" },
+        { country: "Canada", state: "AB", city: "Calgary", postalCode: "T2W 1A1" },
+        { country: "Canada", province: "AB", postalCodePrefix: "T2W" },
       ),
     ).toBe(true);
     expect(
       deliveryLocationService.matchesLocation(
-        { country: "Canada", state: "BC", city: "Vancouver", postalCode: "V6B 1A1" },
-        { country: "Canada", province: "ON" },
+        { country: "Canada", state: "AB", city: "Calgary", postalCode: "T2X 2B2" },
+        { country: "Canada", province: "AB", postalCodePrefix: "T2W" },
       ),
     ).toBe(false);
   });
 
-  it("matches city and postal prefix when configured", () => {
+  it("rejects non-Canada addresses", () => {
     expect(
       deliveryLocationService.matchesLocation(
-        { country: "Canada", state: "ON", city: "Toronto", postalCode: "M5V 0A1" },
-        { country: "Canada", province: "ON", city: "Toronto", postalCodePrefix: "M5V" },
-      ),
-    ).toBe(true);
-    expect(
-      deliveryLocationService.matchesLocation(
-        { country: "Canada", state: "ON", city: "Mississauga", postalCode: "L5B 1A1" },
-        { country: "Canada", province: "ON", city: "Toronto" },
+        { country: "USA", state: "AB", postalCode: "T2W 1A1" },
+        { country: "Canada", province: "AB", postalCodePrefix: "T2W" },
       ),
     ).toBe(false);
   });

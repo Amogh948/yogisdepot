@@ -161,12 +161,12 @@ export const settingsUpdateSchema = z.object({
   taxRate: z.number().min(0).max(1).optional(),
   shippingFee: z.number().min(0).optional(),
   freeShippingThreshold: z.number().min(0).optional(),
-  deliveryFeeCents: z.number().int().min(0).optional(),
-  freeShippingThresholdCents: z.number().int().min(0).optional(),
-  platformFeeCents: z.number().int().min(0).optional(),
-  handlingFeeCents: z.number().int().min(0).optional(),
-  smallCartFeeCents: z.number().int().min(0).optional(),
-  smallCartThresholdCents: z.number().int().min(0).optional(),
+  deliveryFeeCents: z.coerce.number().int().min(0).optional(),
+  freeShippingThresholdCents: z.coerce.number().int().min(0).optional(),
+  platformFeeCents: z.coerce.number().int().min(0).optional(),
+  handlingFeeCents: z.coerce.number().int().min(0).optional(),
+  smallCartFeeCents: z.coerce.number().int().min(0).optional(),
+  smallCartThresholdCents: z.coerce.number().int().min(0).optional(),
   supportEmail: z.string().email().optional(),
 });
 
@@ -179,6 +179,13 @@ export const adminSettingsController = {
   update: asyncHandler(async (req: Request, res: Response) => {
     const settings = await getPlatformSettings();
     Object.assign(settings, req.body);
+    // Keep legacy dollar mirrors in sync when cents fields are updated
+    if (typeof req.body.deliveryFeeCents === "number") {
+      settings.shippingFee = req.body.deliveryFeeCents / 100;
+    }
+    if (typeof req.body.freeShippingThresholdCents === "number") {
+      settings.freeShippingThreshold = req.body.freeShippingThresholdCents / 100;
+    }
     await settings.save();
     sendSuccess(res, settings, "Settings updated successfully");
   }),

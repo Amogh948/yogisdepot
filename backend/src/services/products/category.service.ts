@@ -77,7 +77,11 @@ export const categoryService = {
     const categoryIds = [category._id, ...descendantIds];
 
     const productCount = await Product.countDocuments({
-      $or: [{ categoryId: { $in: categoryIds } }, { subCategoryId: { $in: categoryIds } }],
+      $or: [
+        { categoryId: { $in: categoryIds } },
+        { categoryIds: { $in: categoryIds } },
+        { subCategoryId: { $in: categoryIds } },
+      ],
     });
 
     if (productCount > 0) {

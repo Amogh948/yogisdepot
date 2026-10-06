@@ -6,6 +6,7 @@ import { Sku } from "../../models/Sku";
 import { UserScratchReward } from "../../models/UserScratchReward";
 import { addCents, applyBps, clampNonNegativeCents, dollarsToCents } from "../../utils/money";
 import { couponService } from "../coupons/coupon.service";
+import { deliveryLocationService } from "../delivery/deliveryLocation.service";
 import { inventoryReservationService } from "../inventory/inventoryReservation.service";
 import { canadianTaxService, TaxDestination } from "../tax/canadianTax.service";
 import { skuOfferService } from "../catalog/skuOffer.service";
@@ -201,6 +202,12 @@ export const checkoutPricingService = {
     );
 
     let deliveryFeeCents = settings.deliveryFeeCents ?? 0;
+    if (input.shippingDestination) {
+      const match = await deliveryLocationService.findMatchingLocation(input.shippingDestination);
+      if (match) {
+        deliveryFeeCents = match.deliveryFeeCents ?? deliveryFeeCents;
+      }
+    }
     if (afterDiscounts >= (settings.freeShippingThresholdCents ?? 0)) {
       deliveryFeeCents = 0;
     }

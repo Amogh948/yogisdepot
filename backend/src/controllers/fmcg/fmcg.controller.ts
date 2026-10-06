@@ -41,7 +41,8 @@ export const productWizardSchema = z.object({
   name: z.string().min(2),
   brandId: z.string().optional(),
   brandName: z.string().optional(),
-  categoryId: z.string().min(1),
+  categoryId: z.string().min(1).optional(),
+  categoryIds: z.array(z.string().min(1)).min(1).optional(),
   vendorId: z.string().min(1).optional(),
   description: z.string().min(2),
   shortDescription: z.string().optional(),
@@ -58,6 +59,9 @@ export const productWizardSchema = z.object({
   festivalId: z.string().optional().nullable(),
   images: z.array(z.union([z.string(), z.object({ url: z.string(), type: z.string().optional() })])).optional(),
   variants: z.array(wizardVariantSchema).min(1),
+}).refine((data) => Boolean(data.categoryIds?.length || data.categoryId), {
+  message: "Select at least one category",
+  path: ["categoryIds"],
 });
 
 const stackVariantUpdateSchema = z.object({
@@ -78,6 +82,7 @@ export const productStackUpdateSchema = z.object({
   brandId: z.string().optional(),
   brandName: z.string().optional(),
   categoryId: z.string().min(1).optional(),
+  categoryIds: z.array(z.string().min(1)).min(1).optional(),
   vendorId: z.string().min(1).optional(),
   description: z.string().min(2).optional(),
   shortDescription: z.string().optional(),

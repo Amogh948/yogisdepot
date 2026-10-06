@@ -52,6 +52,19 @@ export const merchandisingApi = {
   bySlug: (slug: string) => unwrap<MerchandisingRail>(api.get(`/merchandising/${slug}`)),
 };
 
+export type HomeSectionRail = {
+  id: string;
+  key: "bestsellers" | "deals" | "featured" | "new_arrivals";
+  title: string;
+  subtitle?: string;
+  sortOrder: number;
+  products: Product[];
+};
+
+export const homeSectionsApi = {
+  list: () => unwrap<HomeSectionRail[]>(api.get("/home-sections")),
+};
+
 export type PublicBrand = {
   id?: string;
   _id?: string;

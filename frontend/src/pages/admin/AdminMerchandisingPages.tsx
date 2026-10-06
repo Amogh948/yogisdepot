@@ -84,7 +84,7 @@ export function AdminMerchandisingPage({ placementFilter }: { placementFilter?: 
       <p className="mb-4 text-sm text-yd-muted">
         {isFestivals
           ? "Add festivals for the Festival Store, assign products, and they appear as festival cards on the storefront."
-          : "Curate product rails for Home, Offers, Gift hampers, Taste India regions, and Festival store. Active Home, Offers, and Gift rails (within their start/end dates) appear above Bestsellers on the homepage. Optional dates control visibility."}
+          : "Curate collection cards for Home, Offers, Gift hampers, Taste India regions, and Festival store. Active Home, Offers, and Gift rails (within their start/end dates) appear as cards above the product sections on the homepage. Use Home sections to control Bestsellers, Deals, Featured, and New Arrivals."}
       </p>
       {query.isLoading ? <Skeleton className="h-40" /> : null}
       {!query.isLoading && !items.length ? (

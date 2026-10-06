@@ -64,20 +64,13 @@ export async function getPlatformSettings(): Promise<PlatformSettingsDocument> {
   if (!existing) {
     existing = await PlatformSettings.create({});
   }
-  // Backfill cents from legacy dollar fields once
+  // Backfill cents from legacy dollar fields only when cents were never set
   let dirty = false;
-  if (
-    (existing.deliveryFeeCents == null || existing.deliveryFeeCents === DEFAULT_DELIVERY_FEE_CENTS) &&
-    typeof existing.shippingFee === "number"
-  ) {
+  if (existing.deliveryFeeCents == null && typeof existing.shippingFee === "number") {
     existing.deliveryFeeCents = Math.round(existing.shippingFee * 100);
     dirty = true;
   }
-  if (
-    (existing.freeShippingThresholdCents == null ||
-      existing.freeShippingThresholdCents === DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS) &&
-    typeof existing.freeShippingThreshold === "number"
-  ) {
+  if (existing.freeShippingThresholdCents == null && typeof existing.freeShippingThreshold === "number") {
     existing.freeShippingThresholdCents = Math.round(existing.freeShippingThreshold * 100);
     dirty = true;
   }

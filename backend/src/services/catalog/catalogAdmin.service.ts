@@ -43,7 +43,8 @@ export interface ProductWizardInput {
   name: string;
   brandId?: string;
   brandName?: string;
-  categoryId: string;
+  categoryId?: string;
+  categoryIds?: string[];
   vendorId: string;
   description: string;
   shortDescription?: string;
@@ -81,6 +82,7 @@ export interface ProductStackUpdateInput {
   brandId?: string;
   brandName?: string;
   categoryId?: string;
+  categoryIds?: string[];
   vendorId?: string;
   description?: string;
   shortDescription?: string;
@@ -151,6 +153,23 @@ async function resolveFestivalId(
   return festival._id;
 }
 
+function resolveCategoryIds(input: { categoryId?: string; categoryIds?: string[] }): Types.ObjectId[] {
+  const raw = [
+    ...(input.categoryIds || []),
+    ...(input.categoryId ? [input.categoryId] : []),
+  ].filter(Boolean);
+  const unique = [...new Set(raw)];
+  if (!unique.length) {
+    throw new BadRequestError("Select at least one category");
+  }
+  for (const id of unique) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestError(`Invalid category id: ${id}`);
+    }
+  }
+  return unique.map((id) => new Types.ObjectId(id));
+}
+
 export const catalogAdminService = {
   async createProductStack(input: ProductWizardInput, options?: { asVendorId?: string }) {
     if (options?.asVendorId && options.asVendorId !== input.vendorId) {
@@ -163,6 +182,7 @@ export const catalogAdminService = {
     const brandId = await resolveBrandId(input);
     const tasteIndiaRegion = resolveTasteIndiaRegion(input.tasteIndiaRegion);
     const festivalId = await resolveFestivalId(input.festivalId);
+    const categoryIds = resolveCategoryIds(input);
     const productCode = await nextProductCode();
     const images = normalizeImages(input.images);
     const taxCategoryId = input.variants[0].taxCategoryId || (await skuOfferService.ensureTaxCategory());
@@ -193,7 +213,8 @@ export const catalogAdminService = {
       brand: input.brandName,
       tasteIndiaRegion: tasteIndiaRegion || undefined,
       festivalId: festivalId || undefined,
-      categoryId: input.categoryId,
+      categoryId: categoryIds[0],
+      categoryIds,
       vendorId: input.vendorId,
       description: input.description,
       shortDescription: input.shortDescription,
@@ -295,6 +316,7 @@ export const catalogAdminService = {
     const product = await Product.findById(productId)
       .populate("vendorId", "businessName slug logo")
       .populate("categoryId", "name slug")
+      .populate("categoryIds", "name slug")
       .populate("brandId", "name slug")
       .populate("festivalId", "name slug placement");
     if (!product) {
@@ -385,6 +407,14 @@ export const catalogAdminService = {
                 : product.festivalId,
             )
           : null,
+      categoryIds: (() => {
+        const populated = product.categoryIds || [];
+        const ids = populated.map((item) =>
+          String(typeof item === "object" && item && "_id" in item ? (item as { _id: Types.ObjectId })._id : item),
+        );
+        if (ids.length) return ids;
+        return product.categoryId ? [String(product.categoryId)] : [];
+      })(),
       imageUrls,
       variants,
     };
@@ -399,7 +429,14 @@ export const catalogAdminService = {
     if (input.name !== undefined) product.name = input.name;
     if (input.description !== undefined) product.description = input.description;
     if (input.shortDescription !== undefined) product.shortDescription = input.shortDescription;
-    if (input.categoryId !== undefined) product.categoryId = new Types.ObjectId(input.categoryId);
+    if (input.categoryId !== undefined || input.categoryIds !== undefined) {
+      const categoryIds = resolveCategoryIds({
+        categoryId: input.categoryId,
+        categoryIds: input.categoryIds,
+      });
+      product.categoryIds = categoryIds;
+      product.categoryId = categoryIds[0];
+    }
     if (input.vendorId !== undefined) product.vendorId = new Types.ObjectId(input.vendorId);
     if (input.manufacturer !== undefined) product.manufacturer = input.manufacturer;
     if (input.countryOfOrigin !== undefined) product.countryOfOrigin = input.countryOfOrigin;

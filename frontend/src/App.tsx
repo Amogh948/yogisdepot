@@ -46,6 +46,7 @@ import {
   AdminDeliveryLocationFormPage,
   AdminDeliveryLocationsPage,
 } from "./pages/admin/AdminDeliveryLocationsPage";
+import { AdminHomeSectionFormPage, AdminHomeSectionsPage } from "./pages/admin/AdminHomeSectionsPage";
 import { AdminVendorFormPage, AdminVendorsPage } from "./pages/admin/AdminVendorPages";
 import {
   VendorAnalyticsPage,
@@ -116,6 +117,8 @@ export default function App() {
           <Route path="merchandising" element={<AdminMerchandisingPage />} />
           <Route path="merchandising/new" element={<AdminMerchandisingFormPage />} />
           <Route path="merchandising/:id" element={<AdminMerchandisingFormPage />} />
+          <Route path="home-sections" element={<AdminHomeSectionsPage />} />
+          <Route path="home-sections/:keyOrId" element={<AdminHomeSectionFormPage />} />
           <Route path="festivals" element={<AdminFestivalsPage />} />
           <Route path="festivals/new" element={<AdminFestivalFormPage />} />
           <Route path="festivals/:id" element={<AdminFestivalFormPage />} />

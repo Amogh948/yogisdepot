@@ -10,6 +10,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "seed": "tsx src/scripts/seed.ts",
+    "seed:calgary-delivery": "tsx src/scripts/seedCalgaryDeliveryLocations.ts",
     "migrate:fmcg": "tsx src/scripts/migrateProductsToFmcg.ts",
     "import:fmcg:audit": "tsx src/scripts/import/wcCsvAudit.ts",
     "import:fmcg": "tsx src/scripts/import/wcFmcgImport.ts",

@@ -25,6 +25,10 @@ import {
   productMerchandisingSchema,
 } from "../controllers/merchandising/merchandising.controller";
 import {
+  adminHomeSectionController,
+  homeSectionUpdateSchema,
+} from "../controllers/catalog/homeSection.controller";
+import {
   adminDeliveryLocationController,
   deliveryLocationSchema,
   deliveryLocationUpdateSchema,
@@ -118,6 +122,10 @@ router.post("/merchandising", validate(merchandisingSchema), adminMerchandisingC
 router.get("/merchandising/:id", adminMerchandisingController.get);
 router.put("/merchandising/:id", validate(merchandisingUpdateSchema), adminMerchandisingController.update);
 router.delete("/merchandising/:id", adminMerchandisingController.remove);
+
+router.get("/home-sections", adminHomeSectionController.list);
+router.get("/home-sections/:keyOrId", adminHomeSectionController.get);
+router.put("/home-sections/:keyOrId", validate(homeSectionUpdateSchema), adminHomeSectionController.update);
 
 router.get("/delivery-locations", adminDeliveryLocationController.list);
 router.post("/delivery-locations", validate(deliveryLocationSchema), adminDeliveryLocationController.create);

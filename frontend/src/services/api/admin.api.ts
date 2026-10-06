@@ -44,8 +44,30 @@ export type AdminDeliveryLocation = {
   province: string;
   city?: string;
   postalCodePrefix?: string;
+  areaNames?: string[];
+  deliveryFeeCents?: number;
   isActive: boolean;
   sortOrder: number;
+};
+
+export type AdminHomeSection = {
+  id?: string;
+  _id?: string;
+  key: "bestsellers" | "deals" | "featured" | "new_arrivals";
+  title: string;
+  subtitle?: string;
+  productIds: string[];
+  productCount?: number;
+  isActive: boolean;
+  sortOrder: number;
+  products?: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    thumbnail?: string;
+    isActive?: boolean;
+    price?: number;
+  }>;
 };
 
 export const adminApi = {
@@ -121,6 +143,10 @@ export const adminApi = {
   updateMerchandising: (id: string, payload: Record<string, unknown>) =>
     unwrap<AdminMerchandising>(api.put(`/admin/merchandising/${id}`, payload)),
   deleteMerchandising: (id: string) => unwrap<null>(api.delete(`/admin/merchandising/${id}`)),
+  homeSections: () => unwrap<AdminHomeSection[]>(api.get("/admin/home-sections")),
+  homeSection: (keyOrId: string) => unwrap<AdminHomeSection>(api.get(`/admin/home-sections/${keyOrId}`)),
+  updateHomeSection: (keyOrId: string, payload: Record<string, unknown>) =>
+    unwrap<AdminHomeSection>(api.put(`/admin/home-sections/${keyOrId}`, payload)),
   productMerchandising: (productId: string) =>
     unwrap<Array<{ id?: string; _id?: string; name: string; placement: string; isActive: boolean }>>(
       api.get(`/admin/products/${productId}/merchandising`),

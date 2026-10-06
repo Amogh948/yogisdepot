@@ -5,12 +5,28 @@ import { deliveryLocationService } from "../../services/delivery/deliveryLocatio
 import { sendSuccess } from "../../utils/apiResponse";
 import { asyncHandler } from "../../utils/asyncHandler";
 
+const areaNamesSchema = z.union([
+  z.array(z.string().trim().min(1)).min(1),
+  z
+    .string()
+    .trim()
+    .min(1)
+    .transform((value) =>
+      value
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+]);
+
 export const deliveryLocationSchema = z.object({
-  name: z.string().min(2).max(80),
+  postalCodePrefix: z.string().trim().min(1).max(10),
+  areaNames: areaNamesSchema,
+  deliveryFeeCents: z.coerce.number().int().min(0),
+  name: z.string().min(1).max(80).optional(),
   country: z.string().optional(),
-  province: z.enum(CA_PROVINCES),
+  province: z.enum(CA_PROVINCES).optional(),
   city: z.string().max(80).optional().or(z.literal("")),
-  postalCodePrefix: z.string().max(10).optional().or(z.literal("")),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 });
@@ -19,7 +35,7 @@ export const deliveryLocationUpdateSchema = deliveryLocationSchema.partial();
 
 export const deliveryCheckSchema = z.object({
   country: z.string().min(2),
-  state: z.string().min(1),
+  state: z.string().optional(),
   city: z.string().optional(),
   postalCode: z.string().optional(),
   addressId: z.string().optional(),

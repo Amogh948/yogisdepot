@@ -207,7 +207,16 @@ export const productService = {
       const category = await Category.findOne({ $or: categoryFilter });
       if (category) {
         const children = await Category.find({ parentId: category._id }).select("_id");
-        filter.categoryId = { $in: [category._id, ...children.map((c) => c._id)] };
+        const ids = [category._id, ...children.map((c) => c._id)];
+        const categoryClause = {
+          $or: [{ categoryId: { $in: ids } }, { categoryIds: { $in: ids } }],
+        };
+        if (filter.$or) {
+          filter.$and = [...(Array.isArray(filter.$and) ? filter.$and : []), { $or: filter.$or }, categoryClause];
+          delete filter.$or;
+        } else {
+          Object.assign(filter, categoryClause);
+        }
       }
     }
     if (query.subcategory) {

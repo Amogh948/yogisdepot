@@ -55,7 +55,10 @@ export interface ProductDocument extends Document {
   tasteIndiaRegion?: string;
   /** Optional Festival Store collection (MerchandisingCollection with placement "festival"). */
   festivalId?: Types.ObjectId;
+  /** Primary category (first of categoryIds) — kept for dual-read. */
   categoryId: Types.ObjectId;
+  /** All categories this product belongs to. */
+  categoryIds: Types.ObjectId[];
   subCategoryId?: Types.ObjectId;
   vendorId: Types.ObjectId;
   description: string;
@@ -156,6 +159,7 @@ const productSchema = new Schema<ProductDocument>(
     },
     festivalId: { type: Schema.Types.ObjectId, ref: "MerchandisingCollection" },
     categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
+    categoryIds: [{ type: Schema.Types.ObjectId, ref: "Category" }],
     subCategoryId: { type: Schema.Types.ObjectId, ref: "Category" },
     vendorId: { type: Schema.Types.ObjectId, ref: "Vendor", required: true },
     description: { type: String, required: true },
@@ -229,6 +233,7 @@ productSchema.index({ brandId: 1 });
 productSchema.index({ tasteIndiaRegion: 1 });
 productSchema.index({ festivalId: 1 });
 productSchema.index({ categoryId: 1, status: 1 });
+productSchema.index({ categoryIds: 1, status: 1 });
 productSchema.index({ vendorId: 1, status: 1 });
 productSchema.index({ status: 1 });
 productSchema.index({ "variants.variantCode": 1 });
