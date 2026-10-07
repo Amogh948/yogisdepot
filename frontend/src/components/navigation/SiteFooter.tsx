@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
+import { BrandLogo } from "../brand/BrandLogo";
 
 const sections = [
   {
@@ -59,8 +60,8 @@ export function SiteFooter() {
     <footer className="mt-10 border-t border-yd-border bg-white px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-8 lg:px-8 lg:pb-12">
       <div className="mx-auto grid w-full max-w-store gap-2 lg:grid-cols-4 lg:gap-8">
         <div className="pb-4 lg:pb-0">
-          <p className="font-display text-2xl text-yd-forest">Yogi&apos;s Depot</p>
-          <p className="mt-1 text-sm font-medium text-yd-saffron">Good food. Happier homes.</p>
+          <BrandLogo imgClassName="h-[4.5rem] w-auto lg:h-20" />
+          <p className="mt-2 text-sm font-medium text-yd-saffron">Good food. Happier homes.</p>
           <p className="mt-2 text-sm text-yd-muted">Everyday Indian favourites from trusted kitchens across India.</p>
         </div>
         {sections.map((section) => (

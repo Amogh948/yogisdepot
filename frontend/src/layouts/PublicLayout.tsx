@@ -9,7 +9,7 @@ export function PublicLayout() {
 
   return (
     <div className="relative w-full bg-yd-bg">
-      <header className="sticky top-0 z-30 w-full border-b border-yd-border/80 bg-yd-bg/95 backdrop-blur">
+      <header className="sticky top-0 z-30 w-full border-b border-yd-border/80 bg-yd-bg backdrop-blur">
         <MobileHeader hideSearch={hideSearch} />
         <DesktopHeader hideSearch={hideSearch} />
       </header>

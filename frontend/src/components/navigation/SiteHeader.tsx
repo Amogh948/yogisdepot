@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ShoppingBag } from "lucide-react";
+import { BrandLogo } from "../brand/BrandLogo";
 import { SearchBar } from "./SearchBar";
 import { CategoryNav } from "./CategoryNav";
 import { DeliverToTrigger } from "./DeliverToPicker";
@@ -34,14 +35,7 @@ export function MobileHeader({ hideSearch = false }: { hideSearch?: boolean }) {
     <div className="w-full lg:hidden">
       <div className="flex w-full min-w-0 items-start justify-between gap-3 px-4 pt-3">
         <div className="min-w-0 flex-1">
-          <Link
-            to="/"
-            onClick={onBrandTap}
-            className="inline-block touch-manipulation select-none font-display text-[22px] font-semibold leading-none text-yd-saffron"
-            aria-label="Yogi's Depot home"
-          >
-            Yogi&apos;s Depot
-          </Link>
+          <BrandLogo onClick={onBrandTap} imgClassName="h-[4.5rem] w-auto" />
           {hideSearch ? <DeliverToTrigger variant="text" /> : null}
         </div>
         <Link to="/cart" className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-yd-border bg-white" aria-label={`Cart${count ? `, ${count} items` : ""}`}>
@@ -76,10 +70,8 @@ export function DesktopHeader({ hideSearch = false }: { hideSearch?: boolean }) 
 
   return (
     <div className="hidden lg:block">
-      <div className="mx-auto flex w-full max-w-store items-center gap-5 px-8 py-3">
-        <Link to="/" className="shrink-0 font-display text-2xl font-semibold text-yd-saffron">
-          Yogi&apos;s Depot
-        </Link>
+      <div className="mx-auto flex w-full max-w-store items-center gap-5 px-8 py-3.5">
+        <BrandLogo imgClassName="h-24 w-auto" />
         <DeliverToTrigger variant="pill" />
         <div className="min-w-0 flex-1">{hideSearch ? null : <SearchBar />}</div>
         <nav className="flex items-center gap-5 text-sm font-semibold text-yd-ink">
