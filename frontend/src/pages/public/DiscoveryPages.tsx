@@ -6,7 +6,7 @@ import { ProductCarousel, ProductGrid } from "../../components/product/ProductCa
 import { SectionHeader, Skeleton, EmptyState } from "../../components/ui/Feedback";
 import { Button } from "../../components/ui/Button";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
-import { FESTIVALS, GIFT_BANDS, HELP_FAQS, OFFER_SECTIONS, REGIONS } from "../../content/discovery";
+import { GIFT_BANDS, HELP_FAQS, OFFER_SECTIONS, REGIONS } from "../../content/discovery";
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { scratchApi } from "../../services/api/commerce.api";
@@ -297,7 +297,6 @@ export function FestivalPage() {
     queryFn: () => merchandisingApi.list("festival"),
   });
   const festivals = merch.data?.data || [];
-  const showFallback = !merch.isLoading && !festivals.length;
 
   return (
     <div className="space-y-6">
@@ -307,6 +306,12 @@ export function FestivalPage() {
       <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: "Festival store" }]} />
       <SectionHeader title="Festival store" subtitle="Celebrate with sweets, snacks and gift-ready picks" />
       {merch.isLoading ? <Skeleton className="h-40 rounded-card" /> : null}
+      {!merch.isLoading && !festivals.length ? (
+        <EmptyState
+          title="No festivals yet"
+          body="Festival collections will appear here once they are added in the admin Festival store."
+        />
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {festivals.map((festival) => (
           <Link
@@ -326,18 +331,6 @@ export function FestivalPage() {
             </div>
           </Link>
         ))}
-        {showFallback
-          ? FESTIVALS.map((festival) => (
-              <Link
-                key={festival.slug}
-                to={`/festival/${festival.slug}`}
-                className="rounded-card border border-yd-border bg-white p-5 shadow-soft transition hover:border-yd-green/40"
-              >
-                <p className="font-display text-2xl text-yd-forest">{festival.name}</p>
-                <p className="mt-2 text-sm text-yd-muted">{festival.blurb}</p>
-              </Link>
-            ))
-          : null}
       </div>
     </div>
   );
@@ -351,19 +344,15 @@ export function FestivalDetailPage() {
     enabled: Boolean(slug),
     retry: false,
   });
-  const fallback = FESTIVALS.find((item) => item.slug === slug);
   const collection = merch.data?.data;
-  const list = useProducts(
-    collection ? { festival: slug, limit: 24 } : { search: fallback?.search, limit: 12 },
-  );
   const { addToCart } = useCommerceActions();
 
-  const name = collection?.name || fallback?.name;
-  const blurb = collection?.subtitle || fallback?.blurb;
-  const products = collection?.products?.length ? collection.products : list.data?.items || [];
-  const loading = merch.isLoading || (!collection?.products?.length && list.isLoading);
+  const name = collection?.name;
+  const blurb = collection?.subtitle;
+  const products = collection?.products || [];
+  const loading = merch.isLoading;
 
-  if (!merch.isLoading && !collection && !fallback) {
+  if (!merch.isLoading && !collection) {
     return (
       <div>
         <Breadcrumbs

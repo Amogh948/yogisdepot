@@ -7,7 +7,9 @@ import { Pricing } from "../../models/Pricing";
 import { ScratchCampaign } from "../../models/ScratchCampaign";
 import { TaxCategory } from "../../models/TaxCategory";
 import { Warehouse } from "../../models/Warehouse";
+import { BadRequestError } from "../../errors/AppError";
 import { catalogAdminService } from "../../services/catalog/catalogAdmin.service";
+import { productCsvService } from "../../services/catalog/productCsv.service";
 import { sendSuccess } from "../../utils/apiResponse";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { assertVendorId } from "../vendor/vendor.controller";
@@ -41,8 +43,8 @@ export const productWizardSchema = z.object({
   name: z.string().min(2),
   brandId: z.string().optional(),
   brandName: z.string().optional(),
-  categoryId: z.string().min(1).optional(),
-  categoryIds: z.array(z.string().min(1)).min(1).optional(),
+  categoryId: z.union([z.string().min(1), z.record(z.unknown())]).optional(),
+  categoryIds: z.array(z.union([z.string().min(1), z.record(z.unknown())])).min(1).optional(),
   vendorId: z.string().min(1).optional(),
   description: z.string().min(2),
   shortDescription: z.string().optional(),
@@ -81,8 +83,8 @@ export const productStackUpdateSchema = z.object({
   name: z.string().min(2).optional(),
   brandId: z.string().optional(),
   brandName: z.string().optional(),
-  categoryId: z.string().min(1).optional(),
-  categoryIds: z.array(z.string().min(1)).min(1).optional(),
+  categoryId: z.union([z.string().min(1), z.record(z.unknown())]).optional(),
+  categoryIds: z.array(z.union([z.string().min(1), z.record(z.unknown())])).min(1).optional(),
   vendorId: z.string().min(1).optional(),
   description: z.string().min(2).optional(),
   shortDescription: z.string().optional(),
@@ -128,6 +130,31 @@ export const adminFmcgController = {
       images: body.images as never,
     });
     sendSuccess(res, product, "Product updated");
+  }),
+
+  downloadProductCsvTemplate: asyncHandler(async (_req: Request, res: Response) => {
+    const csv = await productCsvService.buildTemplateCsv();
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="yogisdepot-products-template.csv"');
+    res.status(200).send(csv);
+  }),
+
+  previewProductCsv: asyncHandler(async (req: Request, res: Response) => {
+    const file = req.file;
+    if (!file?.buffer?.length) {
+      throw new BadRequestError("CSV file is required");
+    }
+    const result = await productCsvService.processCsv(file.buffer, { commit: false });
+    sendSuccess(res, result, "CSV preview ready");
+  }),
+
+  importProductCsv: asyncHandler(async (req: Request, res: Response) => {
+    const file = req.file;
+    if (!file?.buffer?.length) {
+      throw new BadRequestError("CSV file is required");
+    }
+    const result = await productCsvService.processCsv(file.buffer, { commit: true });
+    sendSuccess(res, result, "CSV import finished");
   }),
 
   brands: asyncHandler(async (_req: Request, res: Response) => {

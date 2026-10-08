@@ -15,3 +15,21 @@ export const uploadImage = multer({
     cb(null, true);
   },
 });
+
+export const uploadCsv = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    const name = (file.originalname || "").toLowerCase();
+    const okMime =
+      file.mimetype === "text/csv" ||
+      file.mimetype === "application/vnd.ms-excel" ||
+      file.mimetype === "application/csv" ||
+      file.mimetype === "text/plain";
+    if (!okMime && !name.endsWith(".csv")) {
+      cb(new BadRequestError("Upload a .csv file"));
+      return;
+    }
+    cb(null, true);
+  },
+});

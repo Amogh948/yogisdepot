@@ -49,17 +49,6 @@ export const REGIONS = [
   },
 ] as const;
 
-export const FESTIVALS = [
-  { slug: "diwali", name: "Diwali", search: "sweet", blurb: "Sweets, snacks and gift boxes for the festival of lights." },
-  { slug: "onam", name: "Onam", search: "chips", blurb: "Kerala classics for the harvest celebration." },
-  { slug: "pongal", name: "Pongal", search: "grocery", blurb: "Pantry staples and festive treats." },
-  { slug: "ugadi", name: "Ugadi", search: "pickle", blurb: "New year flavours from the Deccan." },
-  { slug: "holi", name: "Holi", search: "snack", blurb: "Colourful snacks for celebrations." },
-  { slug: "raksha-bandhan", name: "Raksha Bandhan", search: "sweet", blurb: "Thoughtful sweet boxes for siblings." },
-  { slug: "eid", name: "Eid", search: "dry", blurb: "Dry fruits and festive sweets." },
-  { slug: "christmas", name: "Christmas", search: "bakery", blurb: "Bakery favourites and gift hampers." },
-] as const;
-
 export const GIFT_BANDS = [
   { slug: "under-499", name: "Under $75", maxPrice: 499, blurb: "Thoughtful small gifts" },
   { slug: "under-999", name: "Under $99", maxPrice: 999, blurb: "Perfect for family" },

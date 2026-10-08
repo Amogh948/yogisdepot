@@ -43,8 +43,8 @@ export interface ProductWizardInput {
   name: string;
   brandId?: string;
   brandName?: string;
-  categoryId?: string;
-  categoryIds?: string[];
+  categoryId?: unknown;
+  categoryIds?: unknown;
   vendorId: string;
   description: string;
   shortDescription?: string;
@@ -81,8 +81,8 @@ export interface ProductStackUpdateInput {
   name?: string;
   brandId?: string;
   brandName?: string;
-  categoryId?: string;
-  categoryIds?: string[];
+  categoryId?: unknown;
+  categoryIds?: unknown;
   vendorId?: string;
   description?: string;
   shortDescription?: string;
@@ -153,17 +153,47 @@ async function resolveFestivalId(
   return festival._id;
 }
 
-function resolveCategoryIds(input: { categoryId?: string; categoryIds?: string[] }): Types.ObjectId[] {
-  const raw = [
-    ...(input.categoryIds || []),
-    ...(input.categoryId ? [input.categoryId] : []),
-  ].filter(Boolean);
-  const unique = [...new Set(raw)];
+/** Normalize category id from a hex string, ObjectId, or populated `{ id|_id }` object. */
+function asObjectIdString(value: unknown): string {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (Types.ObjectId.isValid(trimmed) && String(new Types.ObjectId(trimmed)) === trimmed) {
+      return trimmed;
+    }
+    return trimmed;
+  }
+  if (value instanceof Types.ObjectId) return String(value);
+  if (typeof value === "object") {
+    const obj = value as { id?: unknown; _id?: unknown };
+    if (obj._id != null) return asObjectIdString(obj._id);
+    if (obj.id != null) return asObjectIdString(obj.id);
+  }
+  return "";
+}
+
+function resolveCategoryIds(input: {
+  categoryId?: unknown;
+  categoryIds?: unknown;
+}): Types.ObjectId[] {
+  const list = Array.isArray(input.categoryIds)
+    ? input.categoryIds
+    : input.categoryIds
+      ? [input.categoryIds]
+      : [];
+  const raw = [...list, ...(input.categoryId != null && input.categoryId !== "" ? [input.categoryId] : [])];
+  const unique = [
+    ...new Set(
+      raw
+        .map((item) => asObjectIdString(item))
+        .filter((id) => Boolean(id)),
+    ),
+  ];
   if (!unique.length) {
     throw new BadRequestError("Select at least one category");
   }
   for (const id of unique) {
-    if (!Types.ObjectId.isValid(id)) {
+    if (!Types.ObjectId.isValid(id) || String(new Types.ObjectId(id)) !== id) {
       throw new BadRequestError(`Invalid category id: ${id}`);
     }
   }
@@ -395,26 +425,23 @@ export const catalogAdminService = {
       product.brand ||
       (typeof brandPopulated === "object" && brandPopulated ? brandPopulated.name : undefined);
 
+    const categoryIds = (() => {
+      const populated = product.categoryIds || [];
+      const ids = populated.map((item) => asObjectIdString(item)).filter(Boolean);
+      if (ids.length) return ids;
+      const primary = asObjectIdString(product.categoryId);
+      return primary ? [primary] : [];
+    })();
+
     return {
       ...productJson,
       brandName,
       tasteIndiaRegion: product.tasteIndiaRegion || null,
-      festivalId:
-        product.festivalId != null
-          ? String(
-              typeof product.festivalId === "object" && "_id" in (product.festivalId as object)
-                ? (product.festivalId as { _id: Types.ObjectId })._id
-                : product.festivalId,
-            )
-          : null,
-      categoryIds: (() => {
-        const populated = product.categoryIds || [];
-        const ids = populated.map((item) =>
-          String(typeof item === "object" && item && "_id" in item ? (item as { _id: Types.ObjectId })._id : item),
-        );
-        if (ids.length) return ids;
-        return product.categoryId ? [String(product.categoryId)] : [];
-      })(),
+      festivalId: asObjectIdString(product.festivalId) || null,
+      categoryId: categoryIds[0] || asObjectIdString(product.categoryId) || null,
+      categoryIds,
+      brandId: asObjectIdString(product.brandId) || null,
+      vendorId: asObjectIdString(product.vendorId) || null,
       imageUrls,
       variants,
     };

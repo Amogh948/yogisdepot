@@ -42,7 +42,7 @@ import { createProductSchema, productStatusSchema, updateProductSchema } from ".
 import { orderStatusSchema } from "../schemas/orders/order.schema";
 import { couponSchema, couponUpdateSchema } from "../schemas/coupons/coupon.schema";
 import { reviewModerationSchema } from "../schemas/reviews/review.schema";
-import { uploadImage } from "../middleware/upload.middleware";
+import { uploadCsv, uploadImage } from "../middleware/upload.middleware";
 import { z } from "zod";
 
 const router = Router();
@@ -78,6 +78,9 @@ router.delete("/categories/:id", adminCategoryController.remove);
 router.get("/products", adminProductController.list);
 router.post("/products", validate(createProductSchema), adminProductController.create);
 router.post("/products/wizard", validate(productWizardSchema), adminFmcgController.createProductWizard);
+router.get("/products/csv-template", adminFmcgController.downloadProductCsvTemplate);
+router.post("/products/csv-preview", uploadCsv.single("file"), adminFmcgController.previewProductCsv);
+router.post("/products/csv-import", uploadCsv.single("file"), adminFmcgController.importProductCsv);
 router.get("/products/:id", adminFmcgController.getProductStack);
 router.get("/products/:id/merchandising", adminMerchandisingController.forProduct);
 router.put("/products/:id/merchandising", validate(productMerchandisingSchema), adminMerchandisingController.setProduct);

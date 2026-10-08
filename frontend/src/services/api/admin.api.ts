@@ -108,6 +108,50 @@ export const adminApi = {
   updateProduct: (id: string, payload: Record<string, unknown>) => unwrap<Product>(api.put(`/admin/products/${id}`, payload)),
   productStatus: (id: string, isActive: boolean) => unwrap<Product>(api.patch(`/admin/products/${id}/status`, { isActive })),
   deleteProduct: (id: string) => unwrap<Product>(api.delete(`/admin/products/${id}`)),
+  downloadProductCsvTemplate: async () => {
+    const response = await api.get("/admin/products/csv-template", { responseType: "blob" });
+    return response.data as Blob;
+  },
+  previewProductCsv: (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return unwrap<{
+      commit: boolean;
+      total: number;
+      created: number;
+      updated: number;
+      failed: number;
+      rows: Array<{
+        rowNumber: number;
+        action: "create" | "update" | "skip";
+        skuCode?: string;
+        productId?: string;
+        name?: string;
+        ok: boolean;
+        errors: string[];
+      }>;
+    }>(api.post("/admin/products/csv-preview", body, { headers: { "Content-Type": "multipart/form-data" } }));
+  },
+  importProductCsv: (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return unwrap<{
+      commit: boolean;
+      total: number;
+      created: number;
+      updated: number;
+      failed: number;
+      rows: Array<{
+        rowNumber: number;
+        action: "create" | "update" | "skip";
+        skuCode?: string;
+        productId?: string;
+        name?: string;
+        ok: boolean;
+        errors: string[];
+      }>;
+    }>(api.post("/admin/products/csv-import", body, { headers: { "Content-Type": "multipart/form-data" } }));
+  },
   brands: () => unwrap<AdminBrand[]>(api.get("/admin/brands")),
   createBrand: (payload: Record<string, unknown>) => unwrap<AdminBrand>(api.post("/admin/brands", payload)),
   updateBrand: (id: string, payload: Record<string, unknown>) => unwrap<AdminBrand>(api.put(`/admin/brands/${id}`, payload)),

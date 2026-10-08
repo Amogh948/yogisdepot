@@ -5,6 +5,7 @@ import { PageHeader } from "../../layouts/DashboardLayout";
 import { Button } from "../../components/ui/Button";
 import { Input, Select, Textarea } from "../../components/ui/Input";
 import { ImageUpload } from "../../components/ui/ImageUpload";
+import { CsvDropzone } from "../../components/ui/CsvDropzone";
 import { Badge, EmptyState, Skeleton } from "../../components/ui/Feedback";
 import { entityId, mediaUrl, type Category, type OrderStatus, type Product } from "../../types";
 import { useToastStore } from "../../store/toast.store";
@@ -13,6 +14,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../services/api/client";
 import { formatCad, formatCadFromCents } from "../../utils/money";
 import { TASTE_INDIA_REGION_OPTIONS } from "../../content/discovery";
+import { Download } from "lucide-react";
 
 type AdminStackVariant = {
   variantId: string;
@@ -139,6 +141,22 @@ export function AdminProductsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [csvBusy, setCsvBusy] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvPreview, setCsvPreview] = useState<{
+    total: number;
+    created: number;
+    updated: number;
+    failed: number;
+    rows: Array<{
+      rowNumber: number;
+      action: "create" | "update" | "skip";
+      skuCode?: string;
+      name?: string;
+      ok: boolean;
+      errors: string[];
+    }>;
+  } | null>(null);
   const query = useQuery({
     queryKey: ["admin-products", search, page],
     queryFn: () => adminApi.products({ limit: 30, page, search: search || undefined }),
@@ -159,6 +177,65 @@ export function AdminProductsPage() {
     }
   };
 
+  const downloadCsvTemplate = async () => {
+    setCsvBusy(true);
+    try {
+      const blob = await adminApi.downloadProductCsvTemplate();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "yogisdepot-products-template.csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast("CSV template downloaded");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not download CSV template", "error");
+    } finally {
+      setCsvBusy(false);
+    }
+  };
+
+  const previewCsv = async () => {
+    if (!csvFile) {
+      toast("Choose a CSV file first", "error");
+      return;
+    }
+    setCsvBusy(true);
+    try {
+      const result = await adminApi.previewProductCsv(csvFile);
+      setCsvPreview(result.data);
+      toast(
+        result.data.failed
+          ? `Preview ready · ${result.data.failed} row(s) need fixes`
+          : `Preview ready · ${result.data.created} create, ${result.data.updated} update`,
+      );
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "CSV preview failed", "error");
+    } finally {
+      setCsvBusy(false);
+    }
+  };
+
+  const importCsv = async () => {
+    if (!csvFile) {
+      toast("Choose a CSV file first", "error");
+      return;
+    }
+    setCsvBusy(true);
+    try {
+      const result = await adminApi.importProductCsv(csvFile);
+      setCsvPreview(result.data);
+      toast(
+        `Import finished · ${result.data.created} created, ${result.data.updated} updated, ${result.data.failed} failed`,
+      );
+      await query.refetch();
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "CSV import failed", "error");
+    } finally {
+      setCsvBusy(false);
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -169,6 +246,72 @@ export function AdminProductsPage() {
           </Link>
         }
       />
+      <section className="mb-5 rounded-2xl border border-yd-border/60 bg-white p-4 shadow-soft sm:p-5">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold text-yd-ink">Bulk import</p>
+            <p className="mt-0.5 text-sm text-yd-muted">
+              Update existing products or add new ones from a CSV. Use pipe-separated{" "}
+              <span className="font-medium text-yd-ink">imageUrls</span> for product images.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={csvBusy}
+            onClick={() => void downloadCsvTemplate()}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-yd-green hover:underline disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            Download template
+          </button>
+        </div>
+
+        <CsvDropzone
+          file={csvFile}
+          disabled={csvBusy}
+          onFile={(next) => {
+            setCsvFile(next);
+            setCsvPreview(null);
+          }}
+        />
+
+        {csvFile ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={csvBusy} onClick={() => void previewCsv()}>
+              {csvBusy ? "Working…" : "Preview"}
+            </Button>
+            <Button type="button" disabled={csvBusy} onClick={() => void importCsv()}>
+              Import
+            </Button>
+          </div>
+        ) : null}
+
+        {csvPreview ? (
+          <div className="mt-4 space-y-2 border-t border-yd-border/70 pt-4 text-sm">
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="muted">{csvPreview.total} rows</Badge>
+              <Badge tone="sage">{csvPreview.created} create</Badge>
+              <Badge tone="sage">{csvPreview.updated} update</Badge>
+              <Badge tone={csvPreview.failed ? "red" : "sage"}>{csvPreview.failed} failed</Badge>
+            </div>
+            {csvPreview.rows.some((row) => !row.ok) ? (
+              <ul className="max-h-36 space-y-1 overflow-y-auto text-yd-error">
+                {csvPreview.rows
+                  .filter((row) => !row.ok)
+                  .slice(0, 12)
+                  .map((row) => (
+                    <li key={row.rowNumber}>
+                      Row {row.rowNumber}
+                      {row.skuCode ? ` · ${row.skuCode}` : ""}: {row.errors.join("; ")}
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <p className="text-yd-muted">All rows look valid. Click Import to apply.</p>
+            )}
+          </div>
+        ) : null}
+      </section>
       <div className="mb-4">
         <Input
           label="Search"
@@ -291,12 +434,13 @@ export function AdminProductWizardPage() {
     }
     setSaving(true);
     try {
+      const categoryIds = form.categoryIds.map((item) => refId(item)).filter(Boolean);
       await adminApi.createProductWizard({
         name: form.name,
         brandId: form.brandId || undefined,
         brandName: form.brandName || undefined,
-        categoryId: form.categoryIds[0],
-        categoryIds: form.categoryIds,
+        categoryId: categoryIds[0],
+        categoryIds,
         vendorId: form.vendorId,
         tasteIndiaRegion: form.inTasteIndia ? form.tasteIndiaRegion || null : null,
         festivalId: form.festivalId || null,
@@ -498,8 +642,14 @@ function refId(value: unknown): string {
   if (!value) return "";
   if (typeof value === "string") return value;
   if (typeof value === "object") {
-    const obj = value as { id?: string; _id?: string };
-    return String(obj.id || obj._id || "");
+    const obj = value as { id?: unknown; _id?: unknown };
+    if (typeof obj._id === "string" && obj._id) return obj._id;
+    if (obj._id && typeof obj._id === "object" && "$oid" in (obj._id as object)) {
+      return String((obj._id as { $oid: string }).$oid);
+    }
+    if (obj._id != null) return String(obj._id);
+    if (typeof obj.id === "string" && obj.id) return obj.id;
+    if (obj.id != null) return String(obj.id);
   }
   return "";
 }
@@ -590,7 +740,7 @@ export function AdminProductEditPage() {
       vendorId: refId(product.vendorId),
       inTasteIndia: Boolean(product.tasteIndiaRegion),
       tasteIndiaRegion: product.tasteIndiaRegion || "",
-      festivalId: product.festivalId || "",
+      festivalId: refId(product.festivalId),
       description: product.description || "",
       shortDescription: product.shortDescription || "",
       ingredients: product.ingredients || "",
@@ -645,12 +795,13 @@ export function AdminProductEditPage() {
         setSaving(false);
         return;
       }
+      const categoryIds = form.categoryIds.map((item) => refId(item)).filter(Boolean);
       await adminApi.updateProductStack(id, {
         name: form.name,
         brandId: form.brandId || undefined,
         brandName: form.brandName || undefined,
-        categoryId: form.categoryIds[0],
-        categoryIds: form.categoryIds,
+        categoryId: categoryIds[0],
+        categoryIds,
         vendorId: form.vendorId,
         tasteIndiaRegion: form.inTasteIndia ? form.tasteIndiaRegion || null : null,
         festivalId: form.festivalId || null,
