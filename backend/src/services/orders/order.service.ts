@@ -16,6 +16,7 @@ import { Vendor } from "../../models/Vendor";
 import { nextOrderNumber } from "../../utils/businessIds";
 import { CAD_CURRENCY } from "../../utils/money";
 import { PaymentService } from "../payments/payment.service";
+import { SquareProvider } from "../payments/square.provider";
 import { couponService } from "../coupons/coupon.service";
 import { notificationService } from "../notifications/notification.service";
 import { cartService } from "../cart/cart.service";
@@ -333,6 +334,9 @@ export const orderService = {
     if (order.paymentMethod !== "square") {
       throw new BadRequestError("This order is not awaiting a Square payment");
     }
+    if (order.orderStatus === "cancelled") {
+      throw new BadRequestError("This order is cancelled");
+    }
     if (order.paymentStatus === "paid") {
       await Cart.findOneAndUpdate({ userId }, { items: [] });
       return order;
@@ -340,12 +344,36 @@ export const orderService = {
     if (!order.paymentReference) {
       throw new BadRequestError("Payment does not match this order");
     }
+    if (!payload.sourceId?.trim()) {
+      throw new BadRequestError("Missing payment token");
+    }
+
+    // If a prior attempt left a Square payment id, reconcile before charging again.
+    if (order.transactionId && order.paymentStatus === "pending") {
+      const live = await new SquareProvider().getPayment(order.transactionId);
+      if (live) {
+        const status = String(live.status || "").toUpperCase();
+        if (status === "COMPLETED" || status === "APPROVED") {
+          return this.markOrderPaid(order, live.id, userId);
+        }
+        if (status === "FAILED" || status === "CANCELED" || status === "CANCELLED") {
+          order.paymentStatus = "failed";
+          await order.save();
+          throw new BadRequestError("Payment verification failed");
+        }
+        // Still pending at Square — do not create a second charge.
+        return order;
+      }
+    }
+
     const amountCents = order.totalCents ?? Math.round((order.total || 0) * 100);
     const amount = amountCents / 100;
+    // Stable key prevents duplicate charges on retries/concurrent verify calls.
+    const idempotencyKey = `pay_${order.id}`;
     const verified = await PaymentService.verifyPayment("square", order.paymentReference, amount, {
       sourceId: payload.sourceId,
       verificationToken: payload.verificationToken,
-      idempotencyKey: `pay_${order.id}`,
+      idempotencyKey,
       orderId: order.orderNumber,
       amountCents,
       currency: order.currency || CAD_CURRENCY,
@@ -356,8 +384,10 @@ export const orderService = {
       throw new BadRequestError("Payment verification failed");
     }
     if (verified.status === "pending") {
-      // Charge accepted but not final — keep order pending until webhook/reconcile confirms.
-      order.transactionId = verified.reference;
+      // Uncertain or not-final Square state — never treat as paid until COMPLETED/APPROVED.
+      if (verified.reference) {
+        order.transactionId = verified.reference;
+      }
       order.paymentStatus = "pending";
       await order.save();
       await Cart.findOneAndUpdate({ userId }, { items: [] });

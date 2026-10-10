@@ -312,9 +312,9 @@ export function CheckoutPage() {
         },
       });
 
+      // Backend charges with the payment token only after SCA (when required) completed in tokenize().
       const order = await ordersApi.verifyPayment(squareSession.orderId, {
         sourceId: tokenized.sourceId,
-        ...(tokenized.verificationToken ? { verificationToken: tokenized.verificationToken } : {}),
       });
       const orderId = squareSession.orderId;
       setSquareSession(null);
@@ -328,9 +328,14 @@ export function CheckoutPage() {
         await abandonPayment(orderId);
       }
     } catch (error) {
-      toast(error instanceof ApiError || error instanceof Error ? error.message : "Payment failed", "error");
-      await abandonPayment(squareSession.orderId);
-      setSquareSession(null);
+      const message = error instanceof ApiError || error instanceof Error ? error.message : "Payment failed";
+      toast(message, "error");
+      // Keep the pending order + card form on challenge cancel so the buyer can retry.
+      const cancelled = /verif(?:ication|y).*cancell?ed|tokeniz(?:ation|e).*cancell?ed/i.test(message);
+      if (!cancelled) {
+        await abandonPayment(squareSession.orderId);
+        setSquareSession(null);
+      }
     } finally {
       setPaying(false);
     }

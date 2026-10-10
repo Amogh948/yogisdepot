@@ -11,6 +11,30 @@ import {
   PaymentVerifyExtra,
   RefundResult,
 } from "./payment.types";
+import { isUncertainSquareFailure, toPaymentResult } from "./square.payment";
+
+type PaymentsApi = {
+  create: (body: Record<string, unknown>) => Promise<{
+    payment?: {
+      id?: string;
+      status?: string;
+      amountMoney?: { amount?: bigint | number; currency?: string };
+      referenceId?: string;
+    };
+  }>;
+  get: (body: { paymentId: string }) => Promise<{
+    payment?: { id?: string; status?: string; referenceId?: string };
+  }>;
+};
+
+type RefundsApi = {
+  refundPayment: (body: Record<string, unknown>) => Promise<{ refund?: { id?: string } }>;
+};
+
+export type SquareApi = {
+  payments: PaymentsApi;
+  refunds: RefundsApi;
+};
 
 function assertConfigured() {
   if (!env.SQUARE_APPLICATION_ID || !env.SQUARE_ACCESS_TOKEN || !env.SQUARE_LOCATION_ID) {
@@ -18,13 +42,14 @@ function assertConfigured() {
   }
 }
 
-function client(): SquareClient {
+function defaultClient(): SquareApi {
   assertConfigured();
-  return new SquareClient({
+  const client = new SquareClient({
     token: env.SQUARE_ACCESS_TOKEN,
     environment:
       env.SQUARE_ENVIRONMENT === "production" ? SquareEnvironment.Production : SquareEnvironment.Sandbox,
   });
+  return client as unknown as SquareApi;
 }
 
 function amountCents(input: PaymentIntentInput): number {
@@ -36,14 +61,13 @@ function dollarsToCents(amount: number): number {
   return Math.round(amount * 100);
 }
 
-function mapPaymentStatus(status: string | undefined): "paid" | "failed" | "pending" {
-  const normalized = String(status || "").toUpperCase();
-  if (normalized === "COMPLETED" || normalized === "APPROVED") return "paid";
-  if (normalized === "PENDING" || normalized === "AUTHORIZED") return "pending";
-  return "failed";
-}
-
 export class SquareProvider implements PaymentProvider {
+  constructor(private readonly apiFactory: () => SquareApi = defaultClient) {}
+
+  private api(): SquareApi {
+    return this.apiFactory();
+  }
+
   async createPayment(input: PaymentIntentInput): Promise<PaymentIntent> {
     assertConfigured();
     const cents = amountCents(input);
@@ -76,17 +100,12 @@ export class SquareProvider implements PaymentProvider {
     const expectedCents =
       typeof extra.amountCents === "number" ? Math.round(extra.amountCents) : dollarsToCents(amount);
     const currency = (extra.currency || CAD_CURRENCY).toUpperCase();
-    if (expectedCents <= 0) {
-      return { success: false, reference, status: "failed" };
-    }
-    if (currency !== CAD_CURRENCY) {
-      return { success: false, reference, status: "failed" };
-    }
+    const idempotencyKey = extra.idempotencyKey || randomUUID();
 
     try {
-      const response = await client().payments.create({
+      const response = await this.api().payments.create({
         sourceId: extra.sourceId,
-        idempotencyKey: extra.idempotencyKey || randomUUID(),
+        idempotencyKey,
         amountMoney: {
           amount: BigInt(expectedCents),
           currency: CAD_CURRENCY,
@@ -95,6 +114,7 @@ export class SquareProvider implements PaymentProvider {
         referenceId: reference.slice(0, 40),
         note: extra.orderId ? `Yogis Depot order ${extra.orderId}` : `Yogis Depot ${reference}`,
         autocomplete: true,
+        // Optional legacy field; modern Card.tokenize embeds SCA in sourceId.
         ...(extra.verificationToken ? { verificationToken: extra.verificationToken } : {}),
         customerDetails: {
           customerInitiated: true,
@@ -102,31 +122,20 @@ export class SquareProvider implements PaymentProvider {
         },
       });
 
-      const payment = response.payment;
-      const paymentId = payment?.id;
-      if (!paymentId) {
-        return { success: false, reference, status: "failed" };
+      return toPaymentResult({
+        paymentId: response.payment?.id,
+        status: response.payment?.status,
+        expectedCents,
+        expectedCurrency: currency,
+        chargedAmount: response.payment?.amountMoney?.amount,
+        chargedCurrency: response.payment?.amountMoney?.currency,
+        fallbackReference: reference,
+      });
+    } catch (error) {
+      // Do not invent a paid state on uncertain failures; leave pending for reconcile/webhook.
+      if (isUncertainSquareFailure(error)) {
+        return { success: true, reference: "", status: "pending" };
       }
-
-      // Reconcile against the charged amount when Square returns amount_money.
-      const charged = payment.amountMoney?.amount;
-      if (typeof charged === "bigint" && charged !== BigInt(expectedCents)) {
-        return { success: false, reference: paymentId, status: "failed" };
-      }
-      if (typeof charged === "number" && Math.round(charged) !== expectedCents) {
-        return { success: false, reference: paymentId, status: "failed" };
-      }
-      const chargedCurrency = String(payment.amountMoney?.currency || "").toUpperCase();
-      if (chargedCurrency && chargedCurrency !== CAD_CURRENCY) {
-        return { success: false, reference: paymentId, status: "failed" };
-      }
-
-      const mapped = mapPaymentStatus(payment.status);
-      if (mapped === "failed") {
-        return { success: false, reference: paymentId, status: "failed" };
-      }
-      return { success: true, reference: paymentId, status: mapped };
-    } catch {
       return { success: false, reference, status: "failed" };
     }
   }
@@ -134,7 +143,7 @@ export class SquareProvider implements PaymentProvider {
   async getPayment(paymentId: string): Promise<{ id: string; status: string; referenceId?: string } | null> {
     if (!paymentId) return null;
     try {
-      const response = await client().payments.get({ paymentId });
+      const response = await this.api().payments.get({ paymentId });
       const payment = response.payment;
       if (!payment?.id) return null;
       return {
@@ -153,7 +162,7 @@ export class SquareProvider implements PaymentProvider {
       throw new BadRequestError("Missing Square payment id for refund");
     }
     const cents = dollarsToCents(amount);
-    const response = await client().refunds.refundPayment({
+    const response = await this.api().refunds.refundPayment({
       idempotencyKey: randomUUID(),
       paymentId,
       amountMoney: {
