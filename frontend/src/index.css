@@ -58,3 +58,322 @@ button {
     min-width: 44px;
   }
 }
+
+/* Add-to-cart celebration — transforms/opacity only; pointer-events none */
+.yd-cart-burst {
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform: translate(-50%, -50%);
+}
+
+.yd-cart-particle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: yd-cart-particle 700ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  animation-delay: var(--delay, 0ms);
+}
+
+.yd-cart-particle--circle {
+  width: var(--size, 5px);
+  height: var(--size, 5px);
+  margin-left: calc(var(--size, 5px) / -2);
+  margin-top: calc(var(--size, 5px) / -2);
+  border-radius: 999px;
+}
+
+.yd-cart-particle--strip {
+  width: 9px;
+  height: 3px;
+  margin-left: -4.5px;
+  margin-top: -1.5px;
+  border-radius: 2px;
+}
+
+.yd-cart-particle--spark {
+  width: var(--size, 5px);
+  height: var(--size, 5px);
+  margin-left: calc(var(--size, 5px) / -2);
+  margin-top: calc(var(--size, 5px) / -2);
+  background: transparent !important;
+  box-shadow:
+    0 -2px 0 0 currentColor,
+    0 2px 0 0 currentColor,
+    -2px 0 0 0 currentColor,
+    2px 0 0 0 currentColor;
+}
+
+.yd-cart-confirm {
+  animation: yd-cart-confirm 1700ms ease forwards;
+}
+
+@keyframes yd-cart-particle {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.4) rotate(0deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--dx), calc(var(--dy) + 28px), 0) scale(0.85) rotate(var(--rot));
+  }
+}
+
+@keyframes yd-cart-confirm {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.94);
+  }
+  12% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yd-cart-particle {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  .yd-cart-confirm {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+
+  .yd-view-cart-bar {
+    transition: none !important;
+  }
+}
+
+.yd-view-cart-bar {
+  opacity: 0;
+  transform: translate3d(0, 12px, 0);
+  transition:
+    opacity 200ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 150ms ease;
+}
+
+.yd-view-cart-bar--in {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.yd-view-cart-bar--out {
+  opacity: 0;
+  transform: translate3d(0, 10px, 0);
+}
+
+.yd-free-delivery-card {
+  animation: yd-free-delivery-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.yd-free-delivery-particle {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: yd-free-delivery-particle 900ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  animation-delay: var(--delay, 0ms);
+}
+
+@keyframes yd-free-delivery-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.88) translate3d(0, 16px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+}
+
+@keyframes yd-free-delivery-particle {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.4);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--dx), var(--dy), 0) scale(0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yd-free-delivery-card {
+    animation: none !important;
+  }
+
+  .yd-free-delivery-particle {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+}
+
+/* Order-success bike celebration — transforms/opacity only; overflow clipped */
+.yd-order-success {
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+}
+
+.yd-order-bike-stage {
+  overflow: hidden;
+}
+
+.yd-order-bike {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: min(42vw, 160px);
+  transform: translate3d(-110%, -50%, 0);
+  will-change: transform;
+}
+
+.yd-order-bike--rest {
+  left: 50%;
+  transform: translate3d(-50%, -50%, 0);
+}
+
+.yd-order-bike--ride {
+  animation: yd-order-bike-ride 2600ms cubic-bezier(0.4, 0.05, 0.2, 1) forwards;
+}
+
+.yd-order-bike-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 6px 10px rgba(24, 60, 43, 0.12));
+}
+
+.yd-order-bike-wheel {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.yd-order-bike--ride .yd-order-bike-wheel {
+  animation: yd-order-wheel-spin 480ms linear infinite;
+}
+
+.yd-order-bike--ride .yd-order-bike-box,
+.yd-order-bike--ride .yd-order-bike-rider {
+  animation: yd-order-bike-bob 420ms ease-in-out infinite alternate;
+}
+
+.yd-order-road {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 38%;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(24, 60, 43, 0.22) 0 18px,
+    transparent 18px 34px
+  );
+  opacity: 0.55;
+}
+
+.yd-order-road--scroll {
+  animation: yd-order-road-scroll 2600ms linear forwards;
+}
+
+.yd-order-confetti {
+  position: absolute;
+  top: 12%;
+  left: var(--x, 50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--hue, #287a43);
+  opacity: 0;
+  animation: yd-order-confetti 1600ms ease-out forwards;
+  animation-delay: var(--delay, 0ms);
+}
+
+@keyframes yd-order-bike-ride {
+  0% {
+    transform: translate3d(-110%, -50%, 0);
+  }
+  12% {
+    transform: translate3d(-40%, calc(-50% - 2px), 0);
+  }
+  100% {
+    transform: translate3d(118%, -50%, 0);
+  }
+}
+
+@keyframes yd-order-wheel-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes yd-order-bike-bob {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes yd-order-road-scroll {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -220px 0;
+  }
+}
+
+@keyframes yd-order-confetti {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.4);
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 64px, 0) scale(0.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yd-order-bike--ride,
+  .yd-order-bike--ride .yd-order-bike-wheel,
+  .yd-order-bike--ride .yd-order-bike-box,
+  .yd-order-bike--ride .yd-order-bike-rider,
+  .yd-order-road--scroll,
+  .yd-order-confetti {
+    animation: none !important;
+  }
+
+  .yd-order-bike--ride {
+    left: 50%;
+    transform: translate3d(-50%, -50%, 0);
+  }
+
+  .yd-order-confetti {
+    opacity: 0 !important;
+  }
+}

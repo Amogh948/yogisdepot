@@ -113,6 +113,8 @@ export function ConfirmDialog({
   title,
   body,
   confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  confirmPending = false,
   onConfirm,
   onClose,
 }: {
@@ -120,6 +122,8 @@ export function ConfirmDialog({
   title: string;
   body: string;
   confirmLabel?: string;
+  cancelLabel?: string;
+  confirmPending?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -127,11 +131,21 @@ export function ConfirmDialog({
     <Modal open={open} title={title} onClose={onClose}>
       <p className="text-sm text-yd-muted">{body}</p>
       <div className="mt-5 flex justify-end gap-2">
-        <button className="min-h-11 rounded-full px-4 text-sm font-semibold" onClick={onClose} type="button">
-          Cancel
+        <button
+          className="min-h-11 rounded-full px-4 text-sm font-semibold"
+          onClick={onClose}
+          type="button"
+          disabled={confirmPending}
+        >
+          {cancelLabel}
         </button>
-        <button className="min-h-11 rounded-full bg-yd-error px-4 text-sm font-semibold text-white" onClick={onConfirm} type="button">
-          {confirmLabel}
+        <button
+          className="min-h-11 rounded-full bg-yd-error px-4 text-sm font-semibold text-white disabled:opacity-60"
+          onClick={onConfirm}
+          type="button"
+          disabled={confirmPending}
+        >
+          {confirmPending ? "Working…" : confirmLabel}
         </button>
       </div>
     </Modal>

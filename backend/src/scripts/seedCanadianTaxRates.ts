@@ -21,6 +21,15 @@ export async function seedCanadianTaxRates(effectiveFrom = new Date("2024-01-01T
       isActive: true,
     });
   }
+  let exempt = await TaxCategory.findOne({ code: "EXEMPT" });
+  if (!exempt) {
+    exempt = await TaxCategory.create({
+      name: "Non-taxable / exempt",
+      code: "EXEMPT",
+      taxability: "EXEMPT",
+      isActive: true,
+    });
+  }
 
   // Illustrative statutory defaults — admin can add new versions; do not mutate these rows in place.
   const rows: Array<{ province: string; component: string; rateBps: number }> = [
@@ -64,5 +73,12 @@ export async function seedCanadianTaxRates(effectiveFrom = new Date("2024-01-01T
     });
     created += 1;
   }
-  return { created, taxCategoryIds: { standard: String(standard._id), grocery: String(grocery._id) } };
+  return {
+    created,
+    taxCategoryIds: {
+      standard: String(standard._id),
+      grocery: String(grocery._id),
+      exempt: String(exempt._id),
+    },
+  };
 }

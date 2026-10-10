@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { couponService } from "../../services/coupons/coupon.service";
+import { checkoutPricingService } from "../../services/checkout/checkoutPricing.service";
 import { sendSuccess } from "../../utils/apiResponse";
 import { asyncHandler } from "../../utils/asyncHandler";
 
@@ -13,9 +14,19 @@ export const couponController = {
         discountType: applied.coupon.discountType,
         discountValue: applied.coupon.discountValue,
         amount: applied.amount,
+        amountCents: applied.amountCents,
       },
       "Coupon applied",
     );
+  }),
+
+  eligible: asyncHandler(async (req: Request, res: Response) => {
+    const quote = await checkoutPricingService.quote({
+      userId: req.user!.id,
+      softCouponFailure: true,
+    });
+    const offers = await couponService.listEligible(req.user!.id, quote.subtotalCents);
+    sendSuccess(res, offers, "Eligible coupons fetched");
   }),
 };
 

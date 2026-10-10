@@ -1,17 +1,19 @@
 import { useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ShoppingBag } from "lucide-react";
+import { Contact, ShoppingBag } from "lucide-react";
 import { BrandLogo } from "../brand/BrandLogo";
 import { SearchBar } from "./SearchBar";
 import { CategoryNav } from "./CategoryNav";
 import { DeliverToTrigger } from "./DeliverToPicker";
 import { useAuthStore } from "../../store/auth.store";
 import { useCartItemCount } from "../../hooks/useCatalog";
+import { useCartUiStore } from "../../store/cartUi.store";
 
 const BRAND_DOUBLE_TAP_MS = 300;
 
 export function MobileHeader({ hideSearch = false }: { hideSearch?: boolean }) {
   const count = useCartItemCount();
+  const cartBump = useCartUiStore((s) => s.bump);
   const location = useLocation();
   const navigate = useNavigate();
   const showCategoryChips = location.pathname === "/";
@@ -39,9 +41,15 @@ export function MobileHeader({ hideSearch = false }: { hideSearch?: boolean }) {
           {hideSearch ? <DeliverToTrigger variant="text" /> : null}
         </div>
         <Link to="/cart" className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-yd-border bg-white" aria-label={`Cart${count ? `, ${count} items` : ""}`}>
-          <ShoppingBag className="h-5 w-5 text-yd-forest" />
+          <ShoppingBag
+            key={cartBump}
+            className={`h-5 w-5 text-yd-forest ${cartBump > 0 ? "animate-cartPop" : ""}`}
+          />
           {count > 0 ? (
-            <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-yd-green px-1 text-[10px] font-bold text-white">
+            <span
+              key={`badge-${cartBump}`}
+              className={`absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-yd-green px-1 text-[10px] font-bold text-white ${cartBump > 0 ? "animate-cartPop" : ""}`}
+            >
               {count}
             </span>
           ) : null}
@@ -67,6 +75,7 @@ export function MobileHeader({ hideSearch = false }: { hideSearch?: boolean }) {
 export function DesktopHeader({ hideSearch = false }: { hideSearch?: boolean }) {
   const user = useAuthStore((s) => s.user);
   const count = useCartItemCount();
+  const cartBump = useCartUiStore((s) => s.bump);
 
   return (
     <div className="hidden lg:block">
@@ -81,19 +90,40 @@ export function DesktopHeader({ hideSearch = false }: { hideSearch?: boolean }) 
           <Link to="/search" className="hover:text-yd-green">
             Search
           </Link>
-          <Link to="/cart" className="relative hover:text-yd-green">
-            Cart
+          <Link
+            to="/cart"
+            className="relative grid h-10 w-10 place-items-center rounded-full text-yd-ink hover:bg-yd-cream hover:text-yd-green"
+            aria-label={`Cart${count ? `, ${count} items` : ""}`}
+          >
+            <ShoppingBag
+              key={cartBump}
+              className={`h-5 w-5 ${cartBump > 0 ? "animate-cartPop" : ""}`}
+              strokeWidth={1.75}
+            />
             {count > 0 ? (
-              <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-yd-green px-1.5 text-[10px] text-white">{count}</span>
+              <span
+                key={`desktop-badge-${cartBump}`}
+                className={`absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-yd-green px-1 text-[10px] font-bold text-white ${cartBump > 0 ? "animate-cartPop" : ""}`}
+              >
+                {count}
+              </span>
             ) : null}
           </Link>
           {user ? (
-            <Link to="/profile" className="hover:text-yd-green">
-              Account
+            <Link
+              to="/profile"
+              className="grid h-10 w-10 place-items-center rounded-full text-yd-ink hover:bg-yd-cream hover:text-yd-green"
+              aria-label="Account"
+            >
+              <Contact className="h-5 w-5" strokeWidth={1.75} />
             </Link>
           ) : (
-            <Link to="/login" className="hover:text-yd-green">
-              Sign in
+            <Link
+              to="/login"
+              className="grid h-10 w-10 place-items-center rounded-full text-yd-ink hover:bg-yd-cream hover:text-yd-green"
+              aria-label="Sign in"
+            >
+              <Contact className="h-5 w-5" strokeWidth={1.75} />
             </Link>
           )}
           {user?.role === "admin" ? (

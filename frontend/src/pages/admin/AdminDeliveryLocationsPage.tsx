@@ -31,8 +31,8 @@ export function AdminDeliveryLocationsPage() {
         }
       />
       <p className="mb-4 text-sm text-yd-muted">
-        Configure postal codes, covered area names, and delivery fees. Checkout matches the customer postal code and
-        applies that area&apos;s fee.
+        Configure postal codes, covered area names, and standard + Superfast delivery fees. Checkout matches the
+        customer postal code and applies that area&apos;s fees.
       </p>
       {query.isLoading ? <Skeleton className="h-40" /> : null}
       {!query.isLoading && !items.length ? (
@@ -48,7 +48,11 @@ export function AdminDeliveryLocationsPage() {
                 <p className="font-semibold">{item.postalCodePrefix || item.name}</p>
                 <p className="line-clamp-2 text-sm text-yd-muted">{areas}</p>
                 <p className="text-sm font-semibold text-yd-forest">
-                  {formatCadFromCents(item.deliveryFeeCents ?? 0)} delivery
+                  {formatCadFromCents(item.deliveryFeeCents ?? 0)} standard
+                  <span className="font-normal text-yd-muted">
+                    {" "}
+                    · {formatCadFromCents(item.superfastDeliveryFeeCents ?? 999)} Superfast
+                  </span>
                 </p>
                 <Badge tone={item.isActive ? "sage" : "muted"}>{item.isActive ? "Active" : "Inactive"}</Badge>
               </Link>
@@ -103,11 +107,13 @@ export function AdminDeliveryLocationFormPage() {
     postalCodePrefix: string;
     areaNames: string[];
     deliveryFeeCents: number | "";
+    superfastDeliveryFeeCents: number | "";
     isActive: boolean;
   }>({
     postalCodePrefix: "",
     areaNames: [""],
     deliveryFeeCents: 499,
+    superfastDeliveryFeeCents: 999,
     isActive: true,
   });
 
@@ -118,6 +124,7 @@ export function AdminDeliveryLocationFormPage() {
       postalCodePrefix: data.postalCodePrefix || "",
       areaNames: data.areaNames?.length ? [...data.areaNames] : [""],
       deliveryFeeCents: data.deliveryFeeCents ?? 499,
+      superfastDeliveryFeeCents: data.superfastDeliveryFeeCents ?? 999,
       isActive: data.isActive !== false,
     });
   }, [existing.data]);
@@ -145,6 +152,10 @@ export function AdminDeliveryLocationFormPage() {
     form.deliveryFeeCents === "" || !Number.isFinite(Number(form.deliveryFeeCents))
       ? 0
       : Math.max(0, Math.round(Number(form.deliveryFeeCents)));
+  const superfastFeeCents =
+    form.superfastDeliveryFeeCents === "" || !Number.isFinite(Number(form.superfastDeliveryFeeCents))
+      ? 0
+      : Math.max(0, Math.round(Number(form.superfastDeliveryFeeCents)));
 
   const save = async () => {
     if (!form.postalCodePrefix.trim()) {
@@ -161,6 +172,7 @@ export function AdminDeliveryLocationFormPage() {
         postalCodePrefix: form.postalCodePrefix.trim().toUpperCase(),
         areaNames: cleanedAreaNames,
         deliveryFeeCents: feeCents,
+        superfastDeliveryFeeCents: superfastFeeCents,
         province: "AB",
         city: "Calgary",
         country: "Canada",
@@ -236,7 +248,7 @@ export function AdminDeliveryLocationFormPage() {
           </ul>
         </div>
         <Input
-          label="Delivery fee (CAD cents)"
+          label="Standard delivery fee (CAD cents)"
           type="number"
           min={0}
           step={1}
@@ -251,6 +263,24 @@ export function AdminDeliveryLocationFormPage() {
         />
         <p className="text-xs text-yd-muted">
           Preview: {form.deliveryFeeCents === "" ? "—" : formatCadFromCents(feeCents)}
+        </p>
+        <Input
+          label="Superfast delivery surcharge (CAD cents)"
+          type="number"
+          min={0}
+          step={1}
+          value={form.superfastDeliveryFeeCents}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setForm((p) => ({
+              ...p,
+              superfastDeliveryFeeCents: raw === "" ? "" : Number(raw),
+            }));
+          }}
+        />
+        <p className="text-xs text-yd-muted">
+          Added on top of the standard fee (or free-shipping base) for this postal area. Preview:{" "}
+          {form.superfastDeliveryFeeCents === "" ? "—" : formatCadFromCents(superfastFeeCents)}
         </p>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.isActive} onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))} />{" "}

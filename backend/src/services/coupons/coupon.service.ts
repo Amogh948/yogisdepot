@@ -117,4 +117,64 @@ export const couponService = {
   async apply(code: string, userId: string, subtotal: number): Promise<AppliedCoupon> {
     return this.applyCents(code, userId, dollarsToCents(subtotal));
   },
+
+  /**
+   * List active coupons for the current cart subtotal (selling cents).
+   * Uses the same applyCents rules as checkout; does not mutate usage.
+   */
+  async listEligible(userId: string, subtotalCents: number) {
+    const now = new Date();
+    const coupons = await Coupon.find({
+      isActive: true,
+      startDate: { $lte: now },
+      endDate: { $gte: now },
+    }).sort({ couponCode: 1 });
+
+    const rows = await Promise.all(
+      coupons.map(async (coupon) => {
+        const base = {
+          code: coupon.couponCode,
+          description:
+            coupon.discountType === "percentage"
+              ? `${coupon.discountValue}% off`
+              : `$${(coupon.discountValue / 100).toFixed(2)} off`,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue,
+          minOrderValueCents: minOrderCents(coupon),
+          maxDiscountAmountCents: maxDiscountCents(coupon) ?? null,
+        };
+        try {
+          const applied = await this.applyCents(coupon.couponCode, userId, subtotalCents);
+          return {
+            ...base,
+            discountAmountCents: applied.amountCents,
+            isApplicable: true,
+            reason: null as string | null,
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Coupon not applicable";
+          const minCents = minOrderCents(coupon);
+          let reason = message;
+          if (subtotalCents < minCents) {
+            const need = ((minCents - subtotalCents) / 100).toFixed(2);
+            reason = `Add $${need} more to use this coupon.`;
+          }
+          return {
+            ...base,
+            discountAmountCents: 0,
+            isApplicable: false,
+            reason,
+          };
+        }
+      }),
+    );
+
+    return rows.sort((a, b) => {
+      if (a.isApplicable !== b.isApplicable) return a.isApplicable ? -1 : 1;
+      if (b.discountAmountCents !== a.discountAmountCents) {
+        return b.discountAmountCents - a.discountAmountCents;
+      }
+      return a.code.localeCompare(b.code);
+    });
+  },
 };

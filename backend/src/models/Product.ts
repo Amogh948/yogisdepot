@@ -84,6 +84,10 @@ export interface ProductDocument extends Document {
   dietaryTags: string[];
   servingSize?: string;
   shelfLife?: string;
+  /** Days after delivery the customer may return; 0 = non-returnable. */
+  returnWindowDays?: number;
+  /** Estimated delivery lead time in days from order date (default 5). */
+  deliveryEstimateDays?: number;
   rating: number;
   reviewCount: number;
   /** @deprecated Legacy flat catalog fields — prefer Sku/Pricing/Inventory. */
@@ -195,20 +199,24 @@ const productSchema = new Schema<ProductDocument>(
     foodType: { type: String },
     dietaryTags: { type: [String], default: [] },
     servingSize: { type: String },
-    shelfLife: { type: String },
-    rating: { type: Number, default: 0, min: 0, max: 5 },
-    reviewCount: { type: Number, default: 0, min: 0 },
-    // Legacy dual-read fields
-    sku: { type: String, uppercase: true, trim: true },
-    price: { type: Number, min: 0 },
-    compareAtPrice: { type: Number, min: 0 },
-    costPrice: { type: Number, min: 0 },
-    discount: { type: Number, default: 0, min: 0, max: 100 },
-    stock: { type: Number, min: 0, default: 0 },
-    lowStockThreshold: { type: Number, default: 10, min: 0 },
-    unit: { type: String, default: "pack" },
-    weight: { type: Number, min: 0 },
-    isActive: { type: Boolean, default: true },
+  shelfLife: { type: String },
+  /** Days after delivery the customer may return; 0 = non-returnable. */
+  returnWindowDays: { type: Number, default: 0, min: 0 },
+  /** Estimated delivery lead time in days from order date (default 5). */
+  deliveryEstimateDays: { type: Number, default: 5, min: 1 },
+  rating: { type: Number, default: 0, min: 0, max: 5 },
+  reviewCount: { type: Number, default: 0, min: 0 },
+  // Legacy dual-read fields
+  sku: { type: String, uppercase: true, trim: true },
+  price: { type: Number, min: 0 },
+  compareAtPrice: { type: Number, min: 0 },
+  costPrice: { type: Number, min: 0 },
+  discount: { type: Number, default: 0, min: 0, max: 100 },
+  stock: { type: Number, min: 0, default: 0 },
+  lowStockThreshold: { type: Number, default: 10, min: 0 },
+  unit: { type: String, default: "pack" },
+  weight: { type: Number, min: 0 },
+  isActive: { type: Boolean, default: true },
     allergens: { type: [String], default: [] },
     nutritionInformation: {
       calories: Number,

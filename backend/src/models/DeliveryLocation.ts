@@ -1,4 +1,5 @@
 import mongoose, { Document, Model, Schema } from "mongoose";
+import { DEFAULT_SUPERFAST_DELIVERY_FEE_CENTS } from "../config/constants";
 import { CA_PROVINCES, CaProvince } from "./CanadianTaxRate";
 
 export interface DeliveryLocationDocument extends Document {
@@ -11,8 +12,10 @@ export interface DeliveryLocationDocument extends Document {
   postalCodePrefix: string;
   /** Neighbourhood / community names covered by this postal prefix. */
   areaNames: string[];
-  /** Delivery fee for this area in CAD cents. */
+  /** Standard delivery fee for this area in CAD cents. */
   deliveryFeeCents: number;
+  /** Superfast surcharge for this area in CAD cents (added on top of standard / free base). */
+  superfastDeliveryFeeCents: number;
   isActive: boolean;
   sortOrder: number;
   createdAt: Date;
@@ -28,6 +31,12 @@ const deliveryLocationSchema = new Schema<DeliveryLocationDocument>(
     postalCodePrefix: { type: String, required: true, trim: true, uppercase: true },
     areaNames: { type: [String], default: [] },
     deliveryFeeCents: { type: Number, required: true, min: 0, default: 499 },
+    superfastDeliveryFeeCents: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: DEFAULT_SUPERFAST_DELIVERY_FEE_CENTS,
+    },
     isActive: { type: Boolean, default: true },
     sortOrder: { type: Number, default: 0 },
   },

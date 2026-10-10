@@ -68,17 +68,48 @@ export function ProductCardSkeleton() {
   );
 }
 
-export function Price({ price, compareAt }: { price: number; compareAt?: number }) {
+/** Discount % from dollar amounts, rounded to nearest whole percent (floor of 0.5+). */
+export function discountPercentFromPrices(selling: number, original: number): number {
+  if (!(original > selling) || original <= 0) return 0;
+  return Math.round(((original - selling) / original) * 100);
+}
+
+/**
+ * Reusable CAD price display: selling price, optional strikethrough original, optional % badge.
+ * Hides strike-through/badge when original ≤ selling.
+ */
+export function Price({
+  price,
+  compareAt,
+  showBadge = false,
+  size = "md",
+}: {
+  price: number;
+  compareAt?: number;
+  showBadge?: boolean;
+  size?: "sm" | "md";
+}) {
   const currency = useCurrencyCode();
+  const hasDiscount = typeof compareAt === "number" && compareAt > price;
+  const percent = hasDiscount ? discountPercentFromPrices(price, compareAt) : 0;
+  const priceClass = size === "sm" ? "text-sm font-semibold text-yd-ink" : "text-base font-semibold text-yd-ink";
   return (
-    <div className="flex items-baseline gap-1.5">
-      <span className="text-base font-semibold text-yd-ink">{formatMoney(price, currency)}</span>
-      {compareAt && compareAt > price ? (
+    <div className="flex flex-wrap items-baseline gap-1.5">
+      <span className={priceClass}>{formatMoney(price, currency)}</span>
+      {hasDiscount ? (
         <span className="text-xs text-yd-muted line-through">{formatMoney(compareAt, currency)}</span>
+      ) : null}
+      {showBadge && percent > 0 ? (
+        <span className="rounded-md bg-yd-saffron/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-yd-saffron">
+          {percent}% OFF
+        </span>
       ) : null}
     </div>
   );
 }
+
+/** Alias used by commerce surfaces. */
+export const PriceDisplay = Price;
 
 export function Rating({ value, count }: { value: number; count?: number }) {
   return (
@@ -108,25 +139,25 @@ export function QuantitySelector({
     <div
       className={
         compact
-          ? "inline-flex h-9 items-center rounded-full bg-yd-green text-white"
+          ? "inline-flex h-8 shrink-0 items-center rounded-full bg-yd-green text-white"
           : "inline-flex h-11 items-center rounded-full border border-yd-border bg-white"
       }
     >
       <button
         type="button"
-        className={compact ? "h-9 w-8 text-lg leading-none" : "h-11 w-11"}
+        className={compact ? "h-8 w-7 text-base leading-none" : "h-11 w-11"}
         aria-label="Decrease quantity"
         disabled={disabled || value <= min}
         onClick={() => onChange(Math.max(min, value - 1))}
       >
         −
       </button>
-      <span className={compact ? "min-w-5 text-center text-sm font-semibold" : "w-8 text-center text-sm font-semibold"} aria-live="polite">
+      <span className={compact ? "min-w-5 text-center text-xs font-semibold" : "w-8 text-center text-sm font-semibold"} aria-live="polite">
         {value}
       </span>
       <button
         type="button"
-        className={compact ? "h-9 w-8 text-lg leading-none" : "h-11 w-11"}
+        className={compact ? "h-8 w-7 text-base leading-none" : "h-11 w-11"}
         aria-label="Increase quantity"
         disabled={disabled || value >= max}
         onClick={() => onChange(Math.min(max, value + 1))}

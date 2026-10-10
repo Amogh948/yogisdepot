@@ -97,6 +97,7 @@ router.get("/tax-categories", adminFmcgController.taxCategories);
 router.post("/tax-categories", adminFmcgController.createTaxCategory);
 router.get("/tax-rates", adminFmcgController.taxRates);
 router.post("/tax-rates", adminFmcgController.createTaxRate);
+router.patch("/tax-rates/:id", adminFmcgController.updateTaxRate);
 router.get("/warehouses", adminFmcgController.warehouses);
 router.post("/warehouses", adminFmcgController.createWarehouse);
 router.get("/skus", adminFmcgController.skus);

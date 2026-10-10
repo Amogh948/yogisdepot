@@ -33,6 +33,7 @@ export type DeliveryLocationInput = {
   postalCodePrefix: string;
   areaNames: string[];
   deliveryFeeCents: number;
+  superfastDeliveryFeeCents: number;
   name?: string;
   country?: string;
   province?: string;
@@ -118,6 +119,9 @@ export const deliveryLocationService = {
     if (input.deliveryFeeCents == null || input.deliveryFeeCents < 0) {
       throw new BadRequestError("Delivery fee must be zero or greater");
     }
+    if (input.superfastDeliveryFeeCents == null || input.superfastDeliveryFeeCents < 0) {
+      throw new BadRequestError("Superfast delivery fee must be zero or greater");
+    }
     return DeliveryLocation.create({
       name: (input.name || postalCodePrefix).trim(),
       country: "Canada",
@@ -126,6 +130,7 @@ export const deliveryLocationService = {
       postalCodePrefix,
       areaNames,
       deliveryFeeCents: Math.round(input.deliveryFeeCents),
+      superfastDeliveryFeeCents: Math.round(input.superfastDeliveryFeeCents),
       isActive: input.isActive ?? true,
       sortOrder: input.sortOrder ?? 0,
     });
@@ -147,6 +152,12 @@ export const deliveryLocationService = {
     if (input.deliveryFeeCents !== undefined) {
       if (input.deliveryFeeCents < 0) throw new BadRequestError("Delivery fee must be zero or greater");
       row.deliveryFeeCents = Math.round(input.deliveryFeeCents);
+    }
+    if (input.superfastDeliveryFeeCents !== undefined) {
+      if (input.superfastDeliveryFeeCents < 0) {
+        throw new BadRequestError("Superfast delivery fee must be zero or greater");
+      }
+      row.superfastDeliveryFeeCents = Math.round(input.superfastDeliveryFeeCents);
     }
     if (input.name !== undefined) row.name = input.name.trim() || row.postalCodePrefix;
     if (input.province !== undefined) row.province = assertProvince(input.province);

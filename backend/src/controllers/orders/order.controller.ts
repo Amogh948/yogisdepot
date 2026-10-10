@@ -6,9 +6,13 @@ import { assertVendorId } from "../vendor/vendor.controller";
 
 export const customerOrderController = {
   quote: asyncHandler(async (req: Request, res: Response) => {
+    const speed = req.query.deliverySpeed;
+    const deliverySpeed =
+      speed === "standard" || speed === "superfast" ? speed : undefined;
     const quote = await orderService.quote(req.user!.id, req.query.coupon as string | undefined, {
       scratchRewardId: req.query.scratchRewardId as string | undefined,
       addressId: req.query.addressId as string | undefined,
+      deliverySpeed,
     });
     sendSuccess(res, quote, "Order quote calculated");
   }),
@@ -36,6 +40,11 @@ export const customerOrderController = {
   cancel: asyncHandler(async (req: Request, res: Response) => {
     const order = await orderService.cancel(req.user!.id, req.params.id);
     sendSuccess(res, order, "Order cancelled successfully");
+  }),
+
+  cancellationFeedback: asyncHandler(async (req: Request, res: Response) => {
+    const order = await orderService.submitCancellationFeedback(req.user!.id, req.params.id, req.body);
+    sendSuccess(res, order, "Cancellation feedback saved");
   }),
 };
 

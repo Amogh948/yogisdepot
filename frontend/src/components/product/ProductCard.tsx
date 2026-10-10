@@ -1,10 +1,11 @@
 import { Heart, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { Product } from "../../types";
-import { entityId, mediaUrl } from "../../types";
+import { entityId } from "../../types";
 import { Price, QuantitySelector, Rating } from "../ui/Feedback";
 import { useCartQuantity } from "../../hooks/useCatalog";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
+import { productImageUrl } from "../../utils/productImage";
 
 interface ProductCardProps {
   product: Product;
@@ -20,20 +21,8 @@ function productWeight(product: Product) {
   return product.servingSize || null;
 }
 
-function primaryImageUrl(product: Product): string {
-  if (product.thumbnail) return mediaUrl(product.thumbnail);
-  const images = product.images;
-  if (!Array.isArray(images) || images.length === 0) return "";
-  const first = images[0] as unknown;
-  if (typeof first === "string") return mediaUrl(first);
-  if (first && typeof first === "object" && "url" in first) {
-    return mediaUrl(String((first as { url?: string }).url || ""));
-  }
-  return "";
-}
-
 export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardProps) {
-  const image = primaryImageUrl(product);
+  const image = productImageUrl(product);
   const productId = entityId(product);
   const quantity = useCartQuantity(productId);
   const { setCartQuantity } = useCommerceActions();
@@ -44,8 +33,11 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
   const outOfStock = product.stock <= 0;
 
   return (
-    <article className="flex flex-col overflow-hidden rounded-[14px] border border-yd-border/60 bg-white shadow-soft">
-      <Link to={`/products/${product.slug}`} className="relative block aspect-square overflow-hidden bg-yd-cream">
+    <article className="flex flex-col overflow-visible rounded-[14px] border border-yd-border/60 bg-white shadow-soft">
+      <Link
+        to={`/products/${product.slug}`}
+        className="relative block aspect-square overflow-hidden rounded-t-[14px] bg-yd-cream"
+      >
         {image ? (
           <img src={image} alt={product.name} className="h-full w-full object-cover" loading="lazy" />
         ) : (
@@ -73,14 +65,14 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
           <span className="absolute inset-x-0 bottom-0 bg-yd-ink/70 py-1 text-center text-[11px] font-semibold text-white">Out of stock</span>
         ) : null}
       </Link>
-      <div className="flex flex-1 flex-col gap-0.5 p-2.5">
+      <div className="flex flex-1 flex-col gap-0.5 overflow-visible p-2.5 pb-3">
         <Link to={`/products/${product.slug}`} className="line-clamp-2 min-h-[2.4rem] text-[13px] font-semibold leading-snug text-yd-ink">
           {product.name}
         </Link>
         {weight ? <p className="text-[11px] text-yd-muted">{weight}</p> : null}
         <Rating value={product.rating || 0} count={product.reviewCount} />
-        <div className="mt-auto flex items-center justify-between gap-1.5 pt-1.5">
-          <Price price={product.price} compareAt={product.compareAtPrice} />
+        <div className="mt-auto flex min-h-8 items-center justify-between gap-1.5 pt-2">
+          <Price price={product.price} compareAt={product.compareAtPrice} showBadge size="sm" />
           {onAdd ? (
             quantity > 0 ? (
               <QuantitySelector
@@ -95,7 +87,7 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
               <button
                 type="button"
                 aria-label={`Add ${product.name} to cart`}
-                className="inline-flex h-8 items-center gap-0.5 rounded-lg bg-yd-green px-2.5 text-xs font-bold text-white transition active:scale-95 disabled:opacity-40"
+                className="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-lg bg-yd-green px-2.5 text-xs font-bold text-white transition active:scale-95 disabled:opacity-40"
                 disabled={outOfStock || pending}
                 onClick={() => setCartQuantity.mutate({ product, quantity: 1 })}
               >

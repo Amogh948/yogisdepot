@@ -220,6 +220,58 @@ describe("isUncertainSquareFailure", () => {
   });
 });
 
+describe("SquareProvider.refundPayment", () => {
+  it("clamps refund to Square's remaining refundable amount", async () => {
+    const refundPayment = vi.fn().mockResolvedValue({ refund: { id: "r1" } });
+    const provider = new SquareProvider(() => ({
+      payments: {
+        create: vi.fn(),
+        get: vi.fn().mockResolvedValue({
+          payment: {
+            id: "pay_1",
+            status: "COMPLETED",
+            amountMoney: { amount: BigInt(1000), currency: "CAD" },
+            refundedMoney: { amount: BigInt(200), currency: "CAD" },
+          },
+        }),
+      },
+      refunds: { refundPayment },
+    }));
+
+    // Order asks for $10 (1000¢) but only 800¢ remains refundable.
+    await provider.refundPayment("pay_1", 10);
+
+    expect(refundPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentId: "pay_1",
+        amountMoney: { amount: BigInt(800), currency: "CAD" },
+      }),
+    );
+  });
+
+  it("treats already-fully-refunded payments as success", async () => {
+    const refundPayment = vi.fn();
+    const provider = new SquareProvider(() => ({
+      payments: {
+        create: vi.fn(),
+        get: vi.fn().mockResolvedValue({
+          payment: {
+            id: "pay_1",
+            status: "COMPLETED",
+            amountMoney: { amount: BigInt(1000), currency: "CAD" },
+            refundedMoney: { amount: BigInt(1000), currency: "CAD" },
+          },
+        }),
+      },
+      refunds: { refundPayment },
+    }));
+
+    const result = await provider.refundPayment("pay_1", 10);
+    expect(result.success).toBe(true);
+    expect(refundPayment).not.toHaveBeenCalled();
+  });
+});
+
 describe("square webhook processing", () => {
   it("rejects invalid signatures", async () => {
     const result = await assertSquareWebhookSignature({

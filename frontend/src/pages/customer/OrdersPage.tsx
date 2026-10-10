@@ -1,18 +1,153 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown } from "lucide-react";
 import { ordersApi, reviewsApi } from "../../services/api/commerce.api";
 import { EmptyState, ErrorState, Skeleton, Badge } from "../../components/ui/Feedback";
 import { Button } from "../../components/ui/Button";
+import { ConfirmDialog, Modal } from "../../components/ui/Overlay";
+import { Input } from "../../components/ui/Input";
 import { entityId, mediaUrl, type Order, type OrderStatus } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { useMemo, useState } from "react";
 import { formatCad } from "../../utils/money";
 
+type CancellationReason =
+  | "changed_my_mind"
+  | "better_deal"
+  | "ordered_by_mistake"
+  | "delivery_too_long"
+  | "other";
+
+const CANCEL_REASONS: Array<{ value: CancellationReason; label: string }> = [
+  { value: "changed_my_mind", label: "Changed my mind" },
+  { value: "better_deal", label: "Got a better deal" },
+  { value: "ordered_by_mistake", label: "Ordered by mistake" },
+  { value: "delivery_too_long", label: "Delivery taking too long" },
+  { value: "other", label: "Other" },
+];
+
+type CancelDialog =
+  | { kind: "confirm" }
+  | { kind: "feedback"; showRefundNote: boolean }
+  | null;
+
+function dollarsFromCents(cents: number | undefined, fallbackDollars: number | undefined): number {
+  if (typeof cents === "number") return cents / 100;
+  return Number(fallbackDollars ?? 0);
+}
+
+function OrderBillBreakdown({ order }: { order: Order }) {
+  const [open, setOpen] = useState(false);
+  const itemTotal = dollarsFromCents(order.subtotalCents, order.subtotal);
+  const productDiscount = dollarsFromCents(order.productDiscountCents, 0);
+  const scratchDiscount = dollarsFromCents(order.scratchDiscountCents, 0);
+  const couponDiscount = dollarsFromCents(
+    order.couponDiscountCents ?? order.coupon?.amountCents,
+    order.coupon?.amount ?? order.discount,
+  );
+  const discountTotal =
+    typeof order.productDiscountCents === "number" ||
+    typeof order.scratchDiscountCents === "number" ||
+    typeof order.couponDiscountCents === "number"
+      ? productDiscount + scratchDiscount + couponDiscount
+      : Number(order.discount ?? 0);
+  const delivery = dollarsFromCents(order.deliveryFeeCents, order.shippingFee);
+  const platformFee = dollarsFromCents(order.platformFeeCents, 0);
+  const handlingFee = dollarsFromCents(order.handlingFeeCents, 0);
+  const tax = dollarsFromCents(order.taxCents, order.tax);
+  const total = dollarsFromCents(order.totalCents, order.total);
+  const taxLabel = order.taxSnapshot?.jurisdiction ? `Tax (${order.taxSnapshot.jurisdiction})` : "Tax";
+  const paymentLabel =
+    order.paymentMethod === "cod"
+      ? "Cash on delivery"
+      : order.paymentMethod === "square"
+        ? "Paid by card"
+        : order.paymentMethod.replace(/_/g, " ");
+
+  return (
+    <section className="rounded-card border border-yd-border bg-white">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span>
+          <span className="block font-semibold text-yd-ink">View bill</span>
+          <span className="mt-0.5 block text-sm text-yd-muted">
+            Total {formatCad(total)} · {paymentLabel}
+          </span>
+        </span>
+        <ChevronDown className={`h-5 w-5 shrink-0 text-yd-muted transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open ? (
+        <div className="border-t border-yd-border px-4 py-3">
+          <dl className="space-y-1.5 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt className="text-yd-muted">Item total</dt>
+              <dd className="font-medium text-yd-ink">{formatCad(itemTotal)}</dd>
+            </div>
+            {discountTotal > 0 ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-yd-muted">
+                  Discount
+                  {order.coupon?.code ? ` (${order.coupon.code})` : ""}
+                </dt>
+                <dd className="font-medium text-yd-green">−{formatCad(discountTotal)}</dd>
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-4">
+              <dt className="text-yd-muted">Delivery</dt>
+              <dd className="font-medium text-yd-ink">{formatCad(delivery)}</dd>
+            </div>
+            {platformFee > 0 ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-yd-muted">Platform fee</dt>
+                <dd className="font-medium text-yd-ink">{formatCad(platformFee)}</dd>
+              </div>
+            ) : null}
+            {handlingFee > 0 ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-yd-muted">Handling</dt>
+                <dd className="font-medium text-yd-ink">{formatCad(handlingFee)}</dd>
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-4">
+              <dt className="text-yd-muted">{taxLabel}</dt>
+              <dd className="font-medium text-yd-ink">{formatCad(tax)}</dd>
+            </div>
+            {order.taxSnapshot?.components?.length ? (
+              <div className="space-y-1 pl-2 text-xs text-yd-muted">
+                {order.taxSnapshot.components.map((component) => (
+                  <div key={`${component.type}-${component.taxAmountCents}`} className="flex justify-between gap-4">
+                    <dt>{component.type.toUpperCase()}</dt>
+                    <dd>{formatCad(component.taxAmountCents / 100)}</dd>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-4 border-t border-yd-border pt-2 text-base font-semibold text-yd-ink">
+              <dt>Total</dt>
+              <dd>{formatCad(total)}</dd>
+            </div>
+            <div className="flex justify-between gap-4 pt-1 text-xs text-yd-muted">
+              <dt>Payment</dt>
+              <dd className="capitalize">
+                {paymentLabel} · {order.paymentStatus}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 const TRACK: OrderStatus[] = ["pending", "confirmed", "packed", "out_for_delivery", "delivered"];
 
 const TRACK_LABEL: Record<string, string> = {
-  pending: "Order placed",
+  pending: "Order Placed",
   confirmed: "Confirmed",
   packed: "Packed",
   out_for_delivery: "Out for delivery",
@@ -89,7 +224,9 @@ export function OrdersPage() {
                     {new Date(order.createdAt).toLocaleDateString("en-CA", { day: "numeric", month: "short", year: "numeric" })} · {formatCad(order.total)}
                   </p>
                 </div>
-                <Badge tone={statusTone(order.orderStatus)}>{order.orderStatus.replace(/_/g, " ")}</Badge>
+                <Badge tone={statusTone(order.orderStatus)}>
+                  {TRACK_LABEL[order.orderStatus] || order.orderStatus.replace(/_/g, " ")}
+                </Badge>
               </div>
               <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
                 {order.items.slice(0, 4).map((item) =>
@@ -127,15 +264,44 @@ export function OrderDetailPage() {
   const [reviewFor, setReviewFor] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [rating, setRating] = useState(5);
+  const [cancelDialog, setCancelDialog] = useState<CancelDialog>(null);
+  const [cancelReason, setCancelReason] = useState<CancellationReason | "">("");
+  const [betterDealDetails, setBetterDealDetails] = useState("");
   const query = useQuery({ queryKey: ["order", id], queryFn: () => ordersApi.get(id), enabled: Boolean(id) });
   const cancel = useMutation({
     mutationFn: () => ordersApi.cancel(id),
-    onSuccess: async () => {
-      toast("Order cancelled");
+    onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["order", id] });
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
       await queryClient.invalidateQueries({ queryKey: ["cart"] });
+      const cancelled = result.data;
+      const showRefundNote =
+        cancelled.paymentMethod !== "cod" &&
+        (cancelled.paymentStatus === "refunded" || cancelled.paymentStatus === "paid");
+      setCancelDialog({ kind: "feedback", showRefundNote });
     },
-    onError: (error) => toast(error instanceof ApiError ? error.message : "Cannot cancel", "error"),
+    onError: (error) => {
+      setCancelDialog(null);
+      toast(error instanceof ApiError ? error.message : "Cannot cancel", "error");
+    },
+  });
+  const feedback = useMutation({
+    mutationFn: () =>
+      ordersApi.cancellationFeedback(id, {
+        reason: cancelReason as CancellationReason,
+        betterDealDetails:
+          cancelReason === "better_deal" && betterDealDetails.trim()
+            ? betterDealDetails.trim()
+            : undefined,
+      }),
+    onSuccess: async () => {
+      toast("Thanks for your feedback");
+      setCancelDialog(null);
+      setCancelReason("");
+      setBetterDealDetails("");
+      await queryClient.invalidateQueries({ queryKey: ["order", id] });
+    },
+    onError: (error) => toast(error instanceof ApiError ? error.message : "Could not save feedback", "error"),
   });
   const review = useMutation({
     mutationFn: () => reviewsApi.create({ productId: reviewFor, orderId: id, rating, comment }),
@@ -188,6 +354,8 @@ export function OrderDetailPage() {
         })}
       </ol>
 
+      <OrderBillBreakdown order={order} />
+
       <section className="rounded-card border border-yd-border bg-white p-4">
         <h2 className="font-semibold text-yd-ink">Delivery address</h2>
         <p className="mt-1 text-sm text-yd-muted">
@@ -217,10 +385,80 @@ export function OrderDetailPage() {
       </div>
 
       {["pending", "confirmed"].includes(order.orderStatus) ? (
-        <Button variant="danger" loading={cancel.isPending} onClick={() => cancel.mutate()}>
+        <Button variant="danger" loading={cancel.isPending} onClick={() => setCancelDialog({ kind: "confirm" })}>
           Cancel order
         </Button>
       ) : null}
+
+      <ConfirmDialog
+        open={cancelDialog?.kind === "confirm"}
+        title="Cancel order"
+        body="Do you want to cancel this order?"
+        confirmLabel="Yes"
+        cancelLabel="No"
+        confirmPending={cancel.isPending}
+        onClose={() => {
+          if (!cancel.isPending) setCancelDialog(null);
+        }}
+        onConfirm={() => cancel.mutate()}
+      />
+
+      <Modal
+        open={cancelDialog?.kind === "feedback"}
+        title="Order cancelled"
+        onClose={() => setCancelDialog(null)}
+      >
+        <p className="text-sm text-yd-ink">Your order has been cancelled successfully.</p>
+        {cancelDialog?.kind === "feedback" && cancelDialog.showRefundNote ? (
+          <p className="mt-3 text-sm text-yd-muted">
+            If any money was debited from your account, it will be refunded within 3–5 business days.
+          </p>
+        ) : null}
+        <p className="mt-4 text-sm font-semibold text-yd-forest">Optional: tell us why you cancelled</p>
+        <p className="mt-1 text-xs text-yd-muted">You can skip this step — feedback is not required.</p>
+        <div className="mt-3 space-y-2">
+          {CANCEL_REASONS.map((option) => (
+            <label
+              key={option.value}
+              className={`flex cursor-pointer gap-3 rounded-[12px] border p-3 text-sm ${
+                cancelReason === option.value ? "border-yd-green bg-yd-green/5" : "border-yd-border"
+              }`}
+            >
+              <input
+                type="radio"
+                name="cancel-reason"
+                className="mt-0.5 accent-yd-green"
+                checked={cancelReason === option.value}
+                onChange={() => setCancelReason(option.value)}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
+        {cancelReason === "better_deal" ? (
+          <div className="mt-3">
+            <Input
+              label="Where did you get the better deal? (optional)"
+              value={betterDealDetails}
+              onChange={(e) => setBetterDealDetails(e.target.value)}
+              placeholder="Store or website name"
+            />
+          </div>
+        ) : null}
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" className="sm:flex-1" onClick={() => setCancelDialog(null)}>
+            Skip
+          </Button>
+          <Button
+            className="sm:flex-1"
+            loading={feedback.isPending}
+            disabled={!cancelReason}
+            onClick={() => feedback.mutate()}
+          >
+            Submit feedback
+          </Button>
+        </div>
+      </Modal>
 
       {reviewFor ? (
         <form

@@ -65,6 +65,8 @@ type AdminProductStack = {
   isActive?: boolean;
   isVegetarian?: boolean;
   isVegan?: boolean;
+  returnWindowDays?: number;
+  deliveryEstimateDays?: number;
   source?: { system?: string; sourceId?: string };
   variants?: AdminStackVariant[];
 };
@@ -397,6 +399,7 @@ export function AdminProductWizardPage() {
   const festivals = useQuery({ queryKey: ["admin-merchandising"], queryFn: () => adminApi.merchandising() });
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  const taxCategories = useQuery({ queryKey: ["admin-tax-categories"], queryFn: () => adminApi.taxCategories() });
   const [form, setForm] = useState({
     name: "",
     brandId: "",
@@ -419,6 +422,9 @@ export function AdminProductWizardPage() {
     batchNumber: "",
     purchasePriceCents: 250,
     batchQty: 50,
+    taxable: true,
+    returnWindowDays: 0,
+    deliveryEstimateDays: 5,
   });
 
   const set = (key: keyof typeof form, value: string | number | boolean | string[]) => setForm((prev) => ({ ...prev, [key]: value }));
@@ -432,11 +438,28 @@ export function AdminProductWizardPage() {
       toast("Select at least one category", "error");
       return;
     }
+    if (Number(form.mrpCents) < Number(form.sellingPriceCents)) {
+      toast("Original price must be greater than or equal to the selling price", "error");
+      return;
+    }
     setSaving(true);
     try {
       const categoryIds = form.categoryIds.map((item) => refId(item)).filter(Boolean);
+      const taxOptions = taxCategories.data?.data || [];
+      const categoryOptionId = (predicate: (t: (typeof taxOptions)[number]) => boolean) => {
+        const match = taxOptions.find(predicate);
+        return match ? String(match.id || match._id || "") : "";
+      };
+      const taxableCategoryId =
+        categoryOptionId((t) => t.code === "STANDARD") || categoryOptionId((t) => t.taxability === "TAXABLE");
+      const nonTaxableCategoryId =
+        categoryOptionId((t) => t.code === "EXEMPT") ||
+        categoryOptionId((t) => t.taxability === "EXEMPT" || t.taxability === "ZERO_RATED");
+      const taxCategoryId = form.taxable ? taxableCategoryId : nonTaxableCategoryId;
       await adminApi.createProductWizard({
         name: form.name,
+        returnWindowDays: Math.max(0, Math.floor(Number(form.returnWindowDays) || 0)),
+        deliveryEstimateDays: Math.max(1, Math.floor(Number(form.deliveryEstimateDays) || 5)),
         brandId: form.brandId || undefined,
         brandName: form.brandName || undefined,
         categoryId: categoryIds[0],
@@ -451,6 +474,7 @@ export function AdminProductWizardPage() {
           {
             name: form.variantName,
             skuCode: form.skuCode || undefined,
+            taxCategoryId: taxCategoryId || undefined,
             mrpCents: Number(form.mrpCents),
             costPriceCents: Number(form.costPriceCents),
             sellingPriceCents: Number(form.sellingPriceCents),
@@ -597,13 +621,49 @@ export function AdminProductWizardPage() {
       {step === 4 ? (
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
           <Input label="Cost price (cents)" type="number" value={form.costPriceCents} onChange={(e) => set("costPriceCents", Number(e.target.value))} />
-          <Input label="MRP (cents)" type="number" value={form.mrpCents} onChange={(e) => set("mrpCents", Number(e.target.value))} />
+          <div>
+            <Input label="Original price / MRP (cents)" type="number" value={form.mrpCents} onChange={(e) => set("mrpCents", Number(e.target.value))} />
+            <p className="mt-1 text-[11px] text-yd-muted">
+              Original price displayed with a strikethrough when higher than the selling price.
+            </p>
+          </div>
           <Input label="Selling price (cents)" type="number" value={form.sellingPriceCents} onChange={(e) => set("sellingPriceCents", Number(e.target.value))} />
+          <div>
+            <Input
+              label="Return window (days)"
+              type="number"
+              min={0}
+              value={form.returnWindowDays}
+              onChange={(e) => set("returnWindowDays", Math.max(0, Number(e.target.value) || 0))}
+            />
+            <p className="mt-1 text-[11px] text-yd-muted">Enter 0 for non-returnable items.</p>
+          </div>
+          <div>
+            <Input
+              label="Estimated delivery (days)"
+              type="number"
+              min={1}
+              value={form.deliveryEstimateDays}
+              onChange={(e) => set("deliveryEstimateDays", Math.max(1, Number(e.target.value) || 5))}
+            />
+            <p className="mt-1 text-[11px] text-yd-muted">Number of days from the order date used to estimate delivery.</p>
+          </div>
         </div>
       ) : null}
       {step === 5 ? (
-        <div className="rounded-2xl bg-white p-4 shadow-soft text-sm text-yd-muted">
-          Tax category defaults to STANDARD (Canadian taxability). Configure rates under Tax admin APIs.
+        <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
+          <Select
+            label="Taxability"
+            value={form.taxable ? "taxable" : "non_taxable"}
+            onChange={(e) => set("taxable", e.target.value === "taxable")}
+          >
+            <option value="taxable">Taxable — province tax applies at checkout</option>
+            <option value="non_taxable">Non-taxable — no tax on this product</option>
+          </Select>
+          <p className="text-xs text-yd-muted">
+            Provincial GST/PST/HST rates are configured under Admin → Provincial taxes. Tax uses the delivery address
+            province at checkout.
+          </p>
         </div>
       ) : null}
       {step === 6 ? (
@@ -702,6 +762,8 @@ export function AdminProductEditPage() {
     isActive: true,
     isVegetarian: true,
     isVegan: false,
+    returnWindowDays: 0,
+    deliveryEstimateDays: 5,
   });
   const [variants, setVariants] = useState<
     Array<{
@@ -754,6 +816,8 @@ export function AdminProductEditPage() {
       isActive: product.isActive !== false,
       isVegetarian: product.isVegetarian !== false,
       isVegan: Boolean(product.isVegan),
+      returnWindowDays: typeof product.returnWindowDays === "number" ? product.returnWindowDays : 0,
+      deliveryEstimateDays: typeof product.deliveryEstimateDays === "number" ? product.deliveryEstimateDays : 5,
     });
     setVariants(
       (product.variants || []).map((v) => ({
@@ -821,6 +885,8 @@ export function AdminProductEditPage() {
         isActive: form.isActive,
         isVegetarian: form.isVegetarian,
         isVegan: form.isVegan,
+        returnWindowDays: Math.max(0, Math.floor(Number(form.returnWindowDays) || 0)),
+        deliveryEstimateDays: Math.max(1, Math.floor(Number(form.deliveryEstimateDays) || 5)),
         variants: variants.map((v) => ({
           variantId: v.variantId,
           name: v.name,
@@ -863,7 +929,22 @@ export function AdminProductEditPage() {
   }
 
   const product = stackQuery.data;
-  const taxOptions = (taxCategories.data?.data || []) as Array<{ name: string; id?: string; _id?: string; code?: string }>;
+  const taxOptions = (taxCategories.data?.data || []) as Array<{
+    name: string;
+    id?: string;
+    _id?: string;
+    code?: string;
+    taxability?: "TAXABLE" | "ZERO_RATED" | "EXEMPT";
+  }>;
+  const categoryOptionId = (predicate: (t: (typeof taxOptions)[number]) => boolean) => {
+    const match = taxOptions.find(predicate);
+    return match ? String(match.id || match._id || "") : "";
+  };
+  const taxableCategoryId =
+    categoryOptionId((t) => t.code === "STANDARD") || categoryOptionId((t) => t.taxability === "TAXABLE");
+  const nonTaxableCategoryId =
+    categoryOptionId((t) => t.code === "EXEMPT") ||
+    categoryOptionId((t) => t.taxability === "EXEMPT" || t.taxability === "ZERO_RATED");
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 pb-28">
@@ -1071,6 +1152,32 @@ export function AdminProductEditPage() {
         </div>
       </section>
 
+      <section className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
+        <h2 className="font-display text-lg">Returns & delivery</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Input
+              label="Return window (days)"
+              type="number"
+              min={0}
+              value={form.returnWindowDays}
+              onChange={(e) => setField("returnWindowDays", Math.max(0, Number(e.target.value) || 0))}
+            />
+            <p className="mt-1 text-[11px] text-yd-muted">Enter 0 for non-returnable items.</p>
+          </div>
+          <div>
+            <Input
+              label="Estimated delivery (days)"
+              type="number"
+              min={1}
+              value={form.deliveryEstimateDays}
+              onChange={(e) => setField("deliveryEstimateDays", Math.max(1, Number(e.target.value) || 5))}
+            />
+            <p className="mt-1 text-[11px] text-yd-muted">Number of days from the order date used to estimate delivery.</p>
+          </div>
+        </div>
+      </section>
+
       <section className="space-y-3">
         <h2 className="font-display text-lg">Variants & SKUs</h2>
         {!variants.length ? (
@@ -1104,17 +1211,30 @@ export function AdminProductEditPage() {
               <option value="inactive">Inactive</option>
             </Select>
             <Select
-              label="Tax category"
-              value={variant.taxCategoryId}
-              onChange={(e) => setVariant(variant.variantId, { taxCategoryId: e.target.value })}
+              label="Taxability"
+              value={(() => {
+                const selected = taxOptions.find((t) => String(t.id || t._id || "") === variant.taxCategoryId);
+                if (!selected) return "taxable";
+                return selected.taxability === "EXEMPT" || selected.taxability === "ZERO_RATED" || selected.code === "EXEMPT"
+                  ? "non_taxable"
+                  : "taxable";
+              })()}
+              onChange={(e) => {
+                const nextId = e.target.value === "non_taxable" ? nonTaxableCategoryId : taxableCategoryId;
+                if (!nextId) {
+                  toast(
+                    e.target.value === "non_taxable"
+                      ? "No non-taxable tax category is configured yet. Seed Canadian tax categories first."
+                      : "No taxable tax category is configured yet.",
+                    "error",
+                  );
+                  return;
+                }
+                setVariant(variant.variantId, { taxCategoryId: nextId });
+              }}
             >
-              <option value="">Default</option>
-              {taxOptions.map((t) => (
-                <option key={String(t.id || t._id)} value={String(t.id || t._id || "")}>
-                  {t.name}
-                  {t.code ? ` (${t.code})` : ""}
-                </option>
-              ))}
+              <option value="taxable">Taxable — province tax applies at checkout</option>
+              <option value="non_taxable">Non-taxable — no tax on this product</option>
             </Select>
             <div className="grid gap-3 sm:grid-cols-3">
               <Input
@@ -1123,21 +1243,26 @@ export function AdminProductEditPage() {
                 value={variant.costPriceCents}
                 onChange={(e) => setVariant(variant.variantId, { costPriceCents: Number(e.target.value) })}
               />
+              <div>
+                <Input
+                  label="Original price / MRP (¢)"
+                  type="number"
+                  value={variant.mrpCents}
+                  onChange={(e) => setVariant(variant.variantId, { mrpCents: Number(e.target.value) })}
+                />
+                <p className="mt-1 text-[11px] text-yd-muted">
+                  Original price displayed with a strikethrough when higher than the selling price.
+                </p>
+              </div>
               <Input
-                label="MRP (¢)"
-                type="number"
-                value={variant.mrpCents}
-                onChange={(e) => setVariant(variant.variantId, { mrpCents: Number(e.target.value) })}
-              />
-              <Input
-                label="Selling (¢)"
+                label="Selling price (¢)"
                 type="number"
                 value={variant.sellingPriceCents}
                 onChange={(e) => setVariant(variant.variantId, { sellingPriceCents: Number(e.target.value) })}
               />
             </div>
             <p className="text-xs text-yd-muted">
-              Preview: cost {formatCadFromCents(variant.costPriceCents)} · MRP {formatCadFromCents(variant.mrpCents)} · sell{" "}
+              Preview: cost {formatCadFromCents(variant.costPriceCents)} · original {formatCadFromCents(variant.mrpCents)} · sell{" "}
               {formatCadFromCents(variant.sellingPriceCents)}
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1563,6 +1688,25 @@ export function AdminCategoryDetailPage() {
   );
 }
 
+const ADMIN_ORDER_STATUS_LABEL: Record<string, string> = {
+  pending: "Order Placed",
+  confirmed: "Confirmed",
+  processing: "Processing",
+  packed: "Packed",
+  shipped: "Shipped",
+  out_for_delivery: "Out for delivery",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
+
+const ADMIN_CANCEL_REASON_LABEL: Record<string, string> = {
+  changed_my_mind: "Changed my mind",
+  better_deal: "Got a better deal",
+  ordered_by_mistake: "Ordered by mistake",
+  delivery_too_long: "Delivery taking too long",
+  other: "Other",
+};
+
 export function AdminOrdersPage() {
   const query = useQuery({ queryKey: ["admin-orders"], queryFn: () => adminApi.orders({ limit: 40 }) });
   const items = query.data?.items || [];
@@ -1586,7 +1730,7 @@ export function AdminOrdersPage() {
                 {order.items.length} item{order.items.length === 1 ? "" : "s"}
                 {order.createdAt ? ` · ${new Date(order.createdAt).toLocaleDateString("en-CA")}` : ""}
               </p>
-              <Badge>{order.orderStatus.replace(/_/g, " ")}</Badge>
+              <Badge>{ADMIN_ORDER_STATUS_LABEL[order.orderStatus] || order.orderStatus.replace(/_/g, " ")}</Badge>
             </div>
           </Link>
         ))}
@@ -1618,14 +1762,41 @@ export function AdminOrderDetailPage() {
       />
       <div className="rounded-2xl bg-white p-4 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Badge>{order.orderStatus.replace(/_/g, " ")}</Badge>
+          <Badge>{ADMIN_ORDER_STATUS_LABEL[order.orderStatus] || order.orderStatus.replace(/_/g, " ")}</Badge>
           <p className="font-display text-xl">{formatCad(order.total)}</p>
         </div>
         <p className="mt-2 text-sm text-yd-muted">
           Payment {order.paymentMethod} · {order.paymentStatus}
         </p>
         {order.createdAt ? <p className="text-sm text-yd-muted">{new Date(order.createdAt).toLocaleString("en-CA")}</p> : null}
+        {order.orderStatus === "cancelled" && order.cancelledAt ? (
+          <p className="mt-1 text-sm text-yd-muted">
+            Cancelled {new Date(order.cancelledAt).toLocaleString("en-CA")}
+          </p>
+        ) : null}
       </div>
+      {order.orderStatus === "cancelled" && order.cancellationReason ? (
+        <section className="rounded-2xl border border-yd-border bg-white p-4 shadow-soft">
+          <h2 className="font-display text-lg text-yd-forest">Cancellation feedback</h2>
+          <p className="mt-2 text-sm text-yd-ink">
+            Reason: {ADMIN_CANCEL_REASON_LABEL[order.cancellationReason] || order.cancellationReason}
+          </p>
+          {order.cancellationBetterDealDetails ? (
+            <p className="mt-1 text-sm text-yd-muted">
+              Better deal details: {order.cancellationBetterDealDetails}
+            </p>
+          ) : null}
+          {order.cancellationFeedbackAt ? (
+            <p className="mt-2 text-xs text-yd-muted">
+              Submitted {new Date(order.cancellationFeedbackAt).toLocaleString("en-CA")}
+            </p>
+          ) : null}
+        </section>
+      ) : order.orderStatus === "cancelled" ? (
+        <section className="rounded-2xl border border-dashed border-yd-border bg-yd-cream/40 p-4 text-sm text-yd-muted">
+          No cancellation feedback was provided.
+        </section>
+      ) : null}
       <Select
         label="Order status"
         value={order.orderStatus}
@@ -1640,9 +1811,20 @@ export function AdminOrderDetailPage() {
           }
         }}
       >
-        {["pending", "confirmed", "processing", "packed", "shipped", "out_for_delivery", "delivered", "cancelled"].map((status) => (
-          <option key={status} value={status}>
-            {status.replace(/_/g, " ")}
+        {(
+          [
+            ["pending", "Order Placed"],
+            ["confirmed", "Confirmed"],
+            ["processing", "Processing"],
+            ["packed", "Packed"],
+            ["shipped", "Shipped"],
+            ["out_for_delivery", "Out for delivery"],
+            ["delivered", "Delivered"],
+            ["cancelled", "Cancelled"],
+          ] as const
+        ).map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
           </option>
         ))}
       </Select>
@@ -2046,8 +2228,11 @@ export function AdminSettingsPage() {
     >
       <PageHeader title="Settings" />
       <p className="text-sm text-yd-muted">
-        Fees are stored in minor units (cents). Currency controls storefront display formatting. Sales tax uses Canadian tax
-        rates — not a flat taxRate.
+        Fees are stored in minor units (cents). Currency controls storefront display formatting. Sales tax is configured under{" "}
+        <Link to="/admin/tax-rates" className="font-semibold text-yd-green">
+          Provincial taxes
+        </Link>
+        , using the delivery address province at checkout.
       </p>
       <Input label="Site name" name="siteName" defaultValue={String(settings.siteName || "")} />
       <Select label="Currency" name="currency" defaultValue={String(settings.currency || "CAD")}>
@@ -2057,7 +2242,14 @@ export function AdminSettingsPage() {
           </option>
         ))}
       </Select>
-      <Input label="Delivery fee (cents)" name="deliveryFeeCents" type="number" defaultValue={String(settings.deliveryFeeCents ?? 499)} />
+      <Input label="Default delivery fee (cents)" name="deliveryFeeCents" type="number" defaultValue={String(settings.deliveryFeeCents ?? 499)} />
+      <p className="-mt-1 text-xs text-yd-muted">
+        Fallback when no delivery area matches. Per-area standard and Superfast fees are set under{" "}
+        <Link to="/admin/delivery-locations" className="font-semibold text-yd-green">
+          Delivery areas
+        </Link>
+        .
+      </p>
       <Input label="Free shipping threshold (cents)" name="freeShippingThresholdCents" type="number" defaultValue={String(settings.freeShippingThresholdCents ?? 7500)} />
       <Input label="Platform fee (cents)" name="platformFeeCents" type="number" defaultValue={String(settings.platformFeeCents ?? 99)} />
       <Input label="Handling fee (cents)" name="handlingFeeCents" type="number" defaultValue={String(settings.handlingFeeCents ?? 49)} />

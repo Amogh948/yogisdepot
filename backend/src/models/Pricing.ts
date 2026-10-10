@@ -35,10 +35,10 @@ const pricingSchema = new Schema<PricingDocument>(
 pricingSchema.index({ skuId: 1, isActive: 1, effectiveFrom: -1 });
 pricingSchema.pre("validate", function (next) {
   if (this.mrpCents < this.sellingPriceCents) {
-    this.discountAmountCents = 0;
-  } else {
-    this.discountAmountCents = this.mrpCents - this.sellingPriceCents;
+    next(new Error("Original price (MRP) must be greater than or equal to the selling price"));
+    return;
   }
+  this.discountAmountCents = this.mrpCents - this.sellingPriceCents;
   this.discountPercentage =
     this.mrpCents > 0 ? Math.round((this.discountAmountCents / this.mrpCents) * 10000) / 100 : 0;
   next();

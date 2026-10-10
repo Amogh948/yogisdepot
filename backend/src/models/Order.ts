@@ -1,5 +1,9 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 import {
+  CANCELLATION_REASONS,
+  CancellationReason,
+  DELIVERY_SPEEDS,
+  DeliverySpeed,
   ORDER_PAYMENT_METHODS,
   ORDER_STATUSES,
   OrderPaymentMethod,
@@ -76,6 +80,7 @@ export interface OrderDocument extends Document {
   scratchDiscountCents: number;
   couponDiscountCents: number;
   deliveryFeeCents: number;
+  deliverySpeed: DeliverySpeed;
   platformFeeCents: number;
   handlingFeeCents: number;
   taxCents: number;
@@ -98,6 +103,10 @@ export interface OrderDocument extends Document {
   orderStatus: OrderStatus;
   notes?: string;
   cancelledAt?: Date;
+  /** Optional COD cancellation feedback. */
+  cancellationReason?: CancellationReason;
+  cancellationBetterDealDetails?: string;
+  cancellationFeedbackAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -143,6 +152,7 @@ const orderSchema = new Schema<OrderDocument>(
     scratchDiscountCents: { type: Number, min: 0, default: 0 },
     couponDiscountCents: { type: Number, min: 0, default: 0 },
     deliveryFeeCents: { type: Number, min: 0, default: 0 },
+    deliverySpeed: { type: String, enum: DELIVERY_SPEEDS, default: "standard" },
     platformFeeCents: { type: Number, min: 0, default: 0 },
     handlingFeeCents: { type: Number, min: 0, default: 0 },
     taxCents: { type: Number, min: 0, default: 0 },
@@ -185,6 +195,9 @@ const orderSchema = new Schema<OrderDocument>(
     orderStatus: { type: String, enum: ORDER_STATUSES, default: "pending" },
     notes: { type: String },
     cancelledAt: { type: Date },
+    cancellationReason: { type: String, enum: CANCELLATION_REASONS },
+    cancellationBetterDealDetails: { type: String, maxlength: 500 },
+    cancellationFeedbackAt: { type: Date },
   },
   { timestamps: true },
 );

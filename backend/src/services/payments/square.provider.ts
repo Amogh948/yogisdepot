@@ -13,17 +13,25 @@ import {
 } from "./payment.types";
 import { isUncertainSquareFailure, toPaymentResult } from "./square.payment";
 
+type SquareMoney = { amount?: bigint | number; currency?: string };
+
 type PaymentsApi = {
   create: (body: Record<string, unknown>) => Promise<{
     payment?: {
       id?: string;
       status?: string;
-      amountMoney?: { amount?: bigint | number; currency?: string };
+      amountMoney?: SquareMoney;
       referenceId?: string;
     };
   }>;
   get: (body: { paymentId: string }) => Promise<{
-    payment?: { id?: string; status?: string; referenceId?: string };
+    payment?: {
+      id?: string;
+      status?: string;
+      referenceId?: string;
+      amountMoney?: SquareMoney;
+      refundedMoney?: SquareMoney;
+    };
   }>;
 };
 
@@ -59,6 +67,16 @@ function amountCents(input: PaymentIntentInput): number {
 
 function dollarsToCents(amount: number): number {
   return Math.round(amount * 100);
+}
+
+function moneyToCents(money?: SquareMoney): number {
+  if (money?.amount == null) return 0;
+  return Number(money.amount);
+}
+
+function squareErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return "Square refund failed";
 }
 
 export class SquareProvider implements PaymentProvider {
@@ -140,7 +158,13 @@ export class SquareProvider implements PaymentProvider {
     }
   }
 
-  async getPayment(paymentId: string): Promise<{ id: string; status: string; referenceId?: string } | null> {
+  async getPayment(paymentId: string): Promise<{
+    id: string;
+    status: string;
+    referenceId?: string;
+    totalCents?: number;
+    refundedCents?: number;
+  } | null> {
     if (!paymentId) return null;
     try {
       const response = await this.api().payments.get({ paymentId });
@@ -150,6 +174,8 @@ export class SquareProvider implements PaymentProvider {
         id: payment.id,
         status: String(payment.status || ""),
         referenceId: payment.referenceId || undefined,
+        totalCents: moneyToCents(payment.amountMoney),
+        refundedCents: moneyToCents(payment.refundedMoney),
       };
     } catch {
       return null;
@@ -157,19 +183,44 @@ export class SquareProvider implements PaymentProvider {
   }
 
   async refundPayment(paymentId: string, amount: number): Promise<RefundResult> {
-    assertConfigured();
     if (!paymentId) {
       throw new BadRequestError("Missing Square payment id for refund");
     }
-    const cents = dollarsToCents(amount);
-    const response = await this.api().refunds.refundPayment({
-      idempotencyKey: randomUUID(),
-      paymentId,
-      amountMoney: {
-        amount: BigInt(cents),
-        currency: CAD_CURRENCY,
-      },
-    });
-    return { success: true, reference: response.refund?.id || paymentId };
+    // Local createPayment references (sq_…) are not Square payment ids.
+    if (paymentId.startsWith("sq_")) {
+      throw new BadRequestError("Missing Square payment id for refund");
+    }
+
+    const requestedCents = dollarsToCents(amount);
+    let refundCents = requestedCents;
+
+    const live = await this.getPayment(paymentId);
+    if (live && typeof live.totalCents === "number") {
+      const available = Math.max(0, (live.totalCents || 0) - (live.refundedCents || 0));
+      if (available <= 0) {
+        // Already fully refunded at Square — treat as success for idempotent cancel.
+        return { success: true, reference: paymentId };
+      }
+      // Never request more than Square reports as refundable (avoids REFUND_AMOUNT_INVALID).
+      refundCents = Math.min(requestedCents, available);
+    }
+
+    if (refundCents <= 0) {
+      return { success: true, reference: paymentId };
+    }
+
+    try {
+      const response = await this.api().refunds.refundPayment({
+        idempotencyKey: `refund_${paymentId}`,
+        paymentId,
+        amountMoney: {
+          amount: BigInt(refundCents),
+          currency: CAD_CURRENCY,
+        },
+      });
+      return { success: true, reference: response.refund?.id || paymentId };
+    } catch (error) {
+      throw new BadRequestError(squareErrorMessage(error));
+    }
   }
 }

@@ -2,6 +2,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { BottomNav } from "../components/navigation/BottomNav";
 import { DesktopHeader, MobileHeader } from "../components/navigation/SiteHeader";
 import { SiteFooter } from "../components/navigation/SiteFooter";
+import { ViewCartBar } from "../components/cart/ViewCartBar";
 
 export function PublicLayout() {
   const location = useLocation();
@@ -19,6 +20,7 @@ export function PublicLayout() {
       </main>
 
       <SiteFooter />
+      <ViewCartBar />
       <BottomNav />
     </div>
   );

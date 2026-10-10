@@ -23,6 +23,7 @@ export const deliveryLocationSchema = z.object({
   postalCodePrefix: z.string().trim().min(1).max(10),
   areaNames: areaNamesSchema,
   deliveryFeeCents: z.coerce.number().int().min(0),
+  superfastDeliveryFeeCents: z.coerce.number().int().min(0),
   name: z.string().min(1).max(80).optional(),
   country: z.string().optional(),
   province: z.enum(CA_PROVINCES).optional(),

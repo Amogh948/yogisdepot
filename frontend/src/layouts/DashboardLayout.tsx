@@ -93,6 +93,7 @@ export function AdminLayout() {
         { to: "/admin/reviews", label: "Reviews" },
         { to: "/admin/analytics", label: "Analytics" },
         { to: "/admin/delivery-locations", label: "Delivery areas" },
+        { to: "/admin/tax-rates", label: "Provincial taxes" },
         { to: "/admin/settings", label: "Settings" },
       ]}
     />

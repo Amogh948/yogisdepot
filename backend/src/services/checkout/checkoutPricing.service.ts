@@ -1,3 +1,8 @@
+import {
+  DEFAULT_SUPERFAST_DELIVERY_FEE_CENTS,
+  DELIVERY_SPEEDS,
+  type DeliverySpeed,
+} from "../../config/constants";
 import { BadRequestError } from "../../errors/AppError";
 import { Cart } from "../../models/Cart";
 import { getPlatformSettings } from "../../models/PlatformSettings";
@@ -35,6 +40,13 @@ export interface CheckoutBreakdown {
   scratchDiscountCents: number;
   couponDiscountCents: number;
   deliveryFeeCents: number;
+  /** Base delivery after postal-code fee + free-shipping threshold (before superfast). */
+  standardDeliveryFeeCents: number;
+  /** Configured Superfast surcharge (always returned for UI). */
+  superfastDeliveryFeeCents: number;
+  /** Surcharge actually applied for the selected speed (0 for standard). */
+  superfastSurchargeCents: number;
+  deliverySpeed: DeliverySpeed;
   platformFeeCents: number;
   handlingFeeCents: number;
   smallCartFeeCents: number;
@@ -47,8 +59,18 @@ export interface CheckoutBreakdown {
     discountValue: number;
     amountCents: number;
   };
+  /** Present when softCouponFailure is set and the coupon could not be applied. */
+  couponError?: string;
   scratchRewardId?: string;
   scratchRewardCode?: string;
+  /** Sum of original/MRP × qty (integer cents). */
+  totalMrpCents: number;
+  /** Alias of subtotalCents — sum of selling × qty. */
+  sellingTotalCents: number;
+  /** max(0, totalMrpCents - sellingTotalCents). */
+  discountOnMrpCents: number;
+  /** Product MRP discount + coupon + scratch (no double-count). */
+  totalSavingsCents: number;
   /** Compat dollar fields */
   subtotal: number;
   discount: number;
@@ -95,8 +117,11 @@ export const checkoutPricingService = {
   async quote(input: {
     userId: string;
     couponCode?: string;
+    /** When true, invalid coupons do not fail the quote — fees/tax still return. */
+    softCouponFailure?: boolean;
     scratchRewardId?: string;
     shippingDestination?: TaxDestination;
+    deliverySpeed?: DeliverySpeed;
     transactionDate?: Date;
   }): Promise<CheckoutBreakdown> {
     const cart = await Cart.findOne({ userId: input.userId });
@@ -169,15 +194,24 @@ export const checkoutPricingService = {
 
     let couponDiscountCents = 0;
     let couponSnapshot: CheckoutBreakdown["couponSnapshot"];
+    let couponError: string | undefined;
     if (input.couponCode) {
-      const applied = await couponService.applyCents(input.couponCode, input.userId, subtotalCents);
-      couponDiscountCents = applied.amountCents;
-      couponSnapshot = {
-        code: applied.coupon.couponCode,
-        discountType: applied.coupon.discountType,
-        discountValue: applied.coupon.discountValue,
-        amountCents: applied.amountCents,
-      };
+      try {
+        const applied = await couponService.applyCents(input.couponCode, input.userId, subtotalCents);
+        couponDiscountCents = applied.amountCents;
+        couponSnapshot = {
+          code: applied.coupon.couponCode,
+          discountType: applied.coupon.discountType,
+          discountValue: applied.coupon.discountValue,
+          amountCents: applied.amountCents,
+        };
+      } catch (error) {
+        if (input.softCouponFailure && error instanceof BadRequestError) {
+          couponError = error.message;
+        } else {
+          throw error;
+        }
+      }
     }
 
     let scratchDiscountCents = 0;
@@ -201,16 +235,31 @@ export const checkoutPricingService = {
       subtotalCents - couponDiscountCents - scratchDiscountCents,
     );
 
-    let deliveryFeeCents = settings.deliveryFeeCents ?? 0;
+    let standardDeliveryFeeCents = settings.deliveryFeeCents ?? 0;
+    let locationSuperfastFeeCents: number | undefined;
     if (input.shippingDestination) {
       const match = await deliveryLocationService.findMatchingLocation(input.shippingDestination);
       if (match) {
-        deliveryFeeCents = match.deliveryFeeCents ?? deliveryFeeCents;
+        standardDeliveryFeeCents = match.deliveryFeeCents ?? standardDeliveryFeeCents;
+        if (match.superfastDeliveryFeeCents != null) {
+          locationSuperfastFeeCents = match.superfastDeliveryFeeCents;
+        }
       }
     }
     if (afterDiscounts >= (settings.freeShippingThresholdCents ?? 0)) {
-      deliveryFeeCents = 0;
+      standardDeliveryFeeCents = 0;
     }
+    const deliverySpeed: DeliverySpeed =
+      input.deliverySpeed && (DELIVERY_SPEEDS as readonly string[]).includes(input.deliverySpeed)
+        ? input.deliverySpeed
+        : "standard";
+    // Prefer the matched delivery area's Superfast surcharge; fall back to platform default.
+    const superfastDeliveryFeeCents =
+      locationSuperfastFeeCents ??
+      settings.superfastDeliveryFeeCents ??
+      DEFAULT_SUPERFAST_DELIVERY_FEE_CENTS;
+    const superfastSurchargeCents = deliverySpeed === "superfast" ? superfastDeliveryFeeCents : 0;
+    const deliveryFeeCents = addCents(standardDeliveryFeeCents, superfastSurchargeCents);
     const platformFeeCents = settings.platformFeeCents ?? 0;
     const handlingFeeCents = settings.handlingFeeCents ?? 0;
     let smallCartFeeCents = 0;
@@ -243,6 +292,11 @@ export const checkoutPricingService = {
     });
 
     const totalCents = addCents(afterDiscounts, feesCents, taxSnapshot.totalTaxCents);
+    const totalMrpCents = lines.reduce((sum, line) => sum + line.mrpCents * line.quantity, 0);
+    const discountOnMrpCents = clampNonNegativeCents(totalMrpCents - subtotalCents);
+    const totalSavingsCents = clampNonNegativeCents(
+      discountOnMrpCents + couponDiscountCents + scratchDiscountCents,
+    );
 
     return {
       currency: "CAD",
@@ -252,13 +306,22 @@ export const checkoutPricingService = {
       scratchDiscountCents,
       couponDiscountCents,
       deliveryFeeCents,
+      standardDeliveryFeeCents,
+      superfastDeliveryFeeCents,
+      superfastSurchargeCents,
+      deliverySpeed,
       platformFeeCents,
       handlingFeeCents,
       smallCartFeeCents,
       taxCents: taxSnapshot.totalTaxCents,
       totalCents,
+      totalMrpCents,
+      sellingTotalCents: subtotalCents,
+      discountOnMrpCents,
+      totalSavingsCents,
       taxSnapshot,
       couponSnapshot,
+      couponError,
       scratchRewardId,
       scratchRewardCode,
       subtotal: subtotalCents / 100,

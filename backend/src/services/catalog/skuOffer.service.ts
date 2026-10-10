@@ -32,6 +32,8 @@ export interface PublicSkuOffer {
   description?: string;
   taxCategoryId?: string;
   vendorId: string;
+  returnWindowDays: number;
+  deliveryEstimateDays: number;
 }
 
 function publicImages(product: ProductDocument): string[] {
@@ -124,6 +126,8 @@ export const skuOfferService = {
       description: product.description,
       taxCategoryId: sku.taxCategoryId ? String(sku.taxCategoryId) : undefined,
       vendorId: String(sku.vendorId),
+      returnWindowDays: Math.max(0, product.returnWindowDays ?? 0),
+      deliveryEstimateDays: Math.max(1, product.deliveryEstimateDays ?? 5),
     };
 
     if (options?.includeAdmin && pricing) {
@@ -163,6 +167,8 @@ export const skuOfferService = {
           shortDescription: product.shortDescription,
           description: product.description,
           vendorId: String(product.vendorId),
+          returnWindowDays: Math.max(0, product.returnWindowDays ?? 0),
+          deliveryEstimateDays: Math.max(1, product.deliveryEstimateDays ?? 5),
         },
       ];
     }
@@ -180,10 +186,16 @@ export const skuOfferService = {
   async ensureTaxCategory(code = "STANDARD"): Promise<string> {
     let cat = await TaxCategory.findOne({ code });
     if (!cat) {
+      const presets: Record<string, { name: string; taxability: "TAXABLE" | "ZERO_RATED" | "EXEMPT" }> = {
+        STANDARD: { name: "Standard taxable", taxability: "TAXABLE" },
+        EXEMPT: { name: "Non-taxable / exempt", taxability: "EXEMPT" },
+        GROCERY_ZERO: { name: "Basic groceries (zero-rated)", taxability: "ZERO_RATED" },
+      };
+      const preset = presets[code] || { name: code, taxability: "TAXABLE" as const };
       cat = await TaxCategory.create({
-        name: "Standard taxable",
+        name: preset.name,
         code,
-        taxability: "TAXABLE",
+        taxability: preset.taxability,
         isActive: true,
       });
     }

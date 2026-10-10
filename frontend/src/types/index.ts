@@ -93,6 +93,13 @@ export interface Product {
   usageInstructions?: string;
   rating: number;
   reviewCount: number;
+  /** Original/MRP in cents when provided by API. */
+  mrpCents?: number;
+  sellingPriceCents?: number;
+  discountCents?: number;
+  discountPercentage?: number;
+  returnWindowDays?: number;
+  deliveryEstimateDays?: number;
 }
 
 export interface CartItem {
@@ -159,12 +166,34 @@ export interface Order {
   shippingFee: number;
   tax: number;
   total: number;
-  coupon?: { code: string; amount: number };
+  subtotalCents?: number;
+  productDiscountCents?: number;
+  scratchDiscountCents?: number;
+  couponDiscountCents?: number;
+  deliveryFeeCents?: number;
+  platformFeeCents?: number;
+  handlingFeeCents?: number;
+  taxCents?: number;
+  totalCents?: number;
+  taxSnapshot?: {
+    jurisdiction?: string;
+    components?: Array<{ type: string; taxAmountCents: number; rateBps?: number }>;
+  };
+  coupon?: { code: string; amount: number; amountCents?: number };
   shippingAddress: Address;
   paymentMethod: "cod" | "square" | "mock_online" | "razorpay";
   paymentStatus: string;
   orderStatus: OrderStatus;
   notes?: string;
+  cancelledAt?: string;
+  cancellationReason?:
+    | "changed_my_mind"
+    | "better_deal"
+    | "ordered_by_mistake"
+    | "delivery_too_long"
+    | "other";
+  cancellationBetterDealDetails?: string;
+  cancellationFeedbackAt?: string;
   createdAt: string;
 }
 

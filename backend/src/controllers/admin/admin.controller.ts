@@ -162,6 +162,7 @@ export const settingsUpdateSchema = z.object({
   shippingFee: z.number().min(0).optional(),
   freeShippingThreshold: z.number().min(0).optional(),
   deliveryFeeCents: z.coerce.number().int().min(0).optional(),
+  superfastDeliveryFeeCents: z.coerce.number().int().min(0).optional(),
   freeShippingThresholdCents: z.coerce.number().int().min(0).optional(),
   platformFeeCents: z.coerce.number().int().min(0).optional(),
   handlingFeeCents: z.coerce.number().int().min(0).optional(),

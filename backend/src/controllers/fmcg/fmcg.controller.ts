@@ -7,9 +7,10 @@ import { Pricing } from "../../models/Pricing";
 import { ScratchCampaign } from "../../models/ScratchCampaign";
 import { TaxCategory } from "../../models/TaxCategory";
 import { Warehouse } from "../../models/Warehouse";
-import { BadRequestError } from "../../errors/AppError";
+import { BadRequestError, NotFoundError } from "../../errors/AppError";
 import { catalogAdminService } from "../../services/catalog/catalogAdmin.service";
 import { productCsvService } from "../../services/catalog/productCsv.service";
+import { skuOfferService } from "../../services/catalog/skuOffer.service";
 import { sendSuccess } from "../../utils/apiResponse";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { assertVendorId } from "../vendor/vendor.controller";
@@ -59,6 +60,8 @@ export const productWizardSchema = z.object({
     .optional()
     .nullable(),
   festivalId: z.string().optional().nullable(),
+  returnWindowDays: z.number().int().min(0).optional(),
+  deliveryEstimateDays: z.number().int().min(1).optional(),
   images: z.array(z.union([z.string(), z.object({ url: z.string(), type: z.string().optional() })])).optional(),
   variants: z.array(wizardVariantSchema).min(1),
 }).refine((data) => Boolean(data.categoryIds?.length || data.categoryId), {
@@ -104,6 +107,8 @@ export const productStackUpdateSchema = z.object({
     .optional()
     .nullable(),
   festivalId: z.string().optional().nullable(),
+  returnWindowDays: z.number().int().min(0).optional(),
+  deliveryEstimateDays: z.number().int().min(1).optional(),
   variants: z.array(stackVariantUpdateSchema).optional(),
 });
 
@@ -177,6 +182,8 @@ export const adminFmcgController = {
   }),
 
   taxCategories: asyncHandler(async (_req: Request, res: Response) => {
+    await skuOfferService.ensureTaxCategory("STANDARD");
+    await skuOfferService.ensureTaxCategory("EXEMPT");
     sendSuccess(res, await catalogAdminService.listTaxCategories(), "Tax categories fetched");
   }),
 
@@ -195,15 +202,53 @@ export const adminFmcgController = {
       province: z.enum(CA_PROVINCES),
       component: z.enum(CA_TAX_COMPONENTS),
       rateBps: z.number().int().min(0).max(10000),
-      effectiveFrom: z.coerce.date(),
+      effectiveFrom: z.coerce.date().optional(),
       effectiveTo: z.coerce.date().nullable().optional(),
       isActive: z.boolean().optional(),
       appliesToAllTaxable: z.boolean().optional(),
       taxCategoryIds: z.array(z.string()).optional(),
+      /** When true (default), close previous open-ended rates for the same province + tax name. */
+      supersedePrevious: z.boolean().optional(),
     });
     const body = schema.parse(req.body);
-    const rate = await CanadianTaxRate.create(body);
+    const effectiveFrom = body.effectiveFrom || new Date();
+    const supersedePrevious = body.supersedePrevious !== false;
+    if (supersedePrevious) {
+      await CanadianTaxRate.updateMany(
+        {
+          province: body.province,
+          component: body.component,
+          isActive: true,
+          $or: [{ effectiveTo: null }, { effectiveTo: { $exists: false } }],
+        },
+        { effectiveTo: effectiveFrom },
+      );
+    }
+    const rate = await CanadianTaxRate.create({
+      province: body.province,
+      component: body.component,
+      rateBps: body.rateBps,
+      effectiveFrom,
+      effectiveTo: body.effectiveTo ?? null,
+      isActive: body.isActive !== false,
+      appliesToAllTaxable: body.appliesToAllTaxable !== false,
+      taxCategoryIds: body.taxCategoryIds || [],
+    });
     sendSuccess(res, rate, "Tax rate version created", 201);
+  }),
+
+  updateTaxRate: asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      isActive: z.boolean().optional(),
+      effectiveTo: z.coerce.date().nullable().optional(),
+      rateBps: z.number().int().min(0).max(10000).optional(),
+    });
+    const body = schema.parse(req.body);
+    const rate = await CanadianTaxRate.findByIdAndUpdate(req.params.id, body, { new: true });
+    if (!rate) {
+      throw new NotFoundError("Tax rate not found");
+    }
+    sendSuccess(res, rate, "Tax rate updated");
   }),
 
   warehouses: asyncHandler(async (_req: Request, res: Response) => {

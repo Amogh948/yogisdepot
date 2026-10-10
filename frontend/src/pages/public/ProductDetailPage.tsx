@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useNavigate, useParams } from "react-router-dom";
-import { Heart, Truck } from "lucide-react";
+import { Heart, RotateCcw, Truck } from "lucide-react";
 import { useProduct, useWishlist } from "../../hooks/useCatalog";
 import { useQuery } from "@tanstack/react-query";
 import { productsApi } from "../../services/api/products.api";
@@ -12,6 +12,7 @@ import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { entityId, mediaUrl } from "../../types";
 import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
+import { formatEstimatedDeliveryDate, returnPolicyLabel } from "../../utils/dates";
 
 export function ProductDetailPage() {
   const { slug = "" } = useParams();
@@ -87,7 +88,7 @@ export function ProductDetailPage() {
           {product.brand ? <p className="text-sm font-medium text-yd-muted">{product.brand}</p> : null}
           <h1 className="font-display text-3xl text-yd-forest lg:text-4xl">{product.name}</h1>
           <Rating value={product.rating} count={product.reviewCount} />
-          <Price price={product.price} compareAt={product.compareAtPrice} />
+          <Price price={product.price} compareAt={product.compareAtPrice} showBadge />
           <p className="text-sm leading-relaxed text-yd-muted">{product.shortDescription || product.description}</p>
           {weight || product.unit ? (
             <p className="text-sm text-yd-ink">
@@ -107,8 +108,18 @@ export function ProductDetailPage() {
           <div className="flex items-start gap-2 rounded-card border border-yd-border bg-white p-3 text-sm">
             <Truck className="mt-0.5 h-4 w-4 shrink-0 text-yd-green" />
             <div>
-              <p className="font-semibold text-yd-ink">Delivery information</p>
-              <p className="text-yd-muted">Packed fresh from vendor kitchens. Free delivery over $75.</p>
+              <p className="font-semibold text-yd-ink">Estimated delivery</p>
+              <p className="text-yd-muted">
+                Estimated delivery: {formatEstimatedDeliveryDate(product.deliveryEstimateDays ?? 5)}
+              </p>
+              <p className="mt-1 text-xs text-yd-muted">Estimate from order date — not a guaranteed delivery date.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2 rounded-card border border-yd-border bg-white p-3 text-sm">
+            <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-yd-forest" />
+            <div>
+              <p className="font-semibold text-yd-ink">Returns</p>
+              <p className="text-yd-muted">{returnPolicyLabel(product.returnWindowDays)}</p>
             </div>
           </div>
 

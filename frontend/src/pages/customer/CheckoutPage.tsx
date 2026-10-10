@@ -4,10 +4,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { addressApi, cartApi, deliveryApi, ordersApi } from "../../services/api/commerce.api";
+import { addressApi, cartApi, couponsApi, deliveryApi, ordersApi } from "../../services/api/commerce.api";
 import { Button } from "../../components/ui/Button";
 import { Input, Select } from "../../components/ui/Input";
 import { EmptyState } from "../../components/ui/Feedback";
+import { CheckoutCouponsSection, SavingsBanner } from "../../components/commerce/CheckoutCoupons";
 import { entityId, mediaUrl } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
@@ -21,7 +22,8 @@ import {
 } from "../../utils/square";
 import { detectCurrentAddress } from "../../utils/geolocation";
 import { useAuthStore } from "../../store/auth.store";
-import { formatCad } from "../../utils/money";
+import { formatCad, formatCadFromCents } from "../../utils/money";
+import { scrollToTop } from "../../utils/scroll";
 
 type SquareCheckoutSession = {
   orderId: string;
@@ -56,6 +58,13 @@ export function CheckoutPage() {
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [addressId, setAddressId] = useState("");
+  const [deliverySpeed, setDeliverySpeed] = useState<"standard" | "superfast">("standard");
+
+  // When advancing to Delivery (or Payment), start at the top of the new step content.
+  useEffect(() => {
+    if (step === 1) return;
+    scrollToTop();
+  }, [step]);
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "square">("square");
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
@@ -92,14 +101,16 @@ export function CheckoutPage() {
   const resolvedAddressId = addressId || (selected ? entityId(selected) : "");
 
   const quote = useQuery({
-    queryKey: ["checkout-quote", appliedCoupon, scratchRewardId, resolvedAddressId],
+    queryKey: ["checkout-quote", appliedCoupon, scratchRewardId, resolvedAddressId, deliverySpeed],
     queryFn: () =>
       ordersApi.quote({
         coupon: appliedCoupon || undefined,
         scratchRewardId: scratchRewardId || undefined,
         addressId: resolvedAddressId || undefined,
+        deliverySpeed,
       }),
     enabled: Boolean(cart.data?.data?.items.length),
+    placeholderData: (previous) => previous,
   });
 
   const deliveryCheck = useQuery({
@@ -188,11 +199,19 @@ export function CheckoutPage() {
     cartHold.current = cart.data.data;
   }
 
-  const finish = async (orderId: string, message = "Order placed successfully") => {
+  const finish = async (
+    orderId: string,
+    message = "Order placed successfully",
+    options?: { celebrate?: boolean },
+  ) => {
     toast(message);
     await queryClient.invalidateQueries({ queryKey: ["cart"] });
     await queryClient.invalidateQueries({ queryKey: ["orders"] });
-    navigate(`/order-success?orderId=${orderId}`);
+    scrollToTop("auto");
+    navigate(`/order-success?orderId=${orderId}`, {
+      state: options?.celebrate ? { celebrateOrderId: orderId } : undefined,
+      replace: true,
+    });
   };
 
   const abandonPayment = async (orderId: string) => {
@@ -251,6 +270,7 @@ export function CheckoutPage() {
       return ordersApi.create({
         addressId: entityId(selected!),
         paymentMethod,
+        deliverySpeed,
         couponCode: appliedCoupon || couponCode || undefined,
         scratchRewardId: scratchRewardId || undefined,
       });
@@ -258,7 +278,8 @@ export function CheckoutPage() {
     onSuccess: async (result) => {
       const orderId = entityId(result.data.order);
       if (paymentMethod !== "square") {
-        await finish(orderId);
+        // COD (and other non-Square methods): order is placed successfully — celebrate.
+        await finish(orderId, "Order placed successfully", { celebrate: true });
         return;
       }
       const payload = result.data.payment.clientPayload;
@@ -320,9 +341,10 @@ export function CheckoutPage() {
       setSquareSession(null);
       const status = order.data.paymentStatus;
       if (status === "paid") {
-        await finish(orderId, "Payment successful");
+        await finish(orderId, "Payment successful", { celebrate: true });
       } else if (status === "pending") {
-        await finish(orderId, "Payment is processing — we will confirm shortly");
+        // Still settling — show processing UI without a false success celebration.
+        await finish(orderId, "Payment is processing — we will confirm shortly", { celebrate: false });
       } else {
         toast("Payment could not be confirmed", "error");
         await abandonPayment(orderId);
@@ -349,6 +371,15 @@ export function CheckoutPage() {
   };
 
   const cartData = cart.data?.data?.items.length ? cart.data.data : paying ? cartHold.current : cart.data?.data;
+
+  useEffect(() => {
+    if (!appliedCoupon || !quote.isSuccess) return;
+    const error = (quote.data?.data as { couponError?: string } | undefined)?.couponError;
+    if (!error) return;
+    setAppliedCoupon("");
+    toast(error, "error");
+  }, [appliedCoupon, quote.isSuccess, quote.data, toast]);
+
   if (!cartData?.items.length) {
     return <EmptyState title="Nothing to checkout" body="Add items to your cart first." />;
   }
@@ -361,14 +392,52 @@ export function CheckoutPage() {
     total?: number;
     platformFeeCents?: number;
     handlingFeeCents?: number;
+    deliveryFeeCents?: number;
+    standardDeliveryFeeCents?: number;
+    superfastDeliveryFeeCents?: number;
+    superfastSurchargeCents?: number;
+    totalMrpCents?: number;
+    discountOnMrpCents?: number;
+    couponDiscountCents?: number;
+    totalSavingsCents?: number;
+    couponError?: string;
+    couponSnapshot?: { code?: string; discountType?: string; discountValue?: number; amountCents?: number };
     taxSnapshot?: { jurisdiction?: string; components?: Array<{ type: string; taxAmountCents: number }> };
   };
   const shipping = Number(quoteData.shippingFee ?? 0);
+  const standardDeliveryFeeCents = Number(quoteData.standardDeliveryFeeCents ?? 0);
+  const superfastSurchargeCents = Number(quoteData.superfastDeliveryFeeCents ?? 0);
+  const standardDeliveryLabel =
+    standardDeliveryFeeCents <= 0 ? "Free" : formatCadFromCents(standardDeliveryFeeCents);
+  const superfastDeliveryLabel = formatCadFromCents(standardDeliveryFeeCents + superfastSurchargeCents);
   const tax = Number(quoteData.tax ?? 0);
-  const discount = Number(quoteData.discount ?? 0);
+  const couponDiscountCents = Number(quoteData.couponDiscountCents ?? quoteData.couponSnapshot?.amountCents ?? 0);
+  const discountOnMrpCents = Number(
+    quoteData.discountOnMrpCents ??
+      Math.max(0, (quoteData.totalMrpCents ?? 0) - Math.round(Number(quoteData.subtotal ?? cartData.subtotal) * 100)),
+  );
+  const totalMrpCents =
+    quoteData.totalMrpCents ?? Math.round(Number(quoteData.subtotal ?? cartData.subtotal) * 100) + discountOnMrpCents;
+  const totalSavingsCents = Number(
+    quoteData.totalSavingsCents ?? discountOnMrpCents + couponDiscountCents,
+  );
   const total = Number(quoteData.total ?? cartData.subtotal);
   const platformFee = (quoteData.platformFeeCents ?? 0) / 100;
   const handlingFee = (quoteData.handlingFeeCents ?? 0) / 100;
+  const couponLabel = quoteData.couponSnapshot?.code || appliedCoupon;
+
+  const applyCouponCode = async (code: string) => {
+    const result = await couponsApi.validate(code, Number(quoteData.subtotal ?? cartData.subtotal));
+    setAppliedCoupon(result.data.code);
+    setCouponCode(result.data.code);
+    await queryClient.invalidateQueries({ queryKey: ["checkout-quote"] });
+  };
+
+  const removeCouponCode = async () => {
+    setAppliedCoupon("");
+    setCouponCode("");
+    await queryClient.invalidateQueries({ queryKey: ["checkout-quote"] });
+  };
 
   return (
     <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -496,23 +565,173 @@ export function CheckoutPage() {
           </div>
         ) : null}
         {step === 2 ? (
-          <div className="rounded-[14px] border border-yd-border bg-white p-4 shadow-soft">
-            <h2 className="font-display text-xl text-yd-forest">Delivery</h2>
-            {undeliverable ? (
-              <p className="mt-3 rounded-[12px] border border-yd-error/30 bg-yd-error/10 px-4 py-3 text-sm font-medium text-yd-error">
-                {undeliverableMessage}
+          <div className="space-y-5">
+            <section className="rounded-[14px] border border-yd-border bg-white p-4 shadow-soft">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-display text-xl text-yd-forest">Confirm delivery address</h2>
+                <button
+                  type="button"
+                  className="text-sm font-semibold text-yd-green"
+                  onClick={() => setShowAddressForm(true)}
+                >
+                  + Add new address
+                </button>
+              </div>
+              <p className="mt-1 text-sm text-yd-muted">
+                Delivery fee and tax use the postal code and province of the address you confirm.
               </p>
-            ) : null}
-            <label className="mt-4 flex cursor-pointer gap-3 rounded-[12px] border border-yd-green bg-yd-green/5 p-4">
-              <input type="radio" checked readOnly className="mt-1 accent-yd-green" />
-              <span>
-                <p className="font-semibold text-yd-ink">Standard delivery</p>
-                <p className="text-sm text-yd-muted">Packed from vendor kitchens. Free over $75.</p>
-              </span>
-            </label>
-            <Button className="mt-4 w-full" size="lg" disabled={undeliverable} onClick={() => setStep(3)}>
-              Continue to payment
-            </Button>
+              <div className="mt-3 space-y-2">
+                {savedAddresses.map((address) => {
+                  const id = entityId(address);
+                  const isSelected = selected ? entityId(selected) === id : false;
+                  return (
+                    <label
+                      key={id}
+                      className={`flex cursor-pointer gap-3 rounded-[12px] border p-3 ${
+                        isSelected ? "border-yd-green bg-yd-green/5 ring-1 ring-yd-green/30" : "border-yd-border"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="delivery-address"
+                        className="mt-1 accent-yd-green"
+                        checked={isSelected}
+                        onChange={() => setAddressId(id)}
+                      />
+                      <span className="text-sm">
+                        <strong className="capitalize text-yd-ink">{address.addressType}</strong>
+                        <span className="text-yd-muted"> · {address.fullName}</span>
+                        <br />
+                        <span className="text-yd-muted">
+                          {address.addressLine1}
+                          {address.addressLine2 ? `, ${address.addressLine2}` : ""}, {address.city},{" "}
+                          {address.state} {address.postalCode}
+                        </span>
+                        {isSelected ? (
+                          <span className="mt-1 block text-xs font-semibold text-yd-green">Selected for delivery</span>
+                        ) : null}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {undeliverable ? (
+                <p className="mt-3 rounded-[12px] border border-yd-error/30 bg-yd-error/10 px-4 py-3 text-sm font-medium text-yd-error">
+                  {undeliverableMessage}
+                </p>
+              ) : null}
+              {showAddressForm ? (
+                <form
+                  className="mt-4 space-y-3 rounded-[12px] border border-yd-border bg-yd-cream/30 p-4"
+                  onSubmit={form.handleSubmit((values) => createAddress.mutate(values))}
+                >
+                  <h3 className="font-semibold text-yd-ink">New delivery address</h3>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Input label="Full name" {...form.register("fullName")} error={form.formState.errors.fullName?.message} />
+                    <Input label="Phone" {...form.register("phone")} error={form.formState.errors.phone?.message} />
+                    <div className="sm:col-span-2">
+                      <Input label="Address" {...form.register("addressLine1")} error={form.formState.errors.addressLine1?.message} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Input label="Apartment / landmark" {...form.register("addressLine2")} />
+                    </div>
+                    <Input label="City" {...form.register("city")} error={form.formState.errors.city?.message} />
+                    <Select label="Province" {...form.register("state")}>
+                      {["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"].map((code) => (
+                        <option key={code} value={code}>
+                          {code}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input label="Postal code" {...form.register("postalCode")} error={form.formState.errors.postalCode?.message} />
+                    <Input label="Country" {...form.register("country")} error={form.formState.errors.country?.message} />
+                    <Select label="Address type" {...form.register("addressType")}>
+                      <option value="home">Home</option>
+                      <option value="work">Work</option>
+                      <option value="other">Other</option>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" className="flex-1" onClick={() => setShowAddressForm(false)}>
+                      Cancel
+                    </Button>
+                    <Button className="flex-1" loading={createAddress.isPending}>
+                      Save address
+                    </Button>
+                  </div>
+                </form>
+              ) : null}
+            </section>
+
+            <section className="rounded-[14px] border border-yd-border bg-white p-4 shadow-soft">
+              <h2 className="font-display text-xl text-yd-forest">Delivery options</h2>
+              <div className="mt-3 space-y-2">
+                <label
+                  className={`flex cursor-pointer gap-3 rounded-[12px] border p-4 ${
+                    deliverySpeed === "standard" ? "border-yd-green bg-yd-green/5" : "border-yd-border"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="delivery-speed"
+                    className="mt-1 accent-yd-green"
+                    checked={deliverySpeed === "standard"}
+                    onChange={() => setDeliverySpeed("standard")}
+                  />
+                  <span className="flex-1">
+                    <span className="flex items-start justify-between gap-3">
+                      <p className="font-semibold text-yd-ink">Standard Delivery</p>
+                      <p className="shrink-0 text-sm font-semibold text-yd-ink">{standardDeliveryLabel}</p>
+                    </span>
+                    <p className="mt-0.5 text-sm text-yd-muted">Products will be delivered as per the estimated time.</p>
+                  </span>
+                </label>
+                <label
+                  className={`flex cursor-pointer gap-3 rounded-[12px] border p-4 ${
+                    deliverySpeed === "superfast" ? "border-yd-green bg-yd-green/5" : "border-yd-border"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="delivery-speed"
+                    className="mt-1 accent-yd-green"
+                    checked={deliverySpeed === "superfast"}
+                    onChange={() => setDeliverySpeed("superfast")}
+                  />
+                  <span className="flex-1">
+                    <span className="flex items-start justify-between gap-3">
+                      <p className="font-semibold text-yd-ink">Superfast Delivery</p>
+                      <p className="shrink-0 text-sm font-semibold text-yd-ink">{superfastDeliveryLabel}</p>
+                    </span>
+                    <p className="mt-0.5 text-sm text-yd-muted">Products delivered the same day.</p>
+                    {superfastSurchargeCents > 0 ? (
+                      <p className="mt-1 text-xs text-yd-muted">
+                        Includes {formatCadFromCents(superfastSurchargeCents)} Superfast surcharge
+                        {standardDeliveryFeeCents <= 0 ? " on free standard delivery" : ""}.
+                      </p>
+                    ) : null}
+                  </span>
+                </label>
+              </div>
+              <Button
+                className="mt-4 w-full"
+                size="lg"
+                disabled={!selected || undeliverable || deliveryCheck.isFetching}
+                onClick={() => {
+                  if (!selected) {
+                    toast("Select a delivery address", "error");
+                    return;
+                  }
+                  if (undeliverable) {
+                    toast(undeliverableMessage, "error");
+                    return;
+                  }
+                  setStep(3);
+                }}
+              >
+                Confirm address & continue →
+              </Button>
+            </section>
           </div>
         ) : null}
         {step === 3 ? (
@@ -590,10 +809,30 @@ export function CheckoutPage() {
             return src ? <img key={item.productId} src={src} alt="" className="h-12 w-12 rounded-lg object-cover bg-yd-cream" /> : null;
           })}
         </div>
-        <dl className="mt-3 space-y-1.5 text-sm">
-          <div className="flex justify-between"><dt className="text-yd-muted">Item total</dt><dd>{formatCad(Number(quoteData.subtotal ?? cartData.subtotal))}</dd></div>
-          <div className="flex justify-between"><dt className="text-yd-muted">Discount</dt><dd className="text-yd-green">−{formatCad(discount)}</dd></div>
-          <div className="flex justify-between"><dt className="text-yd-muted">Delivery</dt><dd>{formatCad(shipping)}</dd></div>
+        <h3 className="mt-4 text-sm font-semibold text-yd-muted">Price Details</h3>
+        <dl className="mt-2 space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <dt className="text-yd-muted">Total MRP</dt>
+            <dd>{formatCadFromCents(totalMrpCents)}</dd>
+          </div>
+          {discountOnMrpCents > 0 ? (
+            <div className="flex justify-between">
+              <dt className="text-yd-green">Discount on MRP</dt>
+              <dd className="text-yd-green">−{formatCadFromCents(discountOnMrpCents)}</dd>
+            </div>
+          ) : null}
+          {couponDiscountCents > 0 ? (
+            <div className="flex justify-between">
+              <dt className="text-yd-green">Coupon discount{couponLabel ? ` (${couponLabel})` : ""}</dt>
+              <dd className="text-yd-green">−{formatCadFromCents(couponDiscountCents)}</dd>
+            </div>
+          ) : null}
+          <div className="flex justify-between">
+            <dt className="text-yd-muted">
+              Delivery{deliverySpeed === "superfast" ? " (Superfast)" : ""}
+            </dt>
+            <dd>{shipping <= 0 ? "Free" : formatCad(shipping)}</dd>
+          </div>
           {platformFee > 0 ? (
             <div className="flex justify-between"><dt className="text-yd-muted">Platform fee</dt><dd>{formatCad(platformFee)}</dd></div>
           ) : null}
@@ -604,26 +843,20 @@ export function CheckoutPage() {
             <dt className="text-yd-muted">Tax{quoteData.taxSnapshot?.jurisdiction ? ` (${quoteData.taxSnapshot.jurisdiction})` : ""}</dt>
             <dd>{formatCad(tax)}</dd>
           </div>
-          <div className="flex justify-between border-t border-yd-border pt-2 font-semibold"><dt>Total</dt><dd>{formatCad(total)}</dd></div>
+          <div className="flex justify-between border-t border-dashed border-yd-border pt-2 text-base font-semibold">
+            <dt>Total amount</dt>
+            <dd>{formatCad(total)}</dd>
+          </div>
         </dl>
+        <SavingsBanner totalSavingsCents={totalSavingsCents} />
         <p className="mt-2 text-[11px] text-yd-muted">Totals are calculated server-side in CAD. Tax uses your shipping province.</p>
         <div className="mt-4">
-          <Input label="Coupon" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} />
+          <CheckoutCouponsSection
+            appliedCoupon={appliedCoupon}
+            onApply={applyCouponCode}
+            onRemove={removeCouponCode}
+          />
         </div>
-        <Button
-          className="mt-2 w-full"
-          onClick={async () => {
-            try {
-              setAppliedCoupon(couponCode.trim().toUpperCase());
-              await queryClient.invalidateQueries({ queryKey: ["checkout-quote"] });
-              toast("Coupon will be validated on the server quote");
-            } catch (error) {
-              toast(error instanceof ApiError ? error.message : "Invalid coupon", "error");
-            }
-          }}
-        >
-          Apply
-        </Button>
         <div className="mt-3">
           <Input
             label="Scratch reward ID (optional)"

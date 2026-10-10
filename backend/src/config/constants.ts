@@ -79,11 +79,15 @@ export const MAX_LIMIT = 100;
 export const DEFAULT_TAX_RATE = 0;
 /** CAD cents defaults for Canada market */
 export const DEFAULT_DELIVERY_FEE_CENTS = 499; // $4.99
+/** Extra surcharge for Superfast Delivery (on top of standard / free-shipping base). */
+export const DEFAULT_SUPERFAST_DELIVERY_FEE_CENTS = 999; // $9.99
 export const DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS = 7500; // $75.00
 export const DEFAULT_PLATFORM_FEE_CENTS = 99; // $0.99
 export const DEFAULT_HANDLING_FEE_CENTS = 49; // $0.49
 export const DEFAULT_SMALL_CART_FEE_CENTS = 199; // $1.99
 export const DEFAULT_SMALL_CART_THRESHOLD_CENTS = 2500; // $25.00
+export const DELIVERY_SPEEDS = ["standard", "superfast"] as const;
+export type DeliverySpeed = (typeof DELIVERY_SPEEDS)[number];
 /** Legacy aliases (dollars) — prefer *_CENTS */
 export const DEFAULT_SHIPPING_FEE = DEFAULT_DELIVERY_FEE_CENTS / 100;
 export const FREE_SHIPPING_THRESHOLD = DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS / 100;
@@ -95,3 +99,13 @@ export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const ALLOWED_IMAGE_MIME = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 export const CANCELLABLE_STATUSES: OrderStatus[] = ["pending", "confirmed"];
+
+/** Optional customer cancellation feedback reasons (COD flow). */
+export const CANCELLATION_REASONS = [
+  "changed_my_mind",
+  "better_deal",
+  "ordered_by_mistake",
+  "delivery_too_long",
+  "other",
+] as const;
+export type CancellationReason = (typeof CANCELLATION_REASONS)[number];

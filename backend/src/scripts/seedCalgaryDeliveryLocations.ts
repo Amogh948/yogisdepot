@@ -7,6 +7,7 @@ import { DeliveryLocation } from "../models/DeliveryLocation";
 import { logger } from "../utils/logger";
 
 const DEFAULT_FEE_CENTS = 499;
+const DEFAULT_SUPERFAST_FEE_CENTS = 999;
 
 const CALGARY_AREAS = [
   {
@@ -56,6 +57,7 @@ async function seedCalgaryDeliveryLocations() {
           postalCodePrefix,
           areaNames: [...area.areaNames],
           deliveryFeeCents: DEFAULT_FEE_CENTS,
+          superfastDeliveryFeeCents: DEFAULT_SUPERFAST_FEE_CENTS,
           isActive: true,
           sortOrder: index + 1,
         },

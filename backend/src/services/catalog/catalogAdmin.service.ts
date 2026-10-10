@@ -61,6 +61,8 @@ export interface ProductWizardInput {
   tasteIndiaRegion?: TasteIndiaRegion | null;
   /** Optional Festival Store merchandising collection id. */
   festivalId?: string | null;
+  returnWindowDays?: number;
+  deliveryEstimateDays?: number;
   variants: WizardVariantInput[];
 }
 
@@ -101,6 +103,8 @@ export interface ProductStackUpdateInput {
   tasteIndiaRegion?: TasteIndiaRegion | null | "";
   /** Pass null or "" to clear. */
   festivalId?: string | null;
+  returnWindowDays?: number;
+  deliveryEstimateDays?: number;
   variants?: ProductStackVariantUpdate[];
 }
 
@@ -208,6 +212,11 @@ export const catalogAdminService = {
     if (!input.variants?.length) {
       throw new BadRequestError("At least one variant is required");
     }
+    for (const v of input.variants) {
+      if (v.mrpCents < v.sellingPriceCents) {
+        throw new BadRequestError("Original price (MRP) must be greater than or equal to the selling price");
+      }
+    }
 
     const brandId = await resolveBrandId(input);
     const tasteIndiaRegion = resolveTasteIndiaRegion(input.tasteIndiaRegion);
@@ -261,6 +270,8 @@ export const catalogAdminService = {
       variants,
       status: "active",
       isActive: true,
+      returnWindowDays: Math.max(0, Math.floor(input.returnWindowDays ?? 0)),
+      deliveryEstimateDays: Math.max(1, Math.floor(input.deliveryEstimateDays ?? 5)),
       // Legacy mirrors from first variant for listing dual-read
       sku: input.variants[0].skuCode?.toUpperCase(),
       price: input.variants[0].sellingPriceCents / 100,
@@ -478,6 +489,12 @@ export const catalogAdminService = {
       product.isActive = input.isActive;
       product.status = input.isActive ? "active" : "inactive";
     }
+    if (input.returnWindowDays !== undefined) {
+      product.returnWindowDays = Math.max(0, Math.floor(input.returnWindowDays));
+    }
+    if (input.deliveryEstimateDays !== undefined) {
+      product.deliveryEstimateDays = Math.max(1, Math.floor(input.deliveryEstimateDays));
+    }
 
     if (input.tasteIndiaRegion !== undefined) {
       const region = resolveTasteIndiaRegion(input.tasteIndiaRegion);
@@ -553,6 +570,9 @@ export const catalogAdminService = {
           const nextMrp = patch.mrpCents ?? current?.mrpCents ?? 0;
           const nextCost = patch.costPriceCents ?? current?.costPriceCents ?? 0;
           const nextSell = patch.sellingPriceCents ?? current?.sellingPriceCents ?? 0;
+          if (nextMrp < nextSell) {
+            throw new BadRequestError("Original price (MRP) must be greater than or equal to the selling price");
+          }
           if (current) {
             current.isActive = false;
             current.effectiveUntil = new Date();

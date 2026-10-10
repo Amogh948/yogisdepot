@@ -3,7 +3,11 @@ import { customerOrderController } from "../controllers/orders/order.controller"
 import { authenticate } from "../middleware/auth.middleware";
 import { requireRoles } from "../middleware/role.middleware";
 import { validate } from "../middleware/validation.middleware";
-import { createOrderSchema, squareVerifySchema } from "../schemas/orders/order.schema";
+import {
+  cancellationFeedbackSchema,
+  createOrderSchema,
+  squareVerifySchema,
+} from "../schemas/orders/order.schema";
 
 const router = Router();
 
@@ -14,5 +18,10 @@ router.post("/:id/pay/verify", validate(squareVerifySchema), customerOrderContro
 router.get("/", customerOrderController.list);
 router.get("/:id", customerOrderController.get);
 router.post("/:id/cancel", customerOrderController.cancel);
+router.post(
+  "/:id/cancellation-feedback",
+  validate(cancellationFeedbackSchema),
+  customerOrderController.cancellationFeedback,
+);
 
 export const orderRoutes = router;

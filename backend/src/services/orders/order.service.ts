@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import {
   CANCELLABLE_STATUSES,
+  CancellationReason,
   ORDER_STATUSES,
   OrderStatus,
   PAYMENT_METHODS,
@@ -14,6 +15,7 @@ import { Order, OrderDocument } from "../../models/Order";
 import { Product } from "../../models/Product";
 import { Vendor } from "../../models/Vendor";
 import { nextOrderNumber } from "../../utils/businessIds";
+import { logger } from "../../utils/logger";
 import { CAD_CURRENCY } from "../../utils/money";
 import { PaymentService } from "../payments/payment.service";
 import { SquareProvider } from "../payments/square.provider";
@@ -30,7 +32,11 @@ export const orderService = {
   async quote(
     userId: string,
     couponCode?: string,
-    options?: { scratchRewardId?: string; addressId?: string },
+    options?: {
+      scratchRewardId?: string;
+      addressId?: string;
+      deliverySpeed?: "standard" | "superfast";
+    },
   ) {
     let shippingDestination: { country: string; state: string; postalCode?: string } | undefined;
     if (options?.addressId) {
@@ -46,8 +52,10 @@ export const orderService = {
     return checkoutPricingService.quote({
       userId,
       couponCode,
+      softCouponFailure: true,
       scratchRewardId: options?.scratchRewardId,
       shippingDestination,
+      deliverySpeed: options?.deliverySpeed,
     });
   },
 
@@ -83,6 +91,7 @@ export const orderService = {
     input: {
       addressId: string;
       paymentMethod: PaymentMethod;
+      deliverySpeed?: "standard" | "superfast";
       couponCode?: string;
       scratchRewardId?: string;
       notes?: string;
@@ -109,6 +118,7 @@ export const orderService = {
       userId,
       couponCode: input.couponCode,
       scratchRewardId: input.scratchRewardId,
+      deliverySpeed: input.deliverySpeed || "standard",
       shippingDestination: {
         country: address.country,
         state: address.state,
@@ -127,7 +137,8 @@ export const orderService = {
 
     const paymentStatus =
       input.paymentMethod === "cod" ? "pending" : payment.status === "paid" ? "paid" : "pending";
-    const orderStatus: OrderStatus = input.paymentMethod === "mock_online" ? "confirmed" : "pending";
+    // Fulfillment starts as "pending" (Order Placed). Admin advances to confirmed / later stages.
+    const orderStatus: OrderStatus = "pending";
 
     const items = quote.lines.map((line) => ({
       skuId: line.skuId || undefined,
@@ -166,6 +177,7 @@ export const orderService = {
             scratchDiscountCents: quote.scratchDiscountCents,
             couponDiscountCents: quote.couponDiscountCents,
             deliveryFeeCents: quote.deliveryFeeCents,
+            deliverySpeed: quote.deliverySpeed,
             platformFeeCents: quote.platformFeeCents,
             handlingFeeCents: quote.handlingFeeCents,
             taxCents: quote.taxCents,
@@ -294,7 +306,7 @@ export const orderService = {
       );
       if (verified.success) {
         createdOrder.paymentStatus = "paid";
-        createdOrder.orderStatus = "confirmed";
+        // Do not auto-confirm fulfillment — admin sets confirmed explicitly.
         await createdOrder.save();
         await inventoryReservationService.markSold(String(createdOrder._id));
       }
@@ -402,12 +414,9 @@ export const orderService = {
       return order;
     }
     order.paymentStatus = "paid";
-    order.orderStatus = "confirmed";
     order.transactionId = squarePaymentId;
-    order.items = order.items.map((item) => {
-      item.fulfillmentStatus = "confirmed";
-      return item;
-    });
+    // Payment success does not advance fulfillment. Leave orderStatus as "pending"
+    // (Order Placed); only admin updates move it to confirmed / later stages.
     await order.save();
     await inventoryReservationService.markSold(String(order._id));
     const customerId = userId || String(order.customerId);
@@ -467,20 +476,45 @@ export const orderService = {
       throw new BadRequestError("This order can no longer be cancelled");
     }
     const wasUnpaid = order.paymentStatus !== "paid";
-    await this.releaseStock(order);
-    order.orderStatus = "cancelled";
-    order.cancelledAt = new Date();
+    let refundSucceeded = false;
+
+    // Attempt provider refund before mutating fulfillment so a hard failure can still
+    // leave the order cancellable with a soft refund outcome.
     if (order.paymentStatus === "paid") {
-      order.paymentStatus = "refunded";
       if (order.paymentMethod === "square" || order.paymentMethod === "mock_online") {
         const method = order.paymentMethod;
         const refundRef =
           method === "square" ? order.transactionId || order.paymentReference : order.paymentReference;
         if (refundRef) {
           const amount = order.totalCents ? order.totalCents / 100 : order.total || 0;
-          await PaymentService.refundPayment(method, refundRef, amount);
+          try {
+            await PaymentService.refundPayment(method, refundRef, amount);
+            refundSucceeded = true;
+          } catch (error) {
+            logger.warn("Order cancel refund failed; cancelling order anyway", {
+              orderId: String(order._id),
+              orderNumber: order.orderNumber,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        } else {
+          logger.warn("Order cancel skipped refund — missing payment reference", {
+            orderId: String(order._id),
+            orderNumber: order.orderNumber,
+          });
         }
+      } else {
+        // COD paid is unexpected; treat cancel as refunded locally.
+        refundSucceeded = true;
       }
+    }
+
+    await this.releaseStock(order);
+    order.orderStatus = "cancelled";
+    order.cancelledAt = new Date();
+    if (order.paymentStatus === "paid") {
+      // Only claim refunded when the provider accepted the refund (or local COD path).
+      order.paymentStatus = refundSucceeded ? "refunded" : "paid";
     } else {
       order.paymentStatus = "failed";
     }
@@ -501,6 +535,26 @@ export const orderService = {
       title: "Order cancelled",
       body: `Order ${order.orderNumber} was cancelled.`,
     });
+    return order;
+  },
+
+  async submitCancellationFeedback(
+    userId: string,
+    id: string,
+    input: { reason: CancellationReason; betterDealDetails?: string },
+  ) {
+    const order = await this.getForCustomer(userId, id);
+    if (order.orderStatus !== "cancelled") {
+      throw new BadRequestError("Feedback can only be submitted for a cancelled order");
+    }
+    order.cancellationReason = input.reason;
+    if (input.reason === "better_deal" && input.betterDealDetails?.trim()) {
+      order.cancellationBetterDealDetails = input.betterDealDetails.trim();
+    } else {
+      order.cancellationBetterDealDetails = undefined;
+    }
+    order.cancellationFeedbackAt = new Date();
+    await order.save();
     return order;
   },
 

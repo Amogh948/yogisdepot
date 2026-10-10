@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from "react";
 import { Home, LayoutGrid, Search, ShoppingBag, UserRound } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useCartItemCount } from "../../hooks/useCatalog";
+import { useCartUiStore } from "../../store/cartUi.store";
 
 const items = [
   { to: "/", label: "Home", icon: Home, end: true },
@@ -38,6 +39,7 @@ function useViewportWidth<T extends HTMLElement>() {
 
 export function BottomNav() {
   const count = useCartItemCount();
+  const cartBump = useCartUiStore((s) => s.bump);
   const ref = useViewportWidth<HTMLElement>();
 
   return (
@@ -47,27 +49,38 @@ export function BottomNav() {
       aria-label="Primary"
     >
       <ul className="grid w-full grid-cols-5">
-        {items.map((item) => (
-          <li key={item.to} className="min-w-0">
-            <NavLink
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                `relative flex min-h-[52px] w-full flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium leading-tight ${
-                  isActive ? "text-yd-green" : "text-yd-muted"
-                }`
-              }
-            >
-              <item.icon className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden />
-              <span className="max-w-full truncate">{item.label}</span>
-              {item.to === "/cart" && count > 0 ? (
-                <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-yd-green px-1 text-[10px] font-bold text-white">
-                  {count}
-                </span>
-              ) : null}
-            </NavLink>
-          </li>
-        ))}
+        {items.map((item) => {
+          const isCart = item.to === "/cart";
+          return (
+            <li key={item.to} className="min-w-0">
+              <NavLink
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  `relative flex min-h-[52px] w-full flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium leading-tight ${
+                    isActive ? "text-yd-green" : "text-yd-muted"
+                  }`
+                }
+              >
+                <item.icon
+                  key={isCart ? cartBump : item.to}
+                  className={`h-5 w-5 shrink-0 ${isCart && cartBump > 0 ? "animate-cartPop" : ""}`}
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                <span className="max-w-full truncate">{item.label}</span>
+                {isCart && count > 0 ? (
+                  <span
+                    key={`nav-badge-${cartBump}`}
+                    className={`absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-yd-green px-1 text-[10px] font-bold text-white ${cartBump > 0 ? "animate-cartPop" : ""}`}
+                  >
+                    {count}
+                  </span>
+                ) : null}
+              </NavLink>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );

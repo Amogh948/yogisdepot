@@ -1,4 +1,5 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Package } from "lucide-react";
 import { ordersApi } from "../../services/api/commerce.api";
@@ -8,10 +9,27 @@ import { useProducts } from "../../hooks/useCatalog";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { formatCad } from "../../utils/money";
+import { OrderSuccessAnimation } from "../../components/order/OrderSuccessAnimation";
+import {
+  markOrderSuccessCelebrated,
+  shouldCelebrateOrderSuccess,
+  type OrderSuccessNavigateState,
+} from "../../store/orderSuccessUi.store";
+import { scrollToTop } from "../../utils/scroll";
 
 export function OrderSuccessPage() {
   const [params] = useSearchParams();
+  const location = useLocation();
   const orderId = params.get("orderId") || "";
+  const navigateState = (location.state || {}) as OrderSuccessNavigateState;
+  const decidedRef = useRef(false);
+  const [playCelebration, setPlayCelebration] = useState(false);
+
+  // Land at the top so the confirmation / bike celebration is visible immediately.
+  useEffect(() => {
+    scrollToTop();
+  }, [orderId]);
+
   const order = useQuery({
     queryKey: ["order", orderId],
     queryFn: () => ordersApi.get(orderId),
@@ -25,6 +43,29 @@ export function OrderSuccessPage() {
   });
   const recommended = useProducts({ sort: "popular", limit: 8 });
   const { addToCart } = useCommerceActions();
+
+  const data = order.data?.data;
+  const isCod = data?.paymentMethod === "cod";
+  const isPaid = data?.paymentStatus === "paid";
+  const isProcessing = Boolean(data && !isCod && data.paymentStatus === "pending");
+  const isFailed = data?.paymentStatus === "failed";
+  const isConfirmedSuccess = Boolean(data && (isPaid || isCod) && !isFailed && !isProcessing);
+
+  // Latch celebration once so remounts/refetches cannot restart or cancel mid-ride.
+  useEffect(() => {
+    if (decidedRef.current || !orderId || !data) return;
+    if (!isConfirmedSuccess) return;
+    decidedRef.current = true;
+    const shouldPlay = shouldCelebrateOrderSuccess({
+      orderId,
+      navigateCelebrateOrderId: navigateState.celebrateOrderId,
+      isConfirmedSuccess: true,
+    });
+    if (shouldPlay) {
+      markOrderSuccessCelebrated(orderId);
+      setPlayCelebration(true);
+    }
+  }, [data, orderId, isConfirmedSuccess, navigateState.celebrateOrderId]);
 
   if (!orderId) {
     return (
@@ -40,13 +81,34 @@ export function OrderSuccessPage() {
     );
   }
   if (order.isLoading) return <Skeleton className="h-64" />;
-  if (order.isError || !order.data) return <ErrorState message="Unable to load order confirmation" />;
+  if (order.isError || !data) return <ErrorState message="Unable to load order confirmation" />;
 
-  const data = order.data.data;
-  const isCod = data.paymentMethod === "cod";
-  const isPaid = data.paymentStatus === "paid";
-  const isProcessing = !isCod && data.paymentStatus === "pending";
-  const isFailed = data.paymentStatus === "failed";
+  const resolvedId = entityId(data);
+  const deliveryNote =
+    data.shippingAddress?.city
+      ? `Preparing delivery to ${data.shippingAddress.city}`
+      : "Your Yogis Depot goodies are getting ready for delivery.";
+
+  if (isConfirmedSuccess) {
+    return (
+      <div className="mx-auto max-w-lg space-y-6">
+        <OrderSuccessAnimation
+          orderNumber={data.orderNumber}
+          orderId={resolvedId}
+          deliveryNote={`${deliveryNote} · Total ${formatCad(data.total)} · ${
+            isCod ? "Cash on delivery" : "Paid online"
+          }`}
+          playCelebration={playCelebration}
+        />
+        <ProductCarousel
+          title="You may also like"
+          products={recommended.data?.items || []}
+          loading={recommended.isLoading}
+          onAdd={(p) => addToCart.mutate({ product: p })}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-md space-y-6 text-center">
@@ -64,13 +126,7 @@ export function OrderSuccessPage() {
           )}
         </div>
         <h1 className="mt-5 font-display text-3xl text-yd-forest">
-          {isProcessing
-            ? "Payment processing"
-            : isFailed
-              ? "Payment not confirmed"
-              : isPaid || isCod
-                ? "Payment successful"
-                : "Order placed successfully!"}
+          {isProcessing ? "Payment processing" : isFailed ? "Payment not confirmed" : "Order placed successfully!"}
         </h1>
         <p className="mt-2 text-sm text-yd-muted">
           {isProcessing
@@ -83,28 +139,19 @@ export function OrderSuccessPage() {
           <p className="text-sm font-semibold text-yd-ink">{data.orderNumber}</p>
           <p className="mt-1 text-sm text-yd-muted">
             Total {formatCad(data.total)} ·{" "}
-            {isCod
-              ? "Cash on delivery"
-              : isPaid
-                ? "Paid online"
-                : isProcessing
-                  ? "Payment processing"
-                  : data.paymentStatus}
+            {isProcessing ? "Payment processing" : data.paymentStatus}
           </p>
-          <p className="mt-1 text-sm text-yd-muted">
-            Est. delivery in 2–4 days · {data.shippingAddress?.city}
-          </p>
+          {data.shippingAddress?.city ? (
+            <p className="mt-1 text-sm text-yd-muted">Delivery to {data.shippingAddress.city}</p>
+          ) : null}
         </div>
         <Link
-          to={`/orders/${entityId(data)}`}
+          to={`/orders/${resolvedId}`}
           className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-yd-saffron text-sm font-bold text-white hover:bg-yd-terracotta"
         >
-          Track order →
+          View Order →
         </Link>
         <div className="mt-3 flex flex-col gap-2 text-sm font-semibold">
-          <Link to={`/orders/${entityId(data)}`} className="text-yd-green">
-            View order details
-          </Link>
           <Link to="/products" className="text-yd-muted">
             Continue shopping
           </Link>

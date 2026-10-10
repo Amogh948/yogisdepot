@@ -7,6 +7,7 @@ import {
   DEFAULT_PLATFORM_FEE_CENTS,
   DEFAULT_SMALL_CART_FEE_CENTS,
   DEFAULT_SMALL_CART_THRESHOLD_CENTS,
+  DEFAULT_SUPERFAST_DELIVERY_FEE_CENTS,
 } from "../config/constants";
 
 export interface PlatformSettingsDocument extends Document {
@@ -16,6 +17,8 @@ export interface PlatformSettingsDocument extends Document {
   /** @deprecated Not used for checkout tax — CanadianTaxRate + canadianTax.service */
   taxRate?: number;
   deliveryFeeCents: number;
+  /** Extra amount added on top of the standard delivery fee for Superfast Delivery. */
+  superfastDeliveryFeeCents: number;
   freeShippingThresholdCents: number;
   platformFeeCents: number;
   handlingFeeCents: number;
@@ -35,6 +38,11 @@ const platformSettingsSchema = new Schema<PlatformSettingsDocument>(
     currency: { type: String, default: "CAD", uppercase: true, trim: true },
     taxRate: { type: Number, min: 0, max: 1 },
     deliveryFeeCents: { type: Number, default: DEFAULT_DELIVERY_FEE_CENTS, min: 0 },
+    superfastDeliveryFeeCents: {
+      type: Number,
+      default: DEFAULT_SUPERFAST_DELIVERY_FEE_CENTS,
+      min: 0,
+    },
     freeShippingThresholdCents: {
       type: Number,
       default: DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS,

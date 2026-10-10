@@ -63,6 +63,17 @@ export default {
         card: "16px",
         sheet: "20px",
       },
+      keyframes: {
+        cartPop: {
+          "0%": { transform: "scale(1)" },
+          "30%": { transform: "scale(1.28)" },
+          "55%": { transform: "scale(0.94)" },
+          "100%": { transform: "scale(1)" },
+        },
+      },
+      animation: {
+        cartPop: "cartPop 420ms cubic-bezier(0.34, 1.4, 0.64, 1)",
+      },
     },
   },
   plugins: [],

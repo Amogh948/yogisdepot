@@ -53,11 +53,16 @@ export const deliveryApi = {
 };
 
 export const ordersApi = {
-  quote: (params?: { coupon?: string; addressId?: string; scratchRewardId?: string }) =>
-    unwrap<Record<string, unknown>>(api.get("/orders/quote", { params })),
+  quote: (params?: {
+    coupon?: string;
+    addressId?: string;
+    scratchRewardId?: string;
+    deliverySpeed?: "standard" | "superfast";
+  }) => unwrap<Record<string, unknown>>(api.get("/orders/quote", { params })),
   create: (payload: {
     addressId: string;
     paymentMethod: "cod" | "square" | "mock_online";
+    deliverySpeed?: "standard" | "superfast";
     couponCode?: string;
     scratchRewardId?: string;
     notes?: string;
@@ -73,6 +78,13 @@ export const ordersApi = {
   },
   get: (id: string) => unwrap<Order>(api.get(`/orders/${id}`)),
   cancel: (id: string) => unwrap<Order>(api.post(`/orders/${id}/cancel`)),
+  cancellationFeedback: (
+    id: string,
+    payload: {
+      reason: "changed_my_mind" | "better_deal" | "ordered_by_mistake" | "delivery_too_long" | "other";
+      betterDealDetails?: string;
+    },
+  ) => unwrap<Order>(api.post(`/orders/${id}/cancellation-feedback`, payload)),
 };
 
 export const reviewsApi = {
@@ -84,9 +96,22 @@ export const reviewsApi = {
   mine: () => unwrap<Review[]>(api.get("/reviews/me")),
 };
 
+export type EligibleCoupon = {
+  code: string;
+  description: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  discountAmountCents: number;
+  isApplicable: boolean;
+  reason: string | null;
+  minOrderValueCents: number;
+  maxDiscountAmountCents: number | null;
+};
+
 export const couponsApi = {
   validate: (code: string, subtotal: number) =>
-    unwrap<{ code: string; amount: number }>(api.post("/coupons/validate", { code, subtotal })),
+    unwrap<{ code: string; amount: number; amountCents?: number }>(api.post("/coupons/validate", { code, subtotal })),
+  eligible: () => unwrap<EligibleCoupon[]>(api.get("/coupons/eligible")),
 };
 
 export const notificationsApi = {

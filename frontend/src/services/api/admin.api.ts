@@ -46,6 +46,7 @@ export type AdminDeliveryLocation = {
   postalCodePrefix?: string;
   areaNames?: string[];
   deliveryFeeCents?: number;
+  superfastDeliveryFeeCents?: number;
   isActive: boolean;
   sortOrder: number;
 };
@@ -156,9 +157,34 @@ export const adminApi = {
   createBrand: (payload: Record<string, unknown>) => unwrap<AdminBrand>(api.post("/admin/brands", payload)),
   updateBrand: (id: string, payload: Record<string, unknown>) => unwrap<AdminBrand>(api.put(`/admin/brands/${id}`, payload)),
   deleteBrand: (id: string) => unwrap<null>(api.delete(`/admin/brands/${id}`)),
-  taxCategories: () => unwrap<unknown[]>(api.get("/admin/tax-categories")),
-  taxRates: () => unwrap<unknown[]>(api.get("/admin/tax-rates")),
+  taxCategories: () =>
+    unwrap<
+      Array<{
+        id?: string;
+        _id?: string;
+        name: string;
+        code: string;
+        taxability: "TAXABLE" | "ZERO_RATED" | "EXEMPT";
+        isActive?: boolean;
+      }>
+    >(api.get("/admin/tax-categories")),
+  taxRates: () =>
+    unwrap<
+      Array<{
+        id?: string;
+        _id?: string;
+        province: string;
+        component: string;
+        rateBps: number;
+        effectiveFrom: string;
+        effectiveTo?: string | null;
+        isActive: boolean;
+        appliesToAllTaxable?: boolean;
+      }>
+    >(api.get("/admin/tax-rates")),
   createTaxRate: (payload: Record<string, unknown>) => unwrap<unknown>(api.post("/admin/tax-rates", payload)),
+  updateTaxRate: (id: string, payload: Record<string, unknown>) =>
+    unwrap<unknown>(api.patch(`/admin/tax-rates/${id}`, payload)),
   warehouses: () => unwrap<unknown[]>(api.get("/admin/warehouses")),
   skus: () => unwrap<unknown[]>(api.get("/admin/skus")),
   inventory: () => unwrap<unknown[]>(api.get("/admin/inventory")),

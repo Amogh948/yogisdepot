@@ -8,6 +8,7 @@ import { couponSchema, couponUpdateSchema, validateCouponSchema } from "../schem
 const router = Router();
 
 router.post("/validate", authenticate, validate(validateCouponSchema), couponController.validate);
+router.get("/eligible", authenticate, couponController.eligible);
 router.get("/", authenticate, requireRoles("admin"), adminCouponController.list);
 router.post("/", authenticate, requireRoles("admin"), validate(couponSchema), adminCouponController.create);
 router.put("/:id", authenticate, requireRoles("admin"), validate(couponUpdateSchema), adminCouponController.update);
