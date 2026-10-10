@@ -28,8 +28,12 @@ export interface RefundResult {
 }
 
 export interface PaymentVerifyExtra {
-  paymentId?: string;
-  signature?: string;
+  /** Square Web Payments SDK card token (nonce). */
+  sourceId?: string;
+  /** Idempotency key for Square CreatePayment / refunds. */
+  idempotencyKey?: string;
+  /** Internal order id for Square reference/note. */
+  orderId?: string;
 }
 
 export interface PaymentProvider {

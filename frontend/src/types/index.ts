@@ -161,7 +161,7 @@ export interface Order {
   total: number;
   coupon?: { code: string; amount: number };
   shippingAddress: Address;
-  paymentMethod: "cod" | "razorpay" | "mock_online";
+  paymentMethod: "cod" | "square" | "mock_online" | "razorpay";
   paymentStatus: string;
   orderStatus: OrderStatus;
   notes?: string;

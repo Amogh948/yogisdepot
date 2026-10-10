@@ -1,10 +1,10 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 import {
+  ORDER_PAYMENT_METHODS,
   ORDER_STATUSES,
+  OrderPaymentMethod,
   OrderStatus,
-  PAYMENT_METHODS,
   PAYMENT_STATUSES,
-  PaymentMethod,
   PaymentStatus,
 } from "../config/constants";
 import { CAD_CURRENCY } from "../utils/money";
@@ -91,7 +91,7 @@ export interface OrderDocument extends Document {
   scratchRewardId?: Types.ObjectId;
   scratchRewardCode?: string;
   shippingAddress: ShippingAddressSnapshot;
-  paymentMethod: PaymentMethod;
+  paymentMethod: OrderPaymentMethod;
   paymentStatus: PaymentStatus;
   paymentReference?: string;
   transactionId?: string;
@@ -178,7 +178,7 @@ const orderSchema = new Schema<OrderDocument>(
       country: { type: String, required: true },
       landmark: { type: String },
     },
-    paymentMethod: { type: String, enum: PAYMENT_METHODS, required: true },
+    paymentMethod: { type: String, enum: ORDER_PAYMENT_METHODS, required: true },
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, default: "pending" },
     paymentReference: { type: String },
     transactionId: { type: String },

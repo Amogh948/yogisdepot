@@ -1,7 +1,7 @@
 import { PaymentMethod } from "../../config/constants";
 import { env } from "../../config/env";
 import { BadRequestError } from "../../errors/AppError";
-import { RazorpayProvider } from "./razorpay.provider";
+import { SquareProvider } from "./square.provider";
 import {
   PaymentIntent,
   PaymentIntentInput,
@@ -69,15 +69,20 @@ function providers(): Record<PaymentMethod, PaymentProvider> {
   return {
     cod: new CodProvider(),
     mock_online: new MockOnlineProvider(),
-    razorpay: new RazorpayProvider(),
+    square: new SquareProvider(),
   };
 }
 
 export const PaymentService = {
   publicConfig() {
+    const squareEnabled = Boolean(
+      env.SQUARE_APPLICATION_ID && env.SQUARE_ACCESS_TOKEN && env.SQUARE_LOCATION_ID,
+    );
     return {
-      razorpayKeyId: env.RAZORPAY_KEY_ID,
-      razorpayEnabled: Boolean(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET),
+      squareApplicationId: env.SQUARE_APPLICATION_ID,
+      squareLocationId: env.SQUARE_LOCATION_ID,
+      squareEnvironment: env.SQUARE_ENVIRONMENT,
+      squareEnabled,
     };
   },
 

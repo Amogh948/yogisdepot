@@ -64,7 +64,7 @@ export const orderService = {
   async abandonUnpaidCheckouts(userId: string) {
     const pending = await Order.find({
       customerId: userId,
-      paymentMethod: "razorpay",
+      paymentMethod: "square",
       paymentStatus: { $in: ["pending", "failed"] },
       orderStatus: "pending",
     });
@@ -100,7 +100,7 @@ export const orderService = {
       city: address.city,
       postalCode: address.postalCode,
     });
-    if (input.paymentMethod === "razorpay") {
+    if (input.paymentMethod === "square") {
       await this.abandonUnpaidCheckouts(userId);
     }
 
@@ -254,7 +254,7 @@ export const orderService = {
         await scratchService.markRedeemed(quote.scratchRewardId, userId, String(order._id));
       }
 
-      if (input.paymentMethod !== "razorpay") {
+      if (input.paymentMethod !== "square") {
         await Cart.findOneAndUpdate({ userId }, { items: [] }, opts);
       }
     };
@@ -324,43 +324,77 @@ export const orderService = {
     return { order: createdOrder, payment };
   },
 
-  async confirmRazorpay(
-    userId: string,
-    orderId: string,
-    payload: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string },
-  ) {
+  async confirmOnlinePayment(userId: string, orderId: string, payload: { sourceId: string }) {
     const order = await this.getForCustomer(userId, orderId);
-    if (order.paymentMethod !== "razorpay") {
-      throw new BadRequestError("This order is not awaiting a Razorpay payment");
+    if (order.paymentMethod !== "square") {
+      throw new BadRequestError("This order is not awaiting a Square payment");
     }
     if (order.paymentStatus === "paid") {
       await Cart.findOneAndUpdate({ userId }, { items: [] });
       return order;
     }
-    if (order.paymentReference !== payload.razorpay_order_id) {
+    if (!order.paymentReference) {
       throw new BadRequestError("Payment does not match this order");
     }
     const amount = order.totalCents ? order.totalCents / 100 : order.total || 0;
-    const verified = await PaymentService.verifyPayment("razorpay", payload.razorpay_order_id, amount, {
-      paymentId: payload.razorpay_payment_id,
-      signature: payload.razorpay_signature,
+    const verified = await PaymentService.verifyPayment("square", order.paymentReference, amount, {
+      sourceId: payload.sourceId,
+      idempotencyKey: `pay_${order.id}`,
+      orderId: order.orderNumber,
     });
     if (!verified.success) {
       order.paymentStatus = "failed";
       await order.save();
       throw new BadRequestError("Payment verification failed");
     }
+    return this.markOrderPaid(order, verified.reference, userId);
+  },
+
+  async markOrderPaid(order: OrderDocument, squarePaymentId: string, userId?: string) {
+    if (order.paymentStatus === "paid") {
+      if (userId) await Cart.findOneAndUpdate({ userId }, { items: [] });
+      return order;
+    }
     order.paymentStatus = "paid";
     order.orderStatus = "confirmed";
-    order.transactionId = payload.razorpay_payment_id;
+    order.transactionId = squarePaymentId;
     order.items = order.items.map((item) => {
       item.fulfillmentStatus = "confirmed";
       return item;
     });
     await order.save();
     await inventoryReservationService.markSold(String(order._id));
-    await Cart.findOneAndUpdate({ userId }, { items: [] });
+    const customerId = userId || String(order.customerId);
+    await Cart.findOneAndUpdate({ userId: customerId }, { items: [] });
     return order;
+  },
+
+  /** Idempotent webhook path: match by Square payment id or our local payment reference. */
+  async markPaidFromSquareWebhook(input: { paymentId?: string; referenceId?: string; status?: string }) {
+    const status = String(input.status || "").toUpperCase();
+    if (status && status !== "COMPLETED" && status !== "APPROVED") {
+      return null;
+    }
+    if (!input.paymentId && !input.referenceId) {
+      return null;
+    }
+    const order = await Order.findOne({
+      paymentMethod: "square",
+      $or: [
+        ...(input.paymentId ? [{ transactionId: input.paymentId }, { paymentReference: input.paymentId }] : []),
+        ...(input.referenceId ? [{ paymentReference: input.referenceId }] : []),
+      ],
+    });
+    if (!order) {
+      return null;
+    }
+    if (order.paymentStatus === "paid") {
+      return order;
+    }
+    if (!input.paymentId) {
+      return null;
+    }
+    return this.markOrderPaid(order, input.paymentId);
   },
 
   async listForCustomer(userId: string, query: { page?: number; limit?: number }) {
@@ -392,9 +426,14 @@ export const orderService = {
     order.cancelledAt = new Date();
     if (order.paymentStatus === "paid") {
       order.paymentStatus = "refunded";
-      if (order.paymentReference) {
-        const amount = order.totalCents ? order.totalCents / 100 : order.total || 0;
-        await PaymentService.refundPayment(order.paymentMethod, order.paymentReference, amount);
+      if (order.paymentMethod === "square" || order.paymentMethod === "mock_online") {
+        const method = order.paymentMethod;
+        const refundRef =
+          method === "square" ? order.transactionId || order.paymentReference : order.paymentReference;
+        if (refundRef) {
+          const amount = order.totalCents ? order.totalCents / 100 : order.total || 0;
+          await PaymentService.refundPayment(method, refundRef, amount);
+        }
       }
     } else {
       order.paymentStatus = "failed";

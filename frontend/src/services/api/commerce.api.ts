@@ -57,7 +57,7 @@ export const ordersApi = {
     unwrap<Record<string, unknown>>(api.get("/orders/quote", { params })),
   create: (payload: {
     addressId: string;
-    paymentMethod: "cod" | "razorpay" | "mock_online";
+    paymentMethod: "cod" | "square" | "mock_online";
     couponCode?: string;
     scratchRewardId?: string;
     notes?: string;
@@ -65,10 +65,8 @@ export const ordersApi = {
     unwrap<{ order: Order; payment: { provider: string; reference: string; clientPayload?: Record<string, string | number> } }>(
       api.post("/orders", payload),
     ),
-  verifyRazorpay: (
-    orderId: string,
-    payload: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string },
-  ) => unwrap<Order>(api.post(`/orders/${orderId}/pay/verify`, payload)),
+  verifyPayment: (orderId: string, payload: { sourceId: string }) =>
+    unwrap<Order>(api.post(`/orders/${orderId}/pay/verify`, payload)),
   list: async (page = 1) => {
     const result = await unwrap<Order[]>(api.get("/orders", { params: { page } }));
     return { items: result.data, pagination: result.pagination as Pagination };

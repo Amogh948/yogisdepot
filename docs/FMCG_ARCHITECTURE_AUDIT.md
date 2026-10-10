@@ -22,7 +22,7 @@
 - **Coupon**: server validation exists; currency messaging used ₹.
 - **Auth**: JWT cookie; roles `admin` \| `vendor` \| `customer`; `requireVendor` attaches approved vendorId.
 - **Admin product create**: no dedicated multi-step wizard; vendor product form only.
-- **Payments**: Razorpay hard-coded `INR`.
+- **Payments**: Square (Canada / CAD) via pluggable `PaymentProvider` (historical note: previously Razorpay/INR).
 
 ## 3. Price / cart / order calculation sites
 
@@ -43,7 +43,7 @@
 - Checkout/Cart client fee/tax math and `₹` display
 - Address/Vendor defaults `country: "India"`
 - SiteHeader “Deliver to Bengaluru”
-- Razorpay `INR` / `+91` phone normalize
+- Legacy Razorpay `INR` / `+91` phone normalize (replaced by Square CAD)
 - Coupon error `₹…`
 - `en-IN` locale on orders
 

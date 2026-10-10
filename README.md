@@ -18,7 +18,7 @@ yogisdepot/
 - **Auth:** JWT stored in an HttpOnly cookie (`yd_token`). Never stored in `localStorage`.
 - **Roles:** `admin`, `vendor`, `customer`
 - **Layering:** Controller → Service → Model. Business logic lives in services.
-- **Payments v1:** Cash on Delivery + mock online provider behind `PaymentService`
+- **Payments:** Cash on Delivery + Square (Canada / CAD) behind `PaymentService`
 - **Images v1:** Local disk via `StorageService` (`STORAGE_DRIVER=local`). Cloudinary adapter is selectable but not required.
 - **Validation:** Zod on both backend and frontend
 - **Server state:** TanStack Query. Auth/UI state: Zustand.
@@ -54,7 +54,15 @@ CLIENT_URL=http://localhost:5173
 COOKIE_SECURE=false
 STORAGE_DRIVER=local
 UPLOAD_DIR=uploads
+SQUARE_APPLICATION_ID=
+SQUARE_ACCESS_TOKEN=
+SQUARE_LOCATION_ID=
+SQUARE_ENVIRONMENT=sandbox
+SQUARE_WEBHOOK_SIGNATURE_KEY=
+SQUARE_WEBHOOK_NOTIFICATION_URL=
 ```
+
+Use a Square Canada sandbox application for local card checkout. Production needs a CAD-capable `SQUARE_LOCATION_ID` and webhook URL pointing at `/api/v1/payments/webhooks/square`.
 
 Frontend (`frontend/.env`):
 
@@ -161,6 +169,6 @@ Pushes to `main` that change the frontend or backend are built in GitHub Actions
 - Set `CLIENT_URL` to the real frontend origin
 - Use a MongoDB replica set in production
 - Put object storage behind `STORAGE_DRIVER` when you leave local disk
-- Replace `MockOnlineProvider` with Razorpay/Stripe using the existing `PaymentProvider` interface
+- Configure Square Canada sandbox/production credentials (`SQUARE_*` in `backend/.env`); online checkout uses the Square Web Payments SDK + Payments API
 - Keep `JWT_SECRET` long and unique
 - Do not expose stack traces (`NODE_ENV=production`)

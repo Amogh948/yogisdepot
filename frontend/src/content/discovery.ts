@@ -74,7 +74,7 @@ export const HELP_FAQS = [
   {
     category: "Payments",
     items: [
-      { q: "Which payments are supported?", a: "You can pay online via Razorpay or choose cash on delivery where available." },
+      { q: "Which payments are supported?", a: "You can pay by card online via Square or choose cash on delivery where available." },
       { q: "My payment failed. What next?", a: "Your cart is kept. Retry checkout or choose another payment method." },
     ],
   },

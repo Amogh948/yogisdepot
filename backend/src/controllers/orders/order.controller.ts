@@ -19,7 +19,7 @@ export const customerOrderController = {
   }),
 
   verifyPayment: asyncHandler(async (req: Request, res: Response) => {
-    const order = await orderService.confirmRazorpay(req.user!.id, req.params.id, req.body);
+    const order = await orderService.confirmOnlinePayment(req.user!.id, req.params.id, req.body);
     sendSuccess(res, order, "Payment verified successfully");
   }),
 

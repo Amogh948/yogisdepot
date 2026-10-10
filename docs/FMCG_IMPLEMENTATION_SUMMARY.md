@@ -35,7 +35,7 @@
 ## Files modified (high level)
 
 - Product / Cart / Order / Coupon / PlatformSettings / Address / Vendor models
-- `order.service`, `cart.service`, `coupon.service`, `product.service`, payments Razorpay (CAD)
+- `order.service`, `cart.service`, `coupon.service`, `product.service`, payments Square (CAD)
 - Admin routes, product controller (public offers, strip cost)
 - Constants (CAD fee defaults, `YYZ-WH-01`)
 - Seed addresses → Canada
@@ -96,7 +96,7 @@ Run after deploy/seed. Idempotent. Existing historical orders are not rewritten.
 
 ## Assumptions
 
-- Razorpay currency set to CAD; if the Razorpay account cannot settle CAD, swap payment provider later (interface preserved).
+- Online payments use Square (Canada / CAD) via Web Payments SDK tokenize + Payments API CreatePayment.
 - Default warehouse `YYZ-WH-01` (Toronto).
 - Seed/demo prices remain numeric dollars until migration builds Pricing in cents.
 - “Taste India” merchandising copy intentionally retained (assortment branding).
@@ -115,4 +115,4 @@ Run after deploy/seed. Idempotent. Existing historical orders are not rewritten.
 - Full multi-variant picker UX on PDP (offers array is returned)
 - Guest cart `skuId` persistence
 - Optional FEFO deduction from InventoryBatch on sale
-- Dedicated CAD payment provider if Razorpay CAD is unavailable in production
+- Production Square Canada location + webhook signature key for payment.updated backstop

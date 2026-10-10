@@ -12,10 +12,17 @@ import { entityId, mediaUrl } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { paymentsApi } from "../../services/api/payments.api";
-import { openRazorpayCheckout } from "../../utils/razorpay";
+import { attachSquareCard, type SquareEnvironment } from "../../utils/square";
 import { detectCurrentAddress } from "../../utils/geolocation";
 import { useAuthStore } from "../../store/auth.store";
 import { formatCad } from "../../utils/money";
+
+type SquareCheckoutSession = {
+  orderId: string;
+  applicationId: string;
+  locationId: string;
+  environment: SquareEnvironment;
+};
 
 const steps = ["Address", "Delivery", "Payment"] as const;
 
@@ -41,18 +48,28 @@ export function CheckoutPage() {
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [addressId, setAddressId] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"cod" | "razorpay">("razorpay");
+  const [paymentMethod, setPaymentMethod] = useState<"cod" | "square">("square");
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
   const [scratchRewardId, setScratchRewardId] = useState("");
   const [paying, setPaying] = useState(false);
+  const [squareSession, setSquareSession] = useState<SquareCheckoutSession | null>(null);
+  const [cardReady, setCardReady] = useState(false);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [detecting, setDetecting] = useState(false);
+  const squareCardRef = useRef<{ tokenize: () => Promise<string>; destroy: () => Promise<void> } | null>(null);
 
   const cart = useQuery({ queryKey: ["cart"], queryFn: () => cartApi.get() });
   const addresses = useQuery({ queryKey: ["addresses"], queryFn: () => addressApi.list() });
   const paymentConfig = useQuery({ queryKey: ["payments-config"], queryFn: () => paymentsApi.config() });
-  const razorpayEnabled = paymentConfig.data?.data.razorpayEnabled !== false;
+  const squareEnabled = paymentConfig.data?.data.squareEnabled === true;
+
+  useEffect(() => {
+    if (paymentConfig.isSuccess && !squareEnabled && paymentMethod === "square") {
+      setPaymentMethod("cod");
+    }
+  }, [paymentConfig.isSuccess, squareEnabled, paymentMethod]);
+
   const savedAddresses = addresses.data?.data || [];
   const selected = useMemo(
     () => savedAddresses.find((item) => entityId(item) === addressId) || savedAddresses.find((item) => item.isDefault) || savedAddresses[0],
@@ -177,6 +194,41 @@ export function CheckoutPage() {
     await queryClient.invalidateQueries({ queryKey: ["orders"] });
   };
 
+  useEffect(() => {
+    if (!squareSession) {
+      setCardReady(false);
+      return;
+    }
+    let cancelled = false;
+    setCardReady(false);
+    void attachSquareCard({
+      applicationId: squareSession.applicationId,
+      locationId: squareSession.locationId,
+      environment: squareSession.environment,
+      containerSelector: "#square-card-container",
+    })
+      .then((card) => {
+        if (cancelled) {
+          void card.destroy();
+          return;
+        }
+        squareCardRef.current = card;
+        setCardReady(true);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        toast(error instanceof Error ? error.message : "Unable to load card form", "error");
+        void abandonPayment(squareSession.orderId);
+        setSquareSession(null);
+      });
+    return () => {
+      cancelled = true;
+      const current = squareCardRef.current;
+      squareCardRef.current = null;
+      void current?.destroy();
+    };
+  }, [squareSession, toast]);
+
   const placeOrder = useMutation({
     mutationFn: () => {
       if (undeliverable) {
@@ -191,71 +243,52 @@ export function CheckoutPage() {
     },
     onSuccess: async (result) => {
       const orderId = entityId(result.data.order);
-      if (paymentMethod !== "razorpay") {
+      if (paymentMethod !== "square") {
         await finish(orderId);
         return;
       }
       const payload = result.data.payment.clientPayload;
-      if (!payload) {
-        toast("Unable to start Razorpay checkout", "error");
+      const applicationId = String(payload?.applicationId || "");
+      const locationId = String(payload?.locationId || "");
+      if (!payload || !applicationId || !locationId) {
+        toast("Unable to start card checkout", "error");
         await abandonPayment(orderId);
         return;
       }
-      setPaying(true);
-      let settled = false;
-      const settle = (action: () => void) => {
-        if (settled) return;
-        settled = true;
-        setPaying(false);
-        action();
-      };
-      await openRazorpayCheckout({
-        key: String(payload.keyId),
-        amount: Number(payload.amount),
-        currency: String(payload.currency || "CAD"),
-        name: "Yogis Depot",
-        description: `Order ${result.data.order.orderNumber}`,
-        order_id: String(payload.razorpayOrderId),
-        prefill: {
-          name: user ? `${user.firstName} ${user.lastName}` : undefined,
-          email: user?.email,
-          contact: selected?.phone || user?.phone,
-        },
-        theme: { color: "#c45e12" },
-        handler: (response) => {
-          void ordersApi
-            .verifyRazorpay(orderId, response)
-            .then(async () => {
-              settle(() => undefined);
-              await finish(orderId);
-            })
-            .catch((error: unknown) => {
-              settle(() => {
-                toast(error instanceof ApiError ? error.message : "Payment verification failed", "error");
-                void abandonPayment(orderId);
-              });
-            });
-        },
-        onFailure: (response) => {
-          settle(() => {
-            toast(response.error?.description || "Payment failed. Please try again.", "error");
-            void abandonPayment(orderId);
-          });
-        },
-        modal: {
-          ondismiss: () => {
-            window.setTimeout(() => {
-              settle(() => {
-                toast("Payment was cancelled. Your cart is still saved.", "info");
-                void abandonPayment(orderId);
-              });
-            }, 400);
-          },
-        },
+      setSquareSession({
+        orderId,
+        applicationId,
+        locationId,
+        environment: (String(payload.environment || "sandbox") as SquareEnvironment) || "sandbox",
       });
     },
     onError: (error) => toast(error instanceof ApiError ? error.message : "Checkout failed", "error"),
   });
+
+  const payWithSquare = async () => {
+    if (!squareSession || !squareCardRef.current) return;
+    setPaying(true);
+    try {
+      const sourceId = await squareCardRef.current.tokenize();
+      await ordersApi.verifyPayment(squareSession.orderId, { sourceId });
+      const orderId = squareSession.orderId;
+      setSquareSession(null);
+      await finish(orderId);
+    } catch (error) {
+      toast(error instanceof ApiError || error instanceof Error ? error.message : "Payment failed", "error");
+      await abandonPayment(squareSession.orderId);
+      setSquareSession(null);
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const cancelSquareCheckout = async () => {
+    if (!squareSession) return;
+    toast("Payment was cancelled. Your cart is still saved.", "info");
+    await abandonPayment(squareSession.orderId);
+    setSquareSession(null);
+  };
 
   const cartData = cart.data?.data?.items.length ? cart.data.data : paying ? cartHold.current : cart.data?.data;
   if (!cartData?.items.length) {
@@ -435,31 +468,59 @@ export function CheckoutPage() {
                 {undeliverableMessage}
               </p>
             ) : null}
-            {razorpayEnabled ? (
-              <label className={`flex cursor-pointer gap-3 rounded-[12px] border p-4 ${paymentMethod === "razorpay" ? "border-yd-green bg-yd-green/5" : "border-yd-border"}`}>
-                <input type="radio" className="accent-yd-green" checked={paymentMethod === "razorpay"} onChange={() => setPaymentMethod("razorpay")} />
+            {squareEnabled ? (
+              <label className={`flex cursor-pointer gap-3 rounded-[12px] border p-4 ${paymentMethod === "square" ? "border-yd-green bg-yd-green/5" : "border-yd-border"}`}>
+                <input
+                  type="radio"
+                  className="accent-yd-green"
+                  checked={paymentMethod === "square"}
+                  disabled={Boolean(squareSession)}
+                  onChange={() => setPaymentMethod("square")}
+                />
                 <span>
-                  <p className="font-semibold">UPI / Cards / Netbanking</p>
-                  <p className="text-xs text-yd-muted">Pay securely with Razorpay</p>
+                  <p className="font-semibold">Pay by card</p>
+                  <p className="text-xs text-yd-muted">Secure card payment via Square</p>
                 </span>
               </label>
             ) : null}
             <label className={`flex cursor-pointer gap-3 rounded-[12px] border p-4 ${paymentMethod === "cod" ? "border-yd-green bg-yd-green/5" : "border-yd-border"}`}>
-              <input type="radio" className="accent-yd-green" checked={paymentMethod === "cod"} onChange={() => setPaymentMethod("cod")} />
+              <input
+                type="radio"
+                className="accent-yd-green"
+                checked={paymentMethod === "cod"}
+                disabled={Boolean(squareSession)}
+                onChange={() => setPaymentMethod("cod")}
+              />
               <span>
                 <p className="font-semibold">Cash on Delivery</p>
                 <p className="text-xs text-yd-muted">Pay when your order arrives</p>
               </span>
             </label>
-            <Button
-              className="w-full"
-              size="lg"
-              loading={placeOrder.isPending || paying}
-              disabled={undeliverable}
-              onClick={() => placeOrder.mutate()}
-            >
-              Place order →
-            </Button>
+            {squareSession ? (
+              <div className="space-y-3 rounded-[12px] border border-yd-border bg-yd-cream/40 p-4">
+                <p className="text-sm font-semibold text-yd-ink">Enter your card details</p>
+                <div id="square-card-container" className="min-h-[56px]" />
+                {!cardReady ? <p className="text-xs text-yd-muted">Loading secure card form…</p> : null}
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button type="button" variant="outline" className="flex-1" disabled={paying} onClick={() => void cancelSquareCheckout()}>
+                    Cancel
+                  </Button>
+                  <Button className="flex-1" size="lg" loading={paying} disabled={!cardReady || undeliverable} onClick={() => void payWithSquare()}>
+                    Pay now →
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                className="w-full"
+                size="lg"
+                loading={placeOrder.isPending || paying}
+                disabled={undeliverable}
+                onClick={() => placeOrder.mutate()}
+              >
+                Place order →
+              </Button>
+            )}
           </div>
         ) : null}
       </div>

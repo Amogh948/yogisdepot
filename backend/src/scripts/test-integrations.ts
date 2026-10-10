@@ -1,5 +1,5 @@
 import { env } from "../config/env";
-import { RazorpayProvider } from "../services/payments/razorpay.provider";
+import { SquareProvider } from "../services/payments/square.provider";
 import { CloudinaryStorageProvider } from "../services/storage/cloudinary.provider";
 
 const PIXEL_PNG = Buffer.from(
@@ -98,25 +98,39 @@ async function testCloudinaryHttpApi(): Promise<void> {
   console.log("Cloudinary HTTP API: upload and retrieve succeeded");
 }
 
-async function testRazorpayOrder(): Promise<void> {
-  assert(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET, "Razorpay credentials are missing");
-  const intent = await new RazorpayProvider().createPayment({
+async function testSquareCreatePaymentIntent(): Promise<void> {
+  assert(
+    env.SQUARE_APPLICATION_ID && env.SQUARE_ACCESS_TOKEN && env.SQUARE_LOCATION_ID,
+    "Square credentials are missing",
+  );
+  const intent = await new SquareProvider().createPayment({
     orderNumber: `YD-TEST-${Date.now()}`,
-    amount: 199,
-    method: "razorpay",
+    amount: 1.99,
+    amountCents: 199,
+    method: "square",
     customerId: "integration-test",
   });
-  assert(intent.provider === "razorpay", "Payment provider was not Razorpay");
-  assert(intent.reference.startsWith("order_"), `Unexpected Razorpay order id: ${intent.reference}`);
-  assert(intent.clientPayload?.keyId === env.RAZORPAY_KEY_ID, "Razorpay client payload is missing the public key");
-  console.log("Razorpay Orders API: test order created");
-  console.log(`  orderId=${intent.reference} amountPaise=${intent.clientPayload?.amount}`);
+  assert(intent.provider === "square", "Payment provider was not Square");
+  assert(String(intent.reference).startsWith("sq_"), `Unexpected Square reference: ${intent.reference}`);
+  assert(
+    intent.clientPayload?.applicationId === env.SQUARE_APPLICATION_ID,
+    "Square client payload is missing the application id",
+  );
+  assert(
+    intent.clientPayload?.locationId === env.SQUARE_LOCATION_ID,
+    "Square client payload is missing the location id",
+  );
+  assert(intent.clientPayload?.amountCents === 199, "Square amountCents mismatch");
+  console.log("Square Payments: sandbox payment intent created");
+  console.log(
+    `  reference=${intent.reference} amountCents=${intent.clientPayload?.amountCents} env=${intent.clientPayload?.environment}`,
+  );
 }
 
 async function main(): Promise<void> {
   await testCloudinaryProvider();
   await testCloudinaryHttpApi();
-  await testRazorpayOrder();
+  await testSquareCreatePaymentIntent();
   console.log("All live credential checks passed");
 }
 
