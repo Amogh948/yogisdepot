@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import { WebhooksHelper } from "square";
 import { env } from "../../config/env";
+import { SquareWebhookEvent } from "../../models/SquareWebhookEvent";
 import { orderService } from "../../services/orders/order.service";
+import { SquareProvider } from "../../services/payments/square.provider";
 import { asyncHandler } from "../../utils/asyncHandler";
 
 function rawBody(req: Request): string {
@@ -22,9 +24,12 @@ function notificationUrl(req: Request): string {
 }
 
 type SquarePaymentEvent = {
+  event_id?: string;
+  eventId?: string;
   type?: string;
   data?: {
     type?: string;
+    id?: string;
     object?: {
       payment?: {
         id?: string;
@@ -41,7 +46,13 @@ export const squareWebhookController = {
     const body = rawBody(req);
     const signature = String(req.header("x-square-hmacsha256-signature") || "");
 
-    if (env.SQUARE_WEBHOOK_SIGNATURE_KEY) {
+    if (!env.SQUARE_WEBHOOK_SIGNATURE_KEY) {
+      // In production, unsigned webhooks must not mutate order state.
+      if (env.NODE_ENV === "production") {
+        res.status(503).json({ success: false, message: "Square webhook signature key is not configured" });
+        return;
+      }
+    } else {
       const valid = await WebhooksHelper.verifySignature({
         requestBody: body,
         signatureHeader: signature,
@@ -62,14 +73,48 @@ export const squareWebhookController = {
       return;
     }
 
-    const type = String(event.type || "").toLowerCase();
+    const eventId = event.event_id || event.eventId || "";
+    const eventType = String(event.type || "");
+    if (eventId) {
+      try {
+        await SquareWebhookEvent.create({
+          eventId,
+          eventType,
+          paymentId: event.data?.object?.payment?.id,
+          processedAt: new Date(),
+        });
+      } catch (error) {
+        const code = (error as { code?: string })?.code;
+        // Duplicate delivery — acknowledge without reprocessing.
+        if (code === "11000") {
+          res.status(200).json({ success: true, deduplicated: true });
+          return;
+        }
+        throw error;
+      }
+    }
+
+    const type = eventType.toLowerCase();
     const payment = event.data?.object?.payment;
     if (payment && (type.includes("payment") || event.data?.type === "payment")) {
-      const status = String(payment.status || "").toUpperCase();
+      let status = String(payment.status || "").toUpperCase();
+      let paymentId = payment.id;
+      let referenceId = payment.reference_id || payment.referenceId;
+
+      // Reconcile with Square when the payload is incomplete or status is ambiguous.
+      if (paymentId && (!status || status === "PENDING")) {
+        const live = await new SquareProvider().getPayment(paymentId);
+        if (live) {
+          status = String(live.status || status).toUpperCase();
+          referenceId = referenceId || live.referenceId;
+          paymentId = live.id;
+        }
+      }
+
       if (status === "COMPLETED" || status === "APPROVED") {
         await orderService.markPaidFromSquareWebhook({
-          paymentId: payment.id,
-          referenceId: payment.reference_id || payment.referenceId,
+          paymentId,
+          referenceId,
           status,
         });
       }

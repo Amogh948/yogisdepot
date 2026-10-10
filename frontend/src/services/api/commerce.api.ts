@@ -65,7 +65,7 @@ export const ordersApi = {
     unwrap<{ order: Order; payment: { provider: string; reference: string; clientPayload?: Record<string, string | number> } }>(
       api.post("/orders", payload),
     ),
-  verifyPayment: (orderId: string, payload: { sourceId: string }) =>
+  verifyPayment: (orderId: string, payload: { sourceId: string; verificationToken?: string }) =>
     unwrap<Order>(api.post(`/orders/${orderId}/pay/verify`, payload)),
   list: async (page = 1) => {
     const result = await unwrap<Order[]>(api.get("/orders", { params: { page } }));

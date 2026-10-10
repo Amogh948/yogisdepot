@@ -12,7 +12,13 @@ import { entityId, mediaUrl } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { paymentsApi } from "../../services/api/payments.api";
-import { attachSquareCard, type SquareEnvironment } from "../../utils/square";
+import {
+  attachSquareCard,
+  centsToSquareAmount,
+  toSquareCountryCode,
+  type SquareEnvironment,
+  type SquareVerificationDetails,
+} from "../../utils/square";
 import { detectCurrentAddress } from "../../utils/geolocation";
 import { useAuthStore } from "../../store/auth.store";
 import { formatCad } from "../../utils/money";
@@ -22,6 +28,8 @@ type SquareCheckoutSession = {
   applicationId: string;
   locationId: string;
   environment: SquareEnvironment;
+  amountCents: number;
+  currency: string;
 };
 
 const steps = ["Address", "Delivery", "Payment"] as const;
@@ -57,7 +65,13 @@ export function CheckoutPage() {
   const [cardReady, setCardReady] = useState(false);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [detecting, setDetecting] = useState(false);
-  const squareCardRef = useRef<{ tokenize: () => Promise<string>; destroy: () => Promise<void> } | null>(null);
+  const squareCardRef = useRef<{
+    tokenize: (details: SquareVerificationDetails) => Promise<{
+      sourceId: string;
+      verificationToken?: string;
+    }>;
+    destroy: () => Promise<void>;
+  } | null>(null);
 
   const cart = useQuery({ queryKey: ["cart"], queryFn: () => cartApi.get() });
   const addresses = useQuery({ queryKey: ["addresses"], queryFn: () => addressApi.list() });
@@ -174,8 +188,8 @@ export function CheckoutPage() {
     cartHold.current = cart.data.data;
   }
 
-  const finish = async (orderId: string) => {
-    toast("Order placed successfully");
+  const finish = async (orderId: string, message = "Order placed successfully") => {
+    toast(message);
     await queryClient.invalidateQueries({ queryKey: ["cart"] });
     await queryClient.invalidateQueries({ queryKey: ["orders"] });
     navigate(`/order-success?orderId=${orderId}`);
@@ -255,25 +269,64 @@ export function CheckoutPage() {
         await abandonPayment(orderId);
         return;
       }
+      const amountCents = Number(payload.amountCents);
+      if (!Number.isFinite(amountCents) || amountCents <= 0) {
+        toast("Unable to start card checkout (invalid amount)", "error");
+        await abandonPayment(orderId);
+        return;
+      }
       setSquareSession({
         orderId,
         applicationId,
         locationId,
         environment: (String(payload.environment || "sandbox") as SquareEnvironment) || "sandbox",
+        amountCents,
+        currency: String(payload.currency || "CAD"),
       });
     },
     onError: (error) => toast(error instanceof ApiError ? error.message : "Checkout failed", "error"),
   });
 
   const payWithSquare = async () => {
-    if (!squareSession || !squareCardRef.current) return;
+    if (!squareSession || !squareCardRef.current || !selected) return;
     setPaying(true);
     try {
-      const sourceId = await squareCardRef.current.tokenize();
-      await ordersApi.verifyPayment(squareSession.orderId, { sourceId });
+      const [givenName, ...familyParts] = (selected.fullName || "").trim().split(/\s+/);
+      const familyName = familyParts.join(" ") || user?.lastName || givenName;
+      const tokenized = await squareCardRef.current.tokenize({
+        amount: centsToSquareAmount(squareSession.amountCents),
+        currencyCode: squareSession.currency || "CAD",
+        intent: "CHARGE",
+        customerInitiated: true,
+        sellerKeyedIn: false,
+        billingContact: {
+          givenName: givenName || user?.firstName || "Customer",
+          familyName: familyName || "Customer",
+          email: user?.email,
+          phone: selected.phone || user?.phone,
+          addressLines: [selected.addressLine1, selected.addressLine2].filter(Boolean) as string[],
+          city: selected.city,
+          state: selected.state,
+          postalCode: selected.postalCode,
+          countryCode: toSquareCountryCode(selected.country),
+        },
+      });
+
+      const order = await ordersApi.verifyPayment(squareSession.orderId, {
+        sourceId: tokenized.sourceId,
+        ...(tokenized.verificationToken ? { verificationToken: tokenized.verificationToken } : {}),
+      });
       const orderId = squareSession.orderId;
       setSquareSession(null);
-      await finish(orderId);
+      const status = order.data.paymentStatus;
+      if (status === "paid") {
+        await finish(orderId, "Payment successful");
+      } else if (status === "pending") {
+        await finish(orderId, "Payment is processing — we will confirm shortly");
+      } else {
+        toast("Payment could not be confirmed", "error");
+        await abandonPayment(orderId);
+      }
     } catch (error) {
       toast(error instanceof ApiError || error instanceof Error ? error.message : "Payment failed", "error");
       await abandonPayment(squareSession.orderId);

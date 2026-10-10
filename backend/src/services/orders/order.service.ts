@@ -324,7 +324,11 @@ export const orderService = {
     return { order: createdOrder, payment };
   },
 
-  async confirmOnlinePayment(userId: string, orderId: string, payload: { sourceId: string }) {
+  async confirmOnlinePayment(
+    userId: string,
+    orderId: string,
+    payload: { sourceId: string; verificationToken?: string },
+  ) {
     const order = await this.getForCustomer(userId, orderId);
     if (order.paymentMethod !== "square") {
       throw new BadRequestError("This order is not awaiting a Square payment");
@@ -336,16 +340,28 @@ export const orderService = {
     if (!order.paymentReference) {
       throw new BadRequestError("Payment does not match this order");
     }
-    const amount = order.totalCents ? order.totalCents / 100 : order.total || 0;
+    const amountCents = order.totalCents ?? Math.round((order.total || 0) * 100);
+    const amount = amountCents / 100;
     const verified = await PaymentService.verifyPayment("square", order.paymentReference, amount, {
       sourceId: payload.sourceId,
+      verificationToken: payload.verificationToken,
       idempotencyKey: `pay_${order.id}`,
       orderId: order.orderNumber,
+      amountCents,
+      currency: order.currency || CAD_CURRENCY,
     });
     if (!verified.success) {
       order.paymentStatus = "failed";
       await order.save();
       throw new BadRequestError("Payment verification failed");
+    }
+    if (verified.status === "pending") {
+      // Charge accepted but not final — keep order pending until webhook/reconcile confirms.
+      order.transactionId = verified.reference;
+      order.paymentStatus = "pending";
+      await order.save();
+      await Cart.findOneAndUpdate({ userId }, { items: [] });
+      return order;
     }
     return this.markOrderPaid(order, verified.reference, userId);
   },

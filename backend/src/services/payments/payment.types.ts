@@ -30,10 +30,19 @@ export interface RefundResult {
 export interface PaymentVerifyExtra {
   /** Square Web Payments SDK card token (nonce). */
   sourceId?: string;
+  /**
+   * Optional SCA verification token from verifyBuyer / older SDK flows.
+   * Modern Card.tokenize(verificationDetails) embeds verification in sourceId.
+   */
+  verificationToken?: string;
   /** Idempotency key for Square CreatePayment / refunds. */
   idempotencyKey?: string;
-  /** Internal order id for Square reference/note. */
+  /** Human order number for Square note. */
   orderId?: string;
+  /** Expected charge amount in integer cents (authoritative server total). */
+  amountCents?: number;
+  /** Expected ISO currency (e.g. CAD). */
+  currency?: string;
 }
 
 export interface PaymentProvider {

@@ -11,6 +11,8 @@ export const createOrderSchema = z.object({
 
 export const squareVerifySchema = z.object({
   sourceId: z.string().min(1),
+  /** Optional SCA token from legacy verifyBuyer; modern tokenize embeds verification in sourceId. */
+  verificationToken: z.string().min(1).optional(),
 });
 
 export const orderStatusSchema = z.object({
