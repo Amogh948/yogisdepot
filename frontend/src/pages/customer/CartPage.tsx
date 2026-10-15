@@ -14,6 +14,8 @@ import { useToastStore } from "../../store/toast.store";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { formatCad } from "../../utils/money";
 import { formatEstimatedDeliveryDate, returnPolicyLabel } from "../../utils/dates";
+import { emptyCart } from "../../utils/cartOptimistic";
+import type { ApiSuccess, Cart } from "../../types";
 
 export function CartPage() {
   const user = useAuthStore((s) => s.user);
@@ -22,21 +24,29 @@ export function CartPage() {
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
   const recommended = useProducts({ sort: "popular", limit: 8 });
-  const { addToCart } = useCommerceActions();
-  const update = useMutation({
-    mutationFn: ({ id, quantity }: { id: string; quantity: number }) =>
-      quantity <= 0 ? cartApi.remove(id) : cartApi.update(id, quantity),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["cart"] });
-    },
-    onError: () => toast("Could not update cart", "error"),
-  });
+  const { addToCart, setCartQuantity } = useCommerceActions();
+
   const clear = useMutation({
-    mutationFn: () => cartApi.clear(),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["cart"] });
+    mutationFn: async () => {
+      await queryClient.cancelQueries({ queryKey: ["cart"] });
+      const previous = queryClient.getQueryData<ApiSuccess<Cart>>(["cart"]);
+      queryClient.setQueryData<ApiSuccess<Cart>>(["cart"], {
+        success: true,
+        message: "Cart cleared",
+        data: emptyCart(),
+      });
+      try {
+        return await cartApi.clear();
+      } catch (error) {
+        queryClient.setQueryData(["cart"], previous);
+        throw error;
+      }
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData(["cart"], result);
       toast("Cart cleared");
     },
+    onError: () => toast("Could not clear cart", "error"),
   });
 
   if (!user) {
@@ -48,7 +58,7 @@ export function CartPage() {
       />
     );
   }
-  if (cart.isLoading) return <Skeleton className="h-48" />;
+  if (cart.isLoading && !cart.data) return <Skeleton className="h-48" />;
   const data = cart.data?.data;
   if (!data?.items.length) {
     return (
@@ -87,8 +97,18 @@ export function CartPage() {
               <p className="text-[11px] text-yd-muted">{returnPolicyLabel(item.product.returnWindowDays)}</p>
               {!item.inStock ? <p className="text-xs text-yd-error">Stock changed — update quantity</p> : null}
               <div className="mt-2 flex items-center justify-between">
-                <QuantitySelector value={item.quantity} min={0} onChange={(quantity) => update.mutate({ id: item.productId, quantity })} />
-                <button type="button" aria-label="Remove item" className="grid h-10 w-10 place-items-center text-yd-muted hover:text-yd-error" onClick={() => update.mutate({ id: item.productId, quantity: 0 })}>
+                <QuantitySelector
+                  value={item.quantity}
+                  min={0}
+                  max={Math.max(1, item.product.stock ?? item.quantity)}
+                  onChange={(quantity) => setCartQuantity.mutate({ product: item.product, quantity })}
+                />
+                <button
+                  type="button"
+                  aria-label="Remove item"
+                  className="grid h-10 w-10 place-items-center text-yd-muted hover:text-yd-error"
+                  onClick={() => setCartQuantity.mutate({ product: item.product, quantity: 0 })}
+                >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>

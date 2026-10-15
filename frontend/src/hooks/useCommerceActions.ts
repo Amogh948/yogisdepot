@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { ApiSuccess, Cart, Product } from "../types";
 import { entityId } from "../types";
 import { cartApi, wishlistApi } from "../services/api/commerce.api";
@@ -8,39 +8,22 @@ import { useCartUiStore } from "../store/cartUi.store";
 import { useToastStore } from "../store/toast.store";
 import { ApiError } from "../services/api/client";
 import { productImageUrl } from "../utils/productImage";
+import { applyOptimisticAdd, applyOptimisticCart, emptyCart } from "../utils/cartOptimistic";
 
 type CartQueryData = ApiSuccess<Cart>;
 
-function emptyCart(): Cart {
-  return { id: "optimistic", items: [], subtotal: 0, itemCount: 0 };
-}
+const QTY_DEBOUNCE_MS = 320;
 
-function applyOptimisticCart(cart: Cart, product: Product, quantity: number): Cart {
-  const id = entityId(product);
-  const items = cart.items.map((item) => ({ ...item }));
-  const index = items.findIndex((item) => item.productId === id);
+type QtyPending = {
+  product: Product;
+  quantity: number;
+  timer: ReturnType<typeof setTimeout>;
+  /** Cart snapshot before the first change in this debounce burst. */
+  rollback: CartQueryData | undefined;
+};
 
-  if (quantity <= 0) {
-    if (index >= 0) items.splice(index, 1);
-  } else if (index >= 0) {
-    items[index] = { ...items[index], quantity, lineTotal: product.price * quantity };
-  } else {
-    items.push({
-      productId: id,
-      quantity,
-      product,
-      lineTotal: product.price * quantity,
-      inStock: (product.stock ?? 0) > 0,
-    });
-  }
-
-  return {
-    ...cart,
-    items,
-    itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
-    subtotal: items.reduce((sum, item) => sum + item.lineTotal, 0),
-  };
-}
+/** Per-product debounced quantity sync queue (module-level so rapid +/- coalesce). */
+const qtyQueue = new Map<string, QtyPending>();
 
 function celebrateIfIncreased(previousQty: number, nextQty: number) {
   if (nextQty > previousQty) {
@@ -48,10 +31,83 @@ function celebrateIfIncreased(previousQty: number, nextQty: number) {
   }
 }
 
+function writeOptimistic(queryClient: QueryClient, cart: Cart) {
+  queryClient.setQueryData<CartQueryData>(["cart"], {
+    success: true,
+    message: "Cart updated",
+    data: cart,
+  });
+}
+
+async function flushQuantity(
+  productId: string,
+  queryClient: QueryClient,
+  onError: (error: unknown) => void,
+) {
+  const pending = qtyQueue.get(productId);
+  if (!pending) return;
+  qtyQueue.delete(productId);
+
+  const { product, quantity, rollback } = pending;
+  const id = entityId(product);
+  const previousQty = rollback?.data.items.find((item) => item.productId === id)?.quantity ?? 0;
+
+  try {
+    let result: CartQueryData;
+    if (quantity <= 0) {
+      result = await cartApi.remove(id);
+    } else if (previousQty <= 0) {
+      const skuId = (product as Product & { skuId?: string }).skuId;
+      result = await cartApi.add(id, quantity, skuId ? { skuId } : undefined);
+    } else {
+      result = await cartApi.update(id, quantity);
+    }
+    // Prefer server cart, but don't clobber a newer optimistic edit queued after this flush started.
+    if (!qtyQueue.has(productId)) {
+      queryClient.setQueryData(["cart"], result);
+    }
+  } catch (error) {
+    if (!qtyQueue.has(productId)) {
+      queryClient.setQueryData(["cart"], rollback);
+    }
+    onError(error);
+  }
+}
+
+function scheduleQuantitySync(
+  product: Product,
+  quantity: number,
+  queryClient: QueryClient,
+  onError: (error: unknown) => void,
+  /** Snapshot taken before the first optimistic write in this burst. */
+  rollback: CartQueryData | undefined,
+) {
+  const id = entityId(product);
+  const existing = qtyQueue.get(id);
+  if (existing) {
+    clearTimeout(existing.timer);
+    existing.product = product;
+    existing.quantity = quantity;
+    existing.timer = setTimeout(() => {
+      void flushQuantity(id, queryClient, onError);
+    }, QTY_DEBOUNCE_MS);
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    void flushQuantity(id, queryClient, onError);
+  }, QTY_DEBOUNCE_MS);
+  qtyQueue.set(id, { product, quantity, timer, rollback });
+}
+
 export function useCommerceActions() {
   const user = useAuthStore((s) => s.user);
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
+
+  const reportCartError = (error: unknown) => {
+    toast(error instanceof ApiError ? error.message : "Could not update cart", "error");
+  };
 
   const addToCart = useMutation({
     mutationFn: async ({ product, quantity = 1 }: { product: Product; quantity?: number }) => {
@@ -61,33 +117,36 @@ export function useCommerceActions() {
       if (!user) {
         const previousQty = useGuestCartStore.getState().items.find((item) => item.productId === id)?.quantity ?? 0;
         celebrateIfIncreased(previousQty, previousQty + quantity);
-        addGuestItem(id, quantity, { image: productImageUrl(product), name: product.name, price: product.price });
+        addGuestItem(id, quantity, {
+          image: productImageUrl(product),
+          name: product.name,
+          price: product.price,
+        });
         return { guest: true as const };
       }
 
       await queryClient.cancelQueries({ queryKey: ["cart"] });
       const previous = queryClient.getQueryData<CartQueryData>(["cart"]);
       const previousQty = previous?.data.items.find((item) => item.productId === id)?.quantity ?? 0;
-      const nextQty = previousQty + quantity;
-      queryClient.setQueryData<CartQueryData>(["cart"], {
-        success: true,
-        message: "Cart updated",
-        data: applyOptimisticCart(previous?.data ?? emptyCart(), product, nextQty),
-      });
-      celebrateIfIncreased(previousQty, nextQty);
+      writeOptimistic(
+        queryClient,
+        applyOptimisticAdd(previous?.data ?? emptyCart(), product, quantity),
+      );
+      celebrateIfIncreased(previousQty, previousQty + quantity);
 
       try {
-        await cartApi.add(id, quantity, skuId ? { skuId } : undefined);
-        return { guest: false as const, previous };
+        const result = await cartApi.add(id, quantity, skuId ? { skuId } : undefined);
+        // Don't overwrite if a debounced qty edit is in flight for this product.
+        if (!qtyQueue.has(id)) {
+          queryClient.setQueryData(["cart"], result);
+        }
+        return { guest: false as const };
       } catch (error) {
         queryClient.setQueryData(["cart"], previous);
         throw error;
       }
     },
-    onError: (error) => toast(error instanceof ApiError ? error.message : "Could not update cart", "error"),
-    onSettled: () => {
-      if (user) void queryClient.invalidateQueries({ queryKey: ["cart"] });
-    },
+    onError: reportCartError,
   });
 
   const toggleWishlist = useMutation({
@@ -111,7 +170,11 @@ export function useCommerceActions() {
       if (!user) {
         const previousQty = useGuestCartStore.getState().items.find((item) => item.productId === id)?.quantity ?? 0;
         celebrateIfIncreased(previousQty, quantity);
-        updateGuestItem(id, quantity, { image: productImageUrl(product), name: product.name, price: product.price });
+        updateGuestItem(id, quantity, {
+          image: productImageUrl(product),
+          name: product.name,
+          price: product.price,
+        });
         return { guest: true as const };
       }
 
@@ -119,31 +182,14 @@ export function useCommerceActions() {
       const previous = queryClient.getQueryData<CartQueryData>(["cart"]);
       const previousQty = previous?.data.items.find((item) => item.productId === id)?.quantity ?? 0;
 
-      queryClient.setQueryData<CartQueryData>(["cart"], {
-        success: true,
-        message: "Cart updated",
-        data: applyOptimisticCart(previous?.data ?? emptyCart(), product, quantity),
-      });
+      // Instant UI — then coalesce rapid +/- into one backend call.
+      writeOptimistic(queryClient, applyOptimisticCart(previous?.data ?? emptyCart(), product, quantity));
       celebrateIfIncreased(previousQty, quantity);
+      scheduleQuantitySync(product, quantity, queryClient, reportCartError, previous);
 
-      try {
-        if (quantity <= 0) {
-          await cartApi.remove(id);
-        } else if (previousQty <= 0) {
-          await cartApi.add(id, quantity);
-        } else {
-          await cartApi.update(id, quantity);
-        }
-        return { guest: false as const, previous };
-      } catch (error) {
-        queryClient.setQueryData(["cart"], previous);
-        throw error;
-      }
+      return { guest: false as const };
     },
-    onError: (error) => toast(error instanceof ApiError ? error.message : "Could not update cart", "error"),
-    onSettled: () => {
-      if (user) void queryClient.invalidateQueries({ queryKey: ["cart"] });
-    },
+    onError: reportCartError,
   });
 
   return { addToCart, setCartQuantity, toggleWishlist };

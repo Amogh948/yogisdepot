@@ -26,9 +26,6 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
   const productId = entityId(product);
   const quantity = useCartQuantity(productId);
   const { setCartQuantity } = useCommerceActions();
-  const pending = Boolean(
-    setCartQuantity.isPending && setCartQuantity.variables && entityId(setCartQuantity.variables.product) === productId,
-  );
   const weight = productWeight(product);
   const outOfStock = product.stock <= 0;
 
@@ -80,7 +77,6 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
                 value={quantity}
                 min={0}
                 max={Math.max(1, product.stock)}
-                disabled={pending}
                 onChange={(next) => setCartQuantity.mutate({ product, quantity: next })}
               />
             ) : (
@@ -88,7 +84,7 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
                 type="button"
                 aria-label={`Add ${product.name} to cart`}
                 className="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-lg bg-yd-green px-2.5 text-xs font-bold text-white transition active:scale-95 disabled:opacity-40"
-                disabled={outOfStock || pending}
+                disabled={outOfStock}
                 onClick={() => setCartQuantity.mutate({ product, quantity: 1 })}
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
