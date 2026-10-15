@@ -2,7 +2,7 @@ import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Leaf, RefreshCcw, ShieldCheck, Truck } from "lucide-react";
+import { Leaf, ShieldCheck, Truck } from "lucide-react";
 import { useProducts, useCategories, useWishlist } from "../../hooks/useCatalog";
 import { homeSectionsApi, merchandisingApi } from "../../services/api/products.api";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
@@ -20,7 +20,6 @@ const TRUST_DESKTOP = [
   { icon: Leaf, label: "Authentic & Fresh" },
   { icon: ShieldCheck, label: "Trusted Local Makers" },
   { icon: Truck, label: "Safe & Secure Delivery" },
-  { icon: RefreshCcw, label: "Easy Returns" },
 ];
 
 const TRUST_MOBILE = [
@@ -115,7 +114,7 @@ export function HomePage() {
               </div>
             ))}
           </div>
-          <div className="hidden grid-cols-4 gap-2 lg:grid">
+          <div className="hidden grid-cols-3 gap-2 lg:grid">
             {TRUST_DESKTOP.map((item) => (
               <div key={item.label} className="flex items-center gap-2 rounded-[12px] border border-yd-border bg-white px-3 py-2.5">
                 <item.icon className="h-4 w-4 shrink-0 text-yd-green" />
