@@ -178,6 +178,12 @@ export interface Order {
   taxSnapshot?: {
     jurisdiction?: string;
     components?: Array<{ type: string; taxAmountCents: number; rateBps?: number }>;
+    taxableAmountCents?: number;
+    excludedNonTaxableAmountCents?: number;
+    excludesNonTaxableItems?: boolean;
+    excludesGroceries?: boolean;
+    groceryOnlyCart?: boolean;
+    deliveryFeeTaxed?: boolean;
   };
   coupon?: { code: string; amount: number; amountCents?: number };
   shippingAddress: Address;

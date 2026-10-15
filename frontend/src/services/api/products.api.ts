@@ -37,7 +37,9 @@ export type MerchandisingRail = {
   subtitle?: string;
   placement: string;
   tasteIndiaRegion?: string | null;
+  festivalTheme?: string | null;
   image?: string;
+  images?: string[];
   sortOrder: number;
   startDate?: string | null;
   endDate?: string | null;

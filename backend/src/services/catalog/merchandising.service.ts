@@ -6,19 +6,43 @@ import {
 } from "../../models/MerchandisingCollection";
 import { Product, ProductDocument } from "../../models/Product";
 import { slugify } from "../../utils/slug";
-import { TASTE_INDIA_REGIONS, TasteIndiaRegion } from "../../config/constants";
+import {
+  FESTIVAL_THEMES,
+  FestivalTheme,
+  TASTE_INDIA_REGIONS,
+  TasteIndiaRegion,
+} from "../../config/constants";
 
 export interface MerchandisingInput {
   name: string;
   subtitle?: string;
   placement?: MerchandisingPlacement;
   tasteIndiaRegion?: TasteIndiaRegion | null;
+  festivalTheme?: FestivalTheme;
   image?: string;
+  images?: string[];
   sortOrder?: number;
   isActive?: boolean;
   startDate?: string | Date | null;
   endDate?: string | Date | null;
   productIds?: string[];
+}
+
+function resolveFestivalTheme(value: string | undefined): FestivalTheme | undefined {
+  if (value === undefined) return undefined;
+  if ((FESTIVAL_THEMES as readonly string[]).includes(value)) {
+    return value as FestivalTheme;
+  }
+  throw new BadRequestError("Invalid festival theme");
+}
+
+function normalizeImages(images?: string[], image?: string): string[] | undefined {
+  if (images === undefined && image === undefined) return undefined;
+  const list = Array.isArray(images)
+    ? images.map((url) => String(url || "").trim()).filter(Boolean)
+    : [];
+  if (!list.length && image?.trim()) list.push(image.trim());
+  return [...new Set(list)].slice(0, 12);
 }
 
 function parseScheduleDate(value: string | Date | null | undefined, endOfDay = false): Date | null | undefined {
@@ -180,13 +204,18 @@ export const merchandisingService = {
     const preferredSlug =
       tasteIndiaRegion ||
       (input.placement === "region" ? tasteIndiaSlugFrom(input.name) : undefined);
+    const festivalTheme = resolveFestivalTheme(input.festivalTheme);
+    const images = normalizeImages(input.images, input.image) || [];
     const row = await MerchandisingCollection.create({
       name: input.name.trim(),
       slug: await uniqueSlug(input.name, undefined, preferredSlug || undefined),
       subtitle: input.subtitle,
       placement: input.placement || "home",
       tasteIndiaRegion: tasteIndiaRegion || undefined,
-      image: input.image,
+      festivalTheme:
+        input.placement === "festival" ? festivalTheme || "generic" : festivalTheme || undefined,
+      images,
+      image: images[0] || input.image,
       sortOrder: input.sortOrder ?? 0,
       isActive: input.isActive ?? true,
       startDate,
@@ -225,7 +254,20 @@ export const merchandisingService = {
       row.slug = await uniqueSlug(row.name, id, preferredSlug || undefined);
     }
     if (input.subtitle !== undefined) row.subtitle = input.subtitle;
-    if (input.image !== undefined) row.image = input.image;
+    if (input.festivalTheme !== undefined) {
+      row.festivalTheme = resolveFestivalTheme(input.festivalTheme) || "generic";
+    }
+    if (input.images !== undefined) {
+      const images = normalizeImages(input.images) || [];
+      row.images = images;
+      row.image = images[0] || undefined;
+    } else if (input.image !== undefined) {
+      row.image = input.image || undefined;
+      if (input.image) {
+        const existing = Array.isArray(row.images) ? row.images.filter(Boolean) : [];
+        row.images = existing.length ? [input.image, ...existing.filter((url) => url !== input.image)] : [input.image];
+      }
+    }
     if (input.sortOrder !== undefined) row.sortOrder = input.sortOrder;
     if (input.isActive !== undefined) row.isActive = input.isActive;
     if (input.startDate !== undefined) row.startDate = parseScheduleDate(input.startDate, false) ?? null;

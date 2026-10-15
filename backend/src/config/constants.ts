@@ -34,6 +34,10 @@ export const TASTE_INDIA_REGIONS = [
 ] as const;
 export type TasteIndiaRegion = (typeof TASTE_INDIA_REGIONS)[number];
 
+/** Visual atmosphere for Festival Store detail pages. */
+export const FESTIVAL_THEMES = ["diwali", "navratri", "holi", "eid", "generic"] as const;
+export type FestivalTheme = (typeof FESTIVAL_THEMES)[number];
+
 export const ORDER_STATUSES = [
   "pending",
   "confirmed",
@@ -88,6 +92,13 @@ export const DEFAULT_SMALL_CART_FEE_CENTS = 199; // $1.99
 export const DEFAULT_SMALL_CART_THRESHOLD_CENTS = 2500; // $25.00
 export const DELIVERY_SPEEDS = ["standard", "superfast"] as const;
 export type DeliverySpeed = (typeof DELIVERY_SPEEDS)[number];
+
+/** Same-day delivery cutoff (store local time, 24h HH:mm). Separate from Superfast surcharge. */
+export const DEFAULT_SAME_DAY_DELIVERY_ENABLED = true;
+export const DEFAULT_SAME_DAY_CUTOFF_TIME = "16:00";
+export const DEFAULT_SAME_DAY_TIMEZONE = "America/Edmonton";
+/** JS weekday numbers: 0=Sun … 6=Sat. Default Mon–Sat. */
+export const DEFAULT_SAME_DAY_WEEKDAYS = [1, 2, 3, 4, 5, 6] as const;
 /** Legacy aliases (dollars) — prefer *_CENTS */
 export const DEFAULT_SHIPPING_FEE = DEFAULT_DELIVERY_FEE_CENTS / 100;
 export const FREE_SHIPPING_THRESHOLD = DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS / 100;

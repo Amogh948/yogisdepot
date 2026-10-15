@@ -37,8 +37,14 @@ interface SquareCard {
   destroy: () => Promise<void>;
 }
 
+interface SquareCardOptions {
+  /** Prefills the card form postal/ZIP field (use Canadian A1A 1A1 for CA). */
+  postalCode?: string;
+  style?: Record<string, unknown>;
+}
+
 interface SquarePayments {
-  card: () => Promise<SquareCard>;
+  card: (options?: SquareCardOptions) => Promise<SquareCard>;
 }
 
 declare global {
@@ -147,6 +153,8 @@ export async function attachSquareCard(options: {
   locationId: string;
   environment?: SquareEnvironment;
   containerSelector: string;
+  /** Prefill Square postal/ZIP from checkout address (supports Canadian alphanumeric). */
+  postalCode?: string;
 }): Promise<{
   tokenize: (details: SquareVerificationDetails) => Promise<SquareTokenizeResult>;
   destroy: () => Promise<void>;
@@ -156,7 +164,13 @@ export async function attachSquareCard(options: {
     throw new Error("Square Web Payments SDK failed to initialize");
   }
   const payments = await window.Square.payments(options.applicationId, options.locationId);
-  const card = await payments.card();
+  const cardOptions: SquareCardOptions = {};
+  const postal = String(options.postalCode || "").trim();
+  if (postal) {
+    // Prefill so Canadian A1A 1A1 codes are present; Square validates by card-issuing country.
+    cardOptions.postalCode = postal;
+  }
+  const card = await payments.card(Object.keys(cardOptions).length ? cardOptions : undefined);
   await card.attach(options.containerSelector);
 
   return {

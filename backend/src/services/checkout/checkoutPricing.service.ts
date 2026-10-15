@@ -15,6 +15,7 @@ import { deliveryLocationService } from "../delivery/deliveryLocation.service";
 import { inventoryReservationService } from "../inventory/inventoryReservation.service";
 import { canadianTaxService, TaxDestination } from "../tax/canadianTax.service";
 import { skuOfferService } from "../catalog/skuOffer.service";
+import { buildGroceryAwareTaxLines, resolveGroceryProductIds } from "./groceryTax.util";
 
 export interface CheckoutLine {
   skuId: string;
@@ -30,6 +31,8 @@ export interface CheckoutLine {
   lineProductDiscountCents: number;
   lineTotalCents: number;
   taxCategoryId?: string;
+  /** True when product is under Groceries (or a grocery subcategory). */
+  isGrocery?: boolean;
 }
 
 export interface CheckoutBreakdown {
@@ -52,7 +55,11 @@ export interface CheckoutBreakdown {
   smallCartFeeCents: number;
   taxCents: number;
   totalCents: number;
-  taxSnapshot: Awaited<ReturnType<typeof canadianTaxService.calculate>>;
+  taxSnapshot: Awaited<ReturnType<typeof canadianTaxService.calculate>> & {
+    excludesGroceries?: boolean;
+    groceryOnlyCart?: boolean;
+    deliveryFeeTaxed?: boolean;
+  };
   couponSnapshot?: {
     code: string;
     discountType: "percentage" | "fixed";
@@ -269,29 +276,50 @@ export const checkoutPricingService = {
 
     const feesCents = addCents(deliveryFeeCents, platformFeeCents, handlingFeeCents, smallCartFeeCents);
 
-    // Allocate discounts across lines for tax base (proportional to line totals)
+    // Groceries are always excluded from the item tax base.
+    // Grocery-only cart → tax platform fee only (delivery not taxed).
+    // Mixed / non-grocery cart → tax non-grocery items + platform + delivery (if any).
+    const groceryProductIds = await resolveGroceryProductIds(lines.map((line) => line.productId));
+    for (const line of lines) {
+      line.isGrocery = groceryProductIds.has(line.productId);
+    }
+
     const discountPool = couponDiscountCents + scratchDiscountCents;
-    const taxLines = lines.map((line) => {
-      const share =
-        subtotalCents > 0 ? Math.round((line.lineTotalCents / subtotalCents) * discountPool) : 0;
-      return {
-        skuId: line.skuId || line.productId,
+    const groceryTax = buildGroceryAwareTaxLines({
+      lines: lines.map((line) => ({
+        skuId: line.skuId,
+        productId: line.productId,
+        lineTotalCents: line.lineTotalCents,
         taxCategoryId: line.taxCategoryId,
-        taxableAmountCents: clampNonNegativeCents(line.lineTotalCents - share),
-      };
+        isGrocery: Boolean(line.isGrocery),
+      })),
+      subtotalCents,
+      discountPoolCents: discountPool,
+      platformFeeCents,
+      deliveryFeeCents,
     });
 
     const destination: TaxDestination = input.shippingDestination || {
       country: "Canada",
       state: "ON",
     };
-    const taxSnapshot = await canadianTaxService.calculate({
+    const calculatedTax = await canadianTaxService.calculate({
       shippingDestination: destination,
       transactionDate: input.transactionDate || new Date(),
-      lineItems: taxLines,
+      lineItems: groceryTax.taxLines,
     });
+    const taxSnapshot = {
+      ...calculatedTax,
+      excludesNonTaxableItems:
+        calculatedTax.excludesNonTaxableItems || groceryTax.excludedGroceryAmountCents > 0,
+      excludedNonTaxableAmountCents:
+        calculatedTax.excludedNonTaxableAmountCents + groceryTax.excludedGroceryAmountCents,
+      excludesGroceries: groceryTax.hasGrocery,
+      groceryOnlyCart: groceryTax.groceryOnlyCart,
+      deliveryFeeTaxed: groceryTax.deliveryFeeTaxed,
+    };
 
-    const totalCents = addCents(afterDiscounts, feesCents, taxSnapshot.totalTaxCents);
+    const totalCents = addCents(afterDiscounts, feesCents, calculatedTax.totalTaxCents);
     const totalMrpCents = lines.reduce((sum, line) => sum + line.mrpCents * line.quantity, 0);
     const discountOnMrpCents = clampNonNegativeCents(totalMrpCents - subtotalCents);
     const totalSavingsCents = clampNonNegativeCents(
@@ -313,7 +341,7 @@ export const checkoutPricingService = {
       platformFeeCents,
       handlingFeeCents,
       smallCartFeeCents,
-      taxCents: taxSnapshot.totalTaxCents,
+      taxCents: calculatedTax.totalTaxCents,
       totalCents,
       totalMrpCents,
       sellingTotalCents: subtotalCents,
@@ -327,7 +355,7 @@ export const checkoutPricingService = {
       subtotal: subtotalCents / 100,
       discount: (couponDiscountCents + scratchDiscountCents) / 100,
       shippingFee: addCents(deliveryFeeCents, smallCartFeeCents) / 100,
-      tax: taxSnapshot.totalTaxCents / 100,
+      tax: calculatedTax.totalTaxCents / 100,
       total: totalCents / 100,
     };
   },

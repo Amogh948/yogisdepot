@@ -26,6 +26,11 @@ export interface OrderTaxSnapshot {
   components: OrderTaxComponentSnapshot[];
   taxableAmountCents: number;
   totalTaxCents: number;
+  excludedNonTaxableAmountCents?: number;
+  excludesNonTaxableItems?: boolean;
+  excludesGroceries?: boolean;
+  groceryOnlyCart?: boolean;
+  deliveryFeeTaxed?: boolean;
 }
 
 export interface OrderItemSnapshot {
@@ -167,6 +172,11 @@ const orderSchema = new Schema<OrderDocument>(
       components: [taxComponentSchema],
       taxableAmountCents: Number,
       totalTaxCents: Number,
+      excludedNonTaxableAmountCents: Number,
+      excludesNonTaxableItems: Boolean,
+      excludesGroceries: Boolean,
+      groceryOnlyCart: Boolean,
+      deliveryFeeTaxed: Boolean,
     },
     coupon: {
       code: String,

@@ -18,6 +18,9 @@ export const REGIONS = [
     description: "Warm namkeen, chai blends, and festive mithai favourites.",
     search: "namkeen",
     specialties: ["Namkeen", "Masala Chai", "Mathri"],
+    accent: "#D4A017",
+    fill: "#F5E6B8",
+    tagline: "Chai, namkeen & mithai",
   },
   {
     slug: "south-india",
@@ -25,6 +28,9 @@ export const REGIONS = [
     description: "Crisp banana chips, filter coffee, and coastal spice classics.",
     search: "chips",
     specialties: ["Banana Chips", "Filter Coffee", "Mixture"],
+    accent: "#287A43",
+    fill: "#D5EBDD",
+    tagline: "Coffee, chips & coastal spice",
   },
   {
     slug: "west-india",
@@ -32,6 +38,9 @@ export const REGIONS = [
     description: "Farsan, pickles, and pantry staples from Gujarat and Maharashtra.",
     search: "pickle",
     specialties: ["Farsan", "Mango Pickle", "Khakhra"],
+    accent: "#D85B0B",
+    fill: "#FFE4D1",
+    tagline: "Farsan, pickles & khakhra",
   },
   {
     slug: "east-india",
@@ -39,6 +48,9 @@ export const REGIONS = [
     description: "Mishti, mustard notes, and tea-time treats.",
     search: "tea",
     specialties: ["Sandesh", "Darjeeling Tea", "Nolen Gur"],
+    accent: "#B94E27",
+    fill: "#F3D9D0",
+    tagline: "Mishti, tea & mustard notes",
   },
   {
     slug: "northeast-india",
@@ -46,8 +58,13 @@ export const REGIONS = [
     description: "Bold flavours, smoked notes, and regional pantry finds.",
     search: "spice",
     specialties: ["Bhut Jolokia", "Bamboo Shoot", "Local spices"],
+    accent: "#8B1E3F",
+    fill: "#F0D0DA",
+    tagline: "Bold spices & smoked notes",
   },
 ] as const;
+
+export type TasteIndiaRegion = (typeof REGIONS)[number];
 
 export const GIFT_BANDS = [
   { slug: "under-499", name: "Under $75", maxPrice: 499, blurb: "Thoughtful small gifts" },

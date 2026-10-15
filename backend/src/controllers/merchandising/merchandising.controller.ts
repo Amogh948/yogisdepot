@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import { TASTE_INDIA_REGIONS } from "../../config/constants";
+import { FESTIVAL_THEMES, TASTE_INDIA_REGIONS } from "../../config/constants";
 import { MERCHANDISING_PLACEMENTS } from "../../models/MerchandisingCollection";
 import { merchandisingService } from "../../services/catalog/merchandising.service";
 import { sendSuccess } from "../../utils/apiResponse";
@@ -12,7 +12,9 @@ export const merchandisingSchema = z.object({
   subtitle: z.string().max(160).optional(),
   placement: z.enum(MERCHANDISING_PLACEMENTS).optional(),
   tasteIndiaRegion: z.enum(TASTE_INDIA_REGIONS).optional().nullable(),
+  festivalTheme: z.enum(FESTIVAL_THEMES).optional(),
   image: z.string().optional(),
+  images: z.array(z.string().min(1)).max(12).optional(),
   sortOrder: z.number().int().optional(),
   isActive: z.boolean().optional(),
   startDate: z.union([z.string(), z.null()]).optional(),
@@ -34,13 +36,20 @@ function publicMerchPayload(
     subtitle?: string;
     placement: string;
     tasteIndiaRegion?: string;
+    festivalTheme?: string;
     image?: string;
+    images?: string[];
     sortOrder: number;
     startDate?: Date | null;
     endDate?: Date | null;
   },
   products: unknown[],
 ) {
+  const images = Array.isArray(row.images)
+    ? row.images.filter(Boolean)
+    : row.image
+      ? [row.image]
+      : [];
   return {
     id: String(row._id),
     name: row.name,
@@ -48,7 +57,9 @@ function publicMerchPayload(
     subtitle: row.subtitle,
     placement: row.placement,
     tasteIndiaRegion: row.tasteIndiaRegion || null,
-    image: row.image,
+    festivalTheme: row.festivalTheme || "generic",
+    image: images[0] || row.image || undefined,
+    images,
     sortOrder: row.sortOrder,
     startDate: row.startDate || null,
     endDate: row.endDate || null,

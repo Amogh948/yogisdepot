@@ -5,6 +5,11 @@ export type PublicSettings = {
   siteName?: string;
   currency?: string;
   supportEmail?: string;
+  sameDayDeliveryEnabled?: boolean;
+  sameDayCutoffTime?: string;
+  sameDayTimezone?: string;
+  sameDayWeekdays?: number[];
+  sameDayPostalPrefixes?: string[];
 };
 
 export function usePublicSettings() {

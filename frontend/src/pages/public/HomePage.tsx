@@ -12,6 +12,9 @@ import { buildHomeHeroSlides, HomeHeroCarousel } from "../../components/home/Hom
 import { mediaUrl, entityId, type Product, type Category } from "../../types";
 import { Skeleton, SectionHeader } from "../../components/ui/Feedback";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
+import { HomeTasteIndiaSection } from "../../components/discovery/HomeTasteIndiaSection";
+import { HomeFestivalStoreSection } from "../../components/discovery/HomeFestivalStoreSection";
+import { SameDayDeliveryBanner } from "../../components/commerce/SameDayDeliveryBanner";
 
 const TRUST_DESKTOP = [
   { icon: Leaf, label: "Authentic & Fresh" },
@@ -75,7 +78,7 @@ export function HomePage() {
     <div className="w-full min-w-0 max-w-full space-y-6 lg:space-y-10">
       <Helmet>
         <title>Yogi&apos;s Depot — Taste Authentic India Everyday</title>
-        <meta name="description" content="Snacks, teas, spices and pantry staples from trusted local kitchens." />
+        <meta name="description" content="Everyday favourites from trusted brands of South Asia" />
       </Helmet>
 
       <div className="flex w-full min-w-0 flex-col gap-6 lg:flex-row">
@@ -102,6 +105,7 @@ export function HomePage() {
 
         <div className="min-w-0 w-full flex-1 space-y-5">
           <HomeHeroCarousel slides={heroSlides} />
+          <SameDayDeliveryBanner />
 
           <div className="grid grid-cols-3 gap-2 lg:hidden">
             {TRUST_MOBILE.map((item) => (
@@ -151,6 +155,9 @@ export function HomePage() {
         subtitle="Tap a card to browse the products inside"
         rails={homeRails}
       />
+
+      <HomeTasteIndiaSection />
+      <HomeFestivalStoreSection />
 
       {homeSections.isLoading
         ? Array.from({ length: 4 }).map((_, i) => (

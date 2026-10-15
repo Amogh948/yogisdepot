@@ -54,5 +54,36 @@ describe("canadianTax.service", () => {
     });
     expect(result.totalTaxCents).toBe(0);
     expect(result.taxableAmountCents).toBe(0);
+    expect(result.excludesNonTaxableItems).toBe(true);
+    expect(result.excludedNonTaxableAmountCents).toBe(10000);
+  });
+
+  it("taxes non-grocery items plus platform and delivery fees", async () => {
+    findRates.mockResolvedValue([{ component: "HST", rateBps: 1300, appliesToAllTaxable: true, taxCategoryIds: [] }]);
+    findCategories.mockResolvedValue([]);
+    const result = await canadianTaxService.calculate({
+      shippingDestination: { country: "Canada", state: "ON" },
+      transactionDate: new Date("2025-06-01"),
+      lineItems: [
+        { skuId: "s1", taxableAmountCents: 3000 },
+        { skuId: "__platform_fee__", taxableAmountCents: 99 },
+        { skuId: "__delivery_fee__", taxableAmountCents: 499 },
+      ],
+    });
+    expect(result.taxableAmountCents).toBe(3598);
+    expect(result.totalTaxCents).toBe(468);
+  });
+
+  it("taxes only platform fee for grocery-only checkout lines", async () => {
+    findRates.mockResolvedValue([{ component: "HST", rateBps: 1300, appliesToAllTaxable: true, taxCategoryIds: [] }]);
+    findCategories.mockResolvedValue([]);
+    const result = await canadianTaxService.calculate({
+      shippingDestination: { country: "Canada", state: "ON" },
+      transactionDate: new Date("2025-06-01"),
+      lineItems: [{ skuId: "__platform_fee__", taxableAmountCents: 99 }],
+    });
+    expect(result.taxableAmountCents).toBe(99);
+    expect(result.totalTaxCents).toBe(13);
+    expect(result.excludesNonTaxableItems).toBe(false);
   });
 });

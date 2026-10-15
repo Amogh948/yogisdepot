@@ -9,7 +9,9 @@ export type AdminMerchandising = {
   subtitle?: string;
   placement: "home" | "offers" | "gifts" | "region" | "festival";
   tasteIndiaRegion?: string | null;
+  festivalTheme?: "diwali" | "navratri" | "holi" | "eid" | "generic" | null;
   image?: string;
+  images?: string[];
   sortOrder: number;
   isActive: boolean;
   startDate?: string | null;

@@ -13,6 +13,7 @@ import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { entityId, mediaUrl } from "../../types";
 import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
 import { formatEstimatedDeliveryDate, returnPolicyLabel } from "../../utils/dates";
+import { SameDayDeliveryBanner } from "../../components/commerce/SameDayDeliveryBanner";
 
 export function ProductDetailPage() {
   const { slug = "" } = useParams();
@@ -105,6 +106,7 @@ export function ProductDetailPage() {
             </p>
           ) : null}
 
+          <SameDayDeliveryBanner compact />
           <div className="flex items-start gap-2 rounded-card border border-yd-border bg-white p-3 text-sm">
             <Truck className="mt-0.5 h-4 w-4 shrink-0 text-yd-green" />
             <div>

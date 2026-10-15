@@ -18,6 +18,12 @@ import { formatMoneyFromCents } from "../../utils/money";
 import { useCurrencyCode } from "../../hooks/useSettings";
 import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
 import { MerchandisingCard } from "../../components/merchandising/MerchandisingCard";
+import { TasteIndiaMap } from "../../components/discovery/TasteIndiaMap";
+import {
+  FestivalAtmosphere,
+  FestivalThemeShell,
+} from "../../components/discovery/FestivalAtmosphere";
+import { resolveFestivalTheme } from "../../content/festivalThemes";
 import { mediaUrl } from "../../types";
 
 function OfferRail({ title, query }: { title: string; query: { discount?: string; sort?: string; limit?: number; maxPrice?: number } }) {
@@ -137,19 +143,7 @@ export function RegionsPage() {
       </Helmet>
       <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: "Taste India" }]} />
       <SectionHeader title="Taste India" subtitle="Regional favourites from kitchens across the country" />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {REGIONS.map((region) => (
-          <Link
-            key={region.slug}
-            to={`/discover/regions/${region.slug}`}
-            className="rounded-card border border-yd-border bg-white p-5 shadow-soft transition hover:border-yd-green/40"
-          >
-            <p className="font-display text-2xl text-yd-forest">{region.name}</p>
-            <p className="mt-2 text-sm text-yd-muted">{region.description}</p>
-            <p className="mt-3 text-xs font-semibold text-yd-green">{region.specialties.join(" · ")}</p>
-          </Link>
-        ))}
-      </div>
+      <TasteIndiaMap />
     </div>
   );
 }
@@ -351,6 +345,7 @@ export function FestivalDetailPage() {
   const blurb = collection?.subtitle;
   const products = collection?.products || [];
   const loading = merch.isLoading;
+  const theme = resolveFestivalTheme(collection?.festivalTheme, collection?.slug, collection?.name);
 
   if (!merch.isLoading && !collection) {
     return (
@@ -367,7 +362,7 @@ export function FestivalDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <FestivalThemeShell theme={theme} className="-mx-4 px-4 py-4 sm:-mx-0 sm:rounded-[20px] sm:px-5 lg:-mx-0">
       <Helmet>
         <title>{name || "Festival"} | Festival store</title>
       </Helmet>
@@ -378,13 +373,22 @@ export function FestivalDetailPage() {
           { label: name || "Festival" },
         ]}
       />
-      <section className="rounded-card bg-yd-forest p-6 text-white">
-        <p className="text-xs uppercase tracking-wide text-white/70">Festival store</p>
-        <h1 className="mt-1 font-display text-3xl">{name}</h1>
-        {blurb ? <p className="mt-2 max-w-xl text-sm text-white/80">{blurb}</p> : null}
+      {name ? (
+        <FestivalAtmosphere
+          theme={theme}
+          title={name}
+          subtitle={blurb}
+          imageUrl={collection?.image}
+          imageUrls={collection?.images}
+        />
+      ) : (
+        <Skeleton className="h-52 rounded-[20px]" />
+      )}
+      <section className="yd-fest-products rounded-[16px] border border-[color:var(--fest-highlight)]/20 bg-[color:var(--fest-card)]/90 p-3 shadow-soft sm:p-4">
+        <h2 className="mb-3 font-display text-xl text-[color:var(--fest-accent)]">Festive picks</h2>
+        <ProductGrid products={products} loading={loading} onAdd={(p) => addToCart.mutate({ product: p })} />
       </section>
-      <ProductGrid products={products} loading={loading} onAdd={(p) => addToCart.mutate({ product: p })} />
-    </div>
+    </FestivalThemeShell>
   );
 }
 

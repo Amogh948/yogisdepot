@@ -58,6 +58,11 @@ function OrderBillBreakdown({ order }: { order: Order }) {
   const tax = dollarsFromCents(order.taxCents, order.tax);
   const total = dollarsFromCents(order.totalCents, order.total);
   const taxLabel = order.taxSnapshot?.jurisdiction ? `Tax (${order.taxSnapshot.jurisdiction})` : "Tax";
+  const taxNote = order.taxSnapshot?.groceryOnlyCart
+    ? "Groceries excluded; platform fee only (delivery not taxed)"
+    : order.taxSnapshot?.excludesGroceries
+      ? "Excludes groceries; includes platform & delivery fees"
+      : "On items + platform & delivery fees";
   const paymentLabel =
     order.paymentMethod === "cod"
       ? "Cash on delivery"
@@ -114,8 +119,11 @@ function OrderBillBreakdown({ order }: { order: Order }) {
               </div>
             ) : null}
             <div className="flex justify-between gap-4">
-              <dt className="text-yd-muted">{taxLabel}</dt>
-              <dd className="font-medium text-yd-ink">{formatCad(tax)}</dd>
+              <dt className="text-yd-muted">
+                {taxLabel}
+                <span className="mt-0.5 block text-[11px] font-normal leading-snug">{taxNote}</span>
+              </dt>
+              <dd className="shrink-0 font-medium text-yd-ink">{formatCad(tax)}</dd>
             </div>
             {order.taxSnapshot?.components?.length ? (
               <div className="space-y-1 pl-2 text-xs text-yd-muted">

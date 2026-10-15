@@ -154,7 +154,12 @@ const addressSchema = z.object({
   addressLine1: z.string().min(3),
   city: z.string().min(2),
   state: z.string().min(2),
-  postalCode: z.string().min(3),
+  postalCode: z
+    .string()
+    .min(3)
+    .refine((value) => /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(value.trim()), {
+      message: "Enter a Canadian postal code (e.g. T2W 1A1)",
+    }),
   country: z.string().min(2),
   addressType: z.enum(["home", "work", "other"]),
 });
@@ -259,7 +264,12 @@ const applySchema = z.object({
   addressLine1: z.string().min(3),
   city: z.string().min(2),
   state: z.string().min(2),
-  postalCode: z.string().min(3),
+  postalCode: z
+    .string()
+    .min(3)
+    .refine((value) => /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(value.trim()), {
+      message: "Enter a Canadian postal code (e.g. T2W 1A1)",
+    }),
 });
 
 export function VendorApplyPage() {

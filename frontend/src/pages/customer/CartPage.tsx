@@ -6,6 +6,7 @@ import { cartApi } from "../../services/api/commerce.api";
 import { Button } from "../../components/ui/Button";
 import { EmptyState, Price, QuantitySelector, Skeleton } from "../../components/ui/Feedback";
 import { DeliveryProgress } from "../../components/commerce/DeliveryProgress";
+import { SameDayDeliveryBanner } from "../../components/commerce/SameDayDeliveryBanner";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { mediaUrl } from "../../types";
 import { useAuthStore } from "../../store/auth.store";
@@ -70,6 +71,7 @@ export function CartPage() {
             </button>
           </div>
           <DeliveryProgress subtotal={data.subtotal} />
+          <SameDayDeliveryBanner compact />
           {data.items.map((item) => (
             <article key={item.productId} className="flex gap-3 rounded-[14px] border border-yd-border bg-white p-3 shadow-soft">
               <img src={mediaUrl(item.product.thumbnail || item.product.images[0])} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover bg-yd-cream" />

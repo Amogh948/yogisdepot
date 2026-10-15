@@ -1,5 +1,10 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
-import { TASTE_INDIA_REGIONS, TasteIndiaRegion } from "../config/constants";
+import {
+  FESTIVAL_THEMES,
+  FestivalTheme,
+  TASTE_INDIA_REGIONS,
+  TasteIndiaRegion,
+} from "../config/constants";
 
 export const MERCHANDISING_PLACEMENTS = ["home", "offers", "gifts", "region", "festival"] as const;
 export type MerchandisingPlacement = (typeof MERCHANDISING_PLACEMENTS)[number];
@@ -11,7 +16,12 @@ export interface MerchandisingCollectionDocument extends Document {
   placement: MerchandisingPlacement;
   /** Taste India region this collection targets (when used for regional discovery). */
   tasteIndiaRegion?: TasteIndiaRegion;
+  /** Atmosphere theme for Festival Store detail pages. */
+  festivalTheme?: FestivalTheme;
+  /** Primary / cover image (first of `images` when set). */
   image?: string;
+  /** Gallery / hero carousel images (festivals). */
+  images?: string[];
   sortOrder: number;
   isActive: boolean;
   /** Inclusive schedule start. Null/undefined = no start limit. */
@@ -30,7 +40,9 @@ const merchandisingCollectionSchema = new Schema<MerchandisingCollectionDocument
     subtitle: { type: String, trim: true },
     placement: { type: String, enum: MERCHANDISING_PLACEMENTS, default: "home" },
     tasteIndiaRegion: { type: String, enum: TASTE_INDIA_REGIONS },
+    festivalTheme: { type: String, enum: FESTIVAL_THEMES, default: "generic" },
     image: { type: String },
+    images: { type: [String], default: [] },
     sortOrder: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
     startDate: { type: Date, default: null },

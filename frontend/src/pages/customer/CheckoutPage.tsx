@@ -24,6 +24,11 @@ import { detectCurrentAddress } from "../../utils/geolocation";
 import { useAuthStore } from "../../store/auth.store";
 import { formatCad, formatCadFromCents } from "../../utils/money";
 import { scrollToTop } from "../../utils/scroll";
+import {
+  SameDayDeliveryBanner,
+  useSameDayDeliveryStatus,
+} from "../../components/commerce/SameDayDeliveryBanner";
+import { formatPostalCode, isValidPostalCode, postalCodeForSquare } from "../../utils/postalCode";
 
 type SquareCheckoutSession = {
   orderId: string;
@@ -36,18 +41,35 @@ type SquareCheckoutSession = {
 
 const steps = ["Address", "Delivery", "Payment"] as const;
 
-const checkoutAddressSchema = z.object({
-  fullName: z.string().min(2, "Enter the full name"),
-  phone: z.string().min(8, "Enter a valid phone"),
-  addressLine1: z.string().min(3, "Enter the street address"),
-  addressLine2: z.string().optional(),
-  city: z.string().min(2, "Enter the city"),
-  state: z.string().min(2, "Enter the state"),
-  postalCode: z.string().min(3, "Enter the postal code"),
-  country: z.string().min(2),
-  landmark: z.string().optional(),
-  addressType: z.enum(["home", "work", "other"]),
-});
+/** Temporarily hide Superfast at checkout; admin/backend wiring stays intact. */
+const SUPERFAST_DELIVERY_ENABLED = false;
+
+const checkoutAddressSchema = z
+  .object({
+    fullName: z.string().min(2, "Enter the full name"),
+    phone: z.string().min(8, "Enter a valid phone"),
+    addressLine1: z.string().min(3, "Enter the street address"),
+    addressLine2: z.string().optional(),
+    city: z.string().min(2, "Enter the city"),
+    state: z.string().min(2, "Enter the state"),
+    postalCode: z.string().min(3, "Enter the postal code"),
+    country: z.string().min(2),
+    landmark: z.string().optional(),
+    addressType: z.enum(["home", "work", "other"]),
+  })
+  .superRefine((values, ctx) => {
+    const formatted = formatPostalCode(values.postalCode, values.country);
+    if (!isValidPostalCode(formatted, values.country)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["postalCode"],
+        message:
+          (values.country || "").toLowerCase().includes("united") || values.country === "US"
+            ? "Enter a valid ZIP code (12345 or 12345-6789)"
+            : "Enter a Canadian postal code (e.g. T2W 1A1)",
+      });
+    }
+  });
 
 type CheckoutAddressForm = z.infer<typeof checkoutAddressSchema>;
 
@@ -59,6 +81,8 @@ export function CheckoutPage() {
   const [step, setStep] = useState(1);
   const [addressId, setAddressId] = useState("");
   const [deliverySpeed, setDeliverySpeed] = useState<"standard" | "superfast">("standard");
+  const effectiveDeliverySpeed = SUPERFAST_DELIVERY_ENABLED ? deliverySpeed : "standard";
+  const sameDayStatus = useSameDayDeliveryStatus();
 
   // When advancing to Delivery (or Payment), start at the top of the new step content.
   useEffect(() => {
@@ -101,13 +125,13 @@ export function CheckoutPage() {
   const resolvedAddressId = addressId || (selected ? entityId(selected) : "");
 
   const quote = useQuery({
-    queryKey: ["checkout-quote", appliedCoupon, scratchRewardId, resolvedAddressId, deliverySpeed],
+    queryKey: ["checkout-quote", appliedCoupon, scratchRewardId, resolvedAddressId, effectiveDeliverySpeed],
     queryFn: () =>
       ordersApi.quote({
         coupon: appliedCoupon || undefined,
         scratchRewardId: scratchRewardId || undefined,
         addressId: resolvedAddressId || undefined,
-        deliverySpeed,
+        deliverySpeed: effectiveDeliverySpeed,
       }),
     enabled: Boolean(cart.data?.data?.items.length),
     placeholderData: (previous) => previous,
@@ -162,7 +186,11 @@ export function CheckoutPage() {
   }, [addresses.isLoading, savedAddresses.length]);
 
   const createAddress = useMutation({
-    mutationFn: (values: CheckoutAddressForm) => addressApi.create(values),
+    mutationFn: (values: CheckoutAddressForm) =>
+      addressApi.create({
+        ...values,
+        postalCode: formatPostalCode(values.postalCode, values.country),
+      }),
     onSuccess: async (result) => {
       const createdId = entityId(result.data);
       setAddressId(createdId);
@@ -183,7 +211,11 @@ export function CheckoutPage() {
       form.setValue("addressLine2", detected.addressLine2 || "", { shouldDirty: true });
       form.setValue("city", detected.city, { shouldDirty: true, shouldValidate: true });
       form.setValue("state", detected.state, { shouldDirty: true, shouldValidate: true });
-      form.setValue("postalCode", detected.postalCode, { shouldDirty: true, shouldValidate: true });
+      form.setValue(
+        "postalCode",
+        formatPostalCode(detected.postalCode, detected.country || "Canada"),
+        { shouldDirty: true, shouldValidate: true },
+      );
       form.setValue("country", detected.country || "Canada", { shouldDirty: true, shouldValidate: true });
       form.setValue("landmark", detected.landmark || "", { shouldDirty: true });
       toast("Address filled from your current location");
@@ -239,6 +271,10 @@ export function CheckoutPage() {
       locationId: squareSession.locationId,
       environment: squareSession.environment,
       containerSelector: "#square-card-container",
+      // Prefill alphanumeric Canadian postal from delivery address into Square's field.
+      postalCode: selected
+        ? postalCodeForSquare(selected.postalCode, selected.country)
+        : undefined,
     })
       .then((card) => {
         if (cancelled) {
@@ -260,7 +296,7 @@ export function CheckoutPage() {
       squareCardRef.current = null;
       void current?.destroy();
     };
-  }, [squareSession, toast]);
+  }, [squareSession, toast, selected?.postalCode, selected?.country]);
 
   const placeOrder = useMutation({
     mutationFn: () => {
@@ -270,7 +306,7 @@ export function CheckoutPage() {
       return ordersApi.create({
         addressId: entityId(selected!),
         paymentMethod,
-        deliverySpeed,
+        deliverySpeed: effectiveDeliverySpeed,
         couponCode: appliedCoupon || couponCode || undefined,
         scratchRewardId: scratchRewardId || undefined,
       });
@@ -328,7 +364,7 @@ export function CheckoutPage() {
           addressLines: [selected.addressLine1, selected.addressLine2].filter(Boolean) as string[],
           city: selected.city,
           state: selected.state,
-          postalCode: selected.postalCode,
+          postalCode: postalCodeForSquare(selected.postalCode, selected.country),
           countryCode: toSquareCountryCode(selected.country),
         },
       });
@@ -402,7 +438,14 @@ export function CheckoutPage() {
     totalSavingsCents?: number;
     couponError?: string;
     couponSnapshot?: { code?: string; discountType?: string; discountValue?: number; amountCents?: number };
-    taxSnapshot?: { jurisdiction?: string; components?: Array<{ type: string; taxAmountCents: number }> };
+    taxSnapshot?: {
+      jurisdiction?: string;
+      components?: Array<{ type: string; taxAmountCents: number }>;
+      excludesNonTaxableItems?: boolean;
+      excludesGroceries?: boolean;
+      groceryOnlyCart?: boolean;
+      deliveryFeeTaxed?: boolean;
+    };
   };
   const shipping = Number(quoteData.shippingFee ?? 0);
   const standardDeliveryFeeCents = Number(quoteData.standardDeliveryFeeCents ?? 0);
@@ -530,7 +573,23 @@ export function CheckoutPage() {
                       </option>
                     ))}
                   </Select>
-                  <Input label="Postal code" {...form.register("postalCode")} error={form.formState.errors.postalCode?.message} />
+                  <Input
+                    label="Postal code"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="postal-code"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    placeholder="T2W 1A1"
+                    {...form.register("postalCode", {
+                      onChange: (event) => {
+                        const next = formatPostalCode(event.target.value, form.getValues("country"));
+                        form.setValue("postalCode", next, { shouldValidate: true, shouldDirty: true });
+                      },
+                    })}
+                    error={form.formState.errors.postalCode?.message}
+                    hint="Canadian format: letter-number-letter number-letter-number"
+                  />
                   <Input label="Country" {...form.register("country")} error={form.formState.errors.country?.message} />
                   <Select label="Address type" {...form.register("addressType")}>
                     <option value="home">Home</option>
@@ -643,7 +702,23 @@ export function CheckoutPage() {
                         </option>
                       ))}
                     </Select>
-                    <Input label="Postal code" {...form.register("postalCode")} error={form.formState.errors.postalCode?.message} />
+                    <Input
+                      label="Postal code"
+                      type="text"
+                      inputMode="text"
+                      autoComplete="postal-code"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      placeholder="T2W 1A1"
+                      {...form.register("postalCode", {
+                        onChange: (event) => {
+                          const next = formatPostalCode(event.target.value, form.getValues("country"));
+                          form.setValue("postalCode", next, { shouldValidate: true, shouldDirty: true });
+                        },
+                      })}
+                      error={form.formState.errors.postalCode?.message}
+                      hint="Canadian format: e.g. T2W 1A1"
+                    />
                     <Input label="Country" {...form.register("country")} error={form.formState.errors.country?.message} />
                     <Select label="Address type" {...form.register("addressType")}>
                       <option value="home">Home</option>
@@ -665,17 +740,20 @@ export function CheckoutPage() {
 
             <section className="rounded-[14px] border border-yd-border bg-white p-4 shadow-soft">
               <h2 className="font-display text-xl text-yd-forest">Delivery options</h2>
+              <div className="mt-3">
+                <SameDayDeliveryBanner compact />
+              </div>
               <div className="mt-3 space-y-2">
                 <label
                   className={`flex cursor-pointer gap-3 rounded-[12px] border p-4 ${
-                    deliverySpeed === "standard" ? "border-yd-green bg-yd-green/5" : "border-yd-border"
+                    effectiveDeliverySpeed === "standard" ? "border-yd-green bg-yd-green/5" : "border-yd-border"
                   }`}
                 >
                   <input
                     type="radio"
                     name="delivery-speed"
                     className="mt-1 accent-yd-green"
-                    checked={deliverySpeed === "standard"}
+                    checked={effectiveDeliverySpeed === "standard"}
                     onChange={() => setDeliverySpeed("standard")}
                   />
                   <span className="flex-1">
@@ -683,35 +761,43 @@ export function CheckoutPage() {
                       <p className="font-semibold text-yd-ink">Standard Delivery</p>
                       <p className="shrink-0 text-sm font-semibold text-yd-ink">{standardDeliveryLabel}</p>
                     </span>
-                    <p className="mt-0.5 text-sm text-yd-muted">Products will be delivered as per the estimated time.</p>
+                    <p className="mt-0.5 text-sm text-yd-muted">
+                      {sameDayStatus?.mode === "same_day"
+                        ? "Place this order before the cutoff for same-day delivery (subject to stock)."
+                        : sameDayStatus?.mode === "next_day"
+                          ? "Same-day cutoff has passed — expect next-day delivery (subject to stock)."
+                          : "Products will be delivered as per the estimated time."}
+                    </p>
                   </span>
                 </label>
-                <label
-                  className={`flex cursor-pointer gap-3 rounded-[12px] border p-4 ${
-                    deliverySpeed === "superfast" ? "border-yd-green bg-yd-green/5" : "border-yd-border"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="delivery-speed"
-                    className="mt-1 accent-yd-green"
-                    checked={deliverySpeed === "superfast"}
-                    onChange={() => setDeliverySpeed("superfast")}
-                  />
-                  <span className="flex-1">
-                    <span className="flex items-start justify-between gap-3">
-                      <p className="font-semibold text-yd-ink">Superfast Delivery</p>
-                      <p className="shrink-0 text-sm font-semibold text-yd-ink">{superfastDeliveryLabel}</p>
+                {SUPERFAST_DELIVERY_ENABLED ? (
+                  <label
+                    className={`flex cursor-pointer gap-3 rounded-[12px] border p-4 ${
+                      deliverySpeed === "superfast" ? "border-yd-green bg-yd-green/5" : "border-yd-border"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="delivery-speed"
+                      className="mt-1 accent-yd-green"
+                      checked={deliverySpeed === "superfast"}
+                      onChange={() => setDeliverySpeed("superfast")}
+                    />
+                    <span className="flex-1">
+                      <span className="flex items-start justify-between gap-3">
+                        <p className="font-semibold text-yd-ink">Superfast Delivery</p>
+                        <p className="shrink-0 text-sm font-semibold text-yd-ink">{superfastDeliveryLabel}</p>
+                      </span>
+                      <p className="mt-0.5 text-sm text-yd-muted">Products delivered the same day.</p>
+                      {superfastSurchargeCents > 0 ? (
+                        <p className="mt-1 text-xs text-yd-muted">
+                          Includes {formatCadFromCents(superfastSurchargeCents)} Superfast surcharge
+                          {standardDeliveryFeeCents <= 0 ? " on free standard delivery" : ""}.
+                        </p>
+                      ) : null}
                     </span>
-                    <p className="mt-0.5 text-sm text-yd-muted">Products delivered the same day.</p>
-                    {superfastSurchargeCents > 0 ? (
-                      <p className="mt-1 text-xs text-yd-muted">
-                        Includes {formatCadFromCents(superfastSurchargeCents)} Superfast surcharge
-                        {standardDeliveryFeeCents <= 0 ? " on free standard delivery" : ""}.
-                      </p>
-                    ) : null}
-                  </span>
-                </label>
+                  </label>
+                ) : null}
               </div>
               <Button
                 className="mt-4 w-full"
@@ -776,6 +862,13 @@ export function CheckoutPage() {
             {squareSession ? (
               <div className="space-y-3 rounded-[12px] border border-yd-border bg-yd-cream/40 p-4">
                 <p className="text-sm font-semibold text-yd-ink">Enter your card details</p>
+                <p className="text-xs text-yd-muted">
+                  Postal code is prefilled from your delivery address
+                  {selected?.postalCode
+                    ? ` (${postalCodeForSquare(selected.postalCode, selected.country)})`
+                    : ""}
+                  . Canadian cards accept letter–number format (e.g. T2W 1A1).
+                </p>
                 <div id="square-card-container" className="min-h-[56px]" />
                 {!cardReady ? <p className="text-xs text-yd-muted">Loading secure card form…</p> : null}
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -829,7 +922,7 @@ export function CheckoutPage() {
           ) : null}
           <div className="flex justify-between">
             <dt className="text-yd-muted">
-              Delivery{deliverySpeed === "superfast" ? " (Superfast)" : ""}
+              Delivery{effectiveDeliverySpeed === "superfast" ? " (Superfast)" : ""}
             </dt>
             <dd>{shipping <= 0 ? "Free" : formatCad(shipping)}</dd>
           </div>
@@ -839,9 +932,19 @@ export function CheckoutPage() {
           {handlingFee > 0 ? (
             <div className="flex justify-between"><dt className="text-yd-muted">Handling</dt><dd>{formatCad(handlingFee)}</dd></div>
           ) : null}
-          <div className="flex justify-between">
-            <dt className="text-yd-muted">Tax{quoteData.taxSnapshot?.jurisdiction ? ` (${quoteData.taxSnapshot.jurisdiction})` : ""}</dt>
-            <dd>{formatCad(tax)}</dd>
+          <div className="flex justify-between gap-3">
+            <dt className="text-yd-muted">
+              Tax
+              {quoteData.taxSnapshot?.jurisdiction ? ` (${quoteData.taxSnapshot.jurisdiction})` : ""}
+              <span className="mt-0.5 block text-[11px] font-normal leading-snug">
+                {quoteData.taxSnapshot?.groceryOnlyCart
+                  ? "Groceries excluded; platform fee only (delivery not taxed)"
+                  : quoteData.taxSnapshot?.excludesGroceries
+                    ? "Excludes groceries; includes platform & delivery fees"
+                    : "On items + platform & delivery fees"}
+              </span>
+            </dt>
+            <dd className="shrink-0">{formatCad(tax)}</dd>
           </div>
           <div className="flex justify-between border-t border-dashed border-yd-border pt-2 text-base font-semibold">
             <dt>Total amount</dt>

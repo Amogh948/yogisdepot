@@ -58,7 +58,7 @@ export function buildHomeHeroSlides(args: {
       kind: "default",
       eyebrow: "Yogi's Depot",
       title: "Taste Authentic India Everyday",
-      body: "Snacks, teas, spices and pantry staples from trusted brands.",
+      body: "Everyday favourites from trusted brands of South Asia",
       ctaLabel: "Shop Now",
       to: "/products",
       image: args.fallbackImage,

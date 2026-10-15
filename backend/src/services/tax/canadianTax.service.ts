@@ -38,6 +38,10 @@ export interface CanadianTaxResult {
   components: TaxComponentResult[];
   taxableAmountCents: number;
   totalTaxCents: number;
+  /** Line amounts skipped because tax category is EXEMPT or ZERO_RATED. */
+  excludedNonTaxableAmountCents: number;
+  /** True when at least one product line was excluded as non-taxable. */
+  excludesNonTaxableItems: boolean;
 }
 
 function normalizeProvince(state: string): CaProvince {
@@ -96,6 +100,7 @@ export const canadianTaxService = {
     const taxabilityMap = new Map(categories.map((c) => [String(c._id), c.taxability as Taxability]));
 
     let taxableAmountCents = 0;
+    let excludedNonTaxableAmountCents = 0;
     const componentBuckets = new Map<string, TaxComponentResult>();
 
     for (const line of input.lineItems) {
@@ -106,6 +111,7 @@ export const canadianTaxService = {
         ? taxabilityMap.get(line.taxCategoryId) || "TAXABLE"
         : "TAXABLE";
       if (taxability === "EXEMPT" || taxability === "ZERO_RATED") {
+        excludedNonTaxableAmountCents += amount;
         continue;
       }
 
@@ -138,6 +144,8 @@ export const canadianTaxService = {
       components,
       taxableAmountCents,
       totalTaxCents,
+      excludedNonTaxableAmountCents,
+      excludesNonTaxableItems: excludedNonTaxableAmountCents > 0,
     };
   },
 };

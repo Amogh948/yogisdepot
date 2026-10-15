@@ -62,7 +62,7 @@ export function SiteFooter() {
         <div className="pb-4 lg:pb-0">
           <BrandLogo imgClassName="h-[4.5rem] w-auto lg:h-20" />
           <p className="mt-2 text-sm font-medium text-yd-saffron">Good food. Happier homes.</p>
-          <p className="mt-2 text-sm text-yd-muted">Everyday Indian favourites from trusted kitchens across India.</p>
+          <p className="mt-2 text-sm text-yd-muted">Everyday favourites from trusted brands of South Asia</p>
         </div>
         {sections.map((section) => (
           <AccordionSection key={section.title} title={section.title} links={section.links} />

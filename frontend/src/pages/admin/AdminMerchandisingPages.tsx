@@ -14,6 +14,7 @@ import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { formatCad } from "../../utils/money";
 import { TASTE_INDIA_REGION_OPTIONS } from "../../content/discovery";
+import { FESTIVAL_THEME_OPTIONS, type FestivalTheme } from "../../content/festivalThemes";
 
 const PLACEMENTS = [
   { value: "home", label: "Home" },
@@ -103,8 +104,12 @@ export function AdminMerchandisingPage({ placementFilter }: { placementFilter?: 
           return (
             <article key={id} className="relative overflow-hidden rounded-2xl border border-yd-border/60 bg-white shadow-soft">
               <Link to={`${editBase}/${id}`} className="block">
-                {item.image ? (
-                  <img src={mediaUrl(item.image)} alt="" className="aspect-[4/3] w-full object-cover" />
+                {item.image || item.images?.[0] ? (
+                  <img
+                    src={mediaUrl(item.images?.[0] || item.image)}
+                    alt=""
+                    className="aspect-[4/3] w-full object-cover"
+                  />
                 ) : (
                   <div className="flex aspect-[4/3] items-center justify-center bg-yd-cream text-xs text-yd-muted">No image</div>
                 )}
@@ -186,7 +191,9 @@ export function AdminMerchandisingFormPage({
     subtitle: "",
     placement: (lockedPlacement || "home") as AdminMerchandising["placement"],
     regionSlug: "",
+    festivalTheme: "generic" as FestivalTheme,
     image: "",
+    images: [] as string[],
     sortOrder: 0,
     isActive: true,
     startDate: "",
@@ -212,7 +219,14 @@ export function AdminMerchandisingFormPage({
       regionSlug:
         data.tasteIndiaRegion ||
         (data.placement === "region" ? regionSlugFromName(data.slug || data.name || "") : ""),
+      festivalTheme: (data.festivalTheme || "generic") as FestivalTheme,
       image: data.image || "",
+      images:
+        Array.isArray(data.images) && data.images.length
+          ? data.images.filter(Boolean)
+          : data.image
+            ? [data.image]
+            : [],
       sortOrder: data.sortOrder ?? 0,
       isActive: data.isActive !== false,
       startDate: toDateInput(data.startDate),
@@ -266,7 +280,15 @@ export function AdminMerchandisingFormPage({
         subtitle: form.subtitle || undefined,
         placement: lockedPlacement || form.placement,
         tasteIndiaRegion: form.placement === "region" ? form.regionSlug || null : null,
-        image: form.image || undefined,
+        festivalTheme: isFestival || form.placement === "festival" ? form.festivalTheme : undefined,
+        ...(isFestival || form.placement === "festival"
+          ? {
+              images: form.images,
+              image: form.images[0] || undefined,
+            }
+          : {
+              image: form.image || undefined,
+            }),
         sortOrder: Number(form.sortOrder),
         isActive: form.isActive,
         startDate: form.startDate || null,
@@ -363,12 +385,36 @@ export function AdminMerchandisingFormPage({
           rows={2}
           placeholder={isFestival ? "Sweets, snacks and gift boxes for the festival of lights" : undefined}
         />
-        <ImageUpload
-          label={isFestival ? "Festival image" : "Collection image"}
-          value={form.image}
-          onChange={(url) => setForm((p) => ({ ...p, image: url }))}
-          hint="Used on Offers, Gifts, Taste India, and Festival cards"
-        />
+        {isFestival || form.placement === "festival" ? (
+          <Select
+            label="Festival atmosphere"
+            value={form.festivalTheme}
+            onChange={(e) => setForm((p) => ({ ...p, festivalTheme: e.target.value as FestivalTheme }))}
+          >
+            {FESTIVAL_THEME_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        ) : null}
+        {isFestival || form.placement === "festival" ? (
+          <ImageUpload
+            label="Festival page images"
+            multiple
+            maxFiles={8}
+            value={form.images}
+            onChange={(urls) => setForm((p) => ({ ...p, images: urls, image: urls[0] || "" }))}
+            hint="Upload multiple hero images (local or Cloudinary). They rotate on the festival page; the first is the card cover."
+          />
+        ) : (
+          <ImageUpload
+            label="Collection image"
+            value={form.image}
+            onChange={(url) => setForm((p) => ({ ...p, image: url }))}
+            hint="Used on Offers, Gifts, Taste India, and Festival cards"
+          />
+        )}
         <Input
           label="Sort order"
           type="number"

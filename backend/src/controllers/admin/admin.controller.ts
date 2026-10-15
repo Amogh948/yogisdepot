@@ -168,6 +168,14 @@ export const settingsUpdateSchema = z.object({
   handlingFeeCents: z.coerce.number().int().min(0).optional(),
   smallCartFeeCents: z.coerce.number().int().min(0).optional(),
   smallCartThresholdCents: z.coerce.number().int().min(0).optional(),
+  sameDayDeliveryEnabled: z.coerce.boolean().optional(),
+  sameDayCutoffTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:mm 24-hour time")
+    .optional(),
+  sameDayTimezone: z.string().min(3).max(64).optional(),
+  sameDayWeekdays: z.array(z.coerce.number().int().min(0).max(6)).max(7).optional(),
+  sameDayPostalPrefixes: z.array(z.string().trim().min(1).max(12)).max(50).optional(),
   supportEmail: z.string().email().optional(),
 });
 

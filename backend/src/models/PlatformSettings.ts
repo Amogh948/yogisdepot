@@ -5,6 +5,10 @@ import {
   DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS,
   DEFAULT_HANDLING_FEE_CENTS,
   DEFAULT_PLATFORM_FEE_CENTS,
+  DEFAULT_SAME_DAY_CUTOFF_TIME,
+  DEFAULT_SAME_DAY_DELIVERY_ENABLED,
+  DEFAULT_SAME_DAY_TIMEZONE,
+  DEFAULT_SAME_DAY_WEEKDAYS,
   DEFAULT_SMALL_CART_FEE_CENTS,
   DEFAULT_SMALL_CART_THRESHOLD_CENTS,
   DEFAULT_SUPERFAST_DELIVERY_FEE_CENTS,
@@ -24,6 +28,15 @@ export interface PlatformSettingsDocument extends Document {
   handlingFeeCents: number;
   smallCartFeeCents: number;
   smallCartThresholdCents: number;
+  /** Same-day delivery promise (cutoff timer). Independent of Superfast surcharge. */
+  sameDayDeliveryEnabled: boolean;
+  /** Local cutoff time HH:mm (24h) in sameDayTimezone. */
+  sameDayCutoffTime: string;
+  sameDayTimezone: string;
+  /** Weekdays (0=Sun…6=Sat) when same-day delivery is offered. */
+  sameDayWeekdays: number[];
+  /** Optional postal prefixes (e.g. T2W). Empty = all areas. */
+  sameDayPostalPrefixes: string[];
   /** Legacy dollar mirrors */
   shippingFee?: number;
   freeShippingThreshold?: number;
@@ -56,6 +69,14 @@ const platformSettingsSchema = new Schema<PlatformSettingsDocument>(
       default: DEFAULT_SMALL_CART_THRESHOLD_CENTS,
       min: 0,
     },
+    sameDayDeliveryEnabled: { type: Boolean, default: DEFAULT_SAME_DAY_DELIVERY_ENABLED },
+    sameDayCutoffTime: { type: String, default: DEFAULT_SAME_DAY_CUTOFF_TIME, trim: true },
+    sameDayTimezone: { type: String, default: DEFAULT_SAME_DAY_TIMEZONE, trim: true },
+    sameDayWeekdays: {
+      type: [Number],
+      default: () => [...DEFAULT_SAME_DAY_WEEKDAYS],
+    },
+    sameDayPostalPrefixes: { type: [String], default: [] },
     shippingFee: { type: Number, min: 0 },
     freeShippingThreshold: { type: Number, min: 0 },
     supportEmail: { type: String, default: "support@yogisdepot.com" },

@@ -16,6 +16,11 @@ import { formatCad, formatCadFromCents } from "../../utils/money";
 import { TASTE_INDIA_REGION_OPTIONS } from "../../content/discovery";
 import { Download } from "lucide-react";
 
+function isGroceryCategory(category: { name?: string; slug?: string }) {
+  const hay = `${category.slug || ""} ${category.name || ""}`.toLowerCase();
+  return /\bgrocer/.test(hay);
+}
+
 type AdminStackVariant = {
   variantId: string;
   variantCode: string;
@@ -453,8 +458,9 @@ export function AdminProductWizardPage() {
       const taxableCategoryId =
         categoryOptionId((t) => t.code === "STANDARD") || categoryOptionId((t) => t.taxability === "TAXABLE");
       const nonTaxableCategoryId =
+        categoryOptionId((t) => t.code === "GROCERY_ZERO") ||
         categoryOptionId((t) => t.code === "EXEMPT") ||
-        categoryOptionId((t) => t.taxability === "EXEMPT" || t.taxability === "ZERO_RATED");
+        categoryOptionId((t) => t.taxability === "ZERO_RATED" || t.taxability === "EXEMPT");
       const taxCategoryId = form.taxable ? taxableCategoryId : nonTaxableCategoryId;
       await adminApi.createProductWizard({
         name: form.name,
@@ -540,7 +546,8 @@ export function AdminProductWizardPage() {
             <p className="mb-2 text-sm font-medium">Categories</p>
             <p className="mb-2 text-xs text-yd-muted">Select one or more categories</p>
             <div className="max-h-40 space-y-2 overflow-y-auto rounded-xl border border-yd-border p-3">
-              {((categories.data?.data || []) as Array<{ name: string; id?: string; _id?: string }>).map((c) => {
+              {((categories.data?.data || []) as Array<{ name: string; slug?: string; id?: string; _id?: string }>).map(
+                (c) => {
                 const cid = String(c.id || c._id || "");
                 const checked = form.categoryIds.includes(cid);
                 return (
@@ -549,18 +556,21 @@ export function AdminProductWizardPage() {
                       type="checkbox"
                       checked={checked}
                       onChange={(e) => {
-                        set(
-                          "categoryIds",
-                          e.target.checked
-                            ? [...form.categoryIds, cid]
-                            : form.categoryIds.filter((id) => id !== cid),
-                        );
+                        const nextIds = e.target.checked
+                          ? [...form.categoryIds, cid]
+                          : form.categoryIds.filter((id) => id !== cid);
+                        set("categoryIds", nextIds);
+                        // Groceries default to non-taxable; admin can override per product.
+                        if (e.target.checked && isGroceryCategory(c)) {
+                          set("taxable", false);
+                        }
                       }}
                     />
                     {c.name}
                   </label>
                 );
-              })}
+              },
+              )}
             </div>
           </div>
           <Select
@@ -661,8 +671,8 @@ export function AdminProductWizardPage() {
             <option value="non_taxable">Non-taxable — no tax on this product</option>
           </Select>
           <p className="text-xs text-yd-muted">
-            Provincial GST/PST/HST rates are configured under Admin → Provincial taxes. Tax uses the delivery address
-            province at checkout.
+            Groceries default to non-taxable (0% on the item). Mark individual grocery products Taxable when they should
+            be taxed. Platform and delivery fees are always taxed. Provincial rates: Admin → Provincial taxes.
           </p>
         </div>
       ) : null}
@@ -943,8 +953,9 @@ export function AdminProductEditPage() {
   const taxableCategoryId =
     categoryOptionId((t) => t.code === "STANDARD") || categoryOptionId((t) => t.taxability === "TAXABLE");
   const nonTaxableCategoryId =
+    categoryOptionId((t) => t.code === "GROCERY_ZERO") ||
     categoryOptionId((t) => t.code === "EXEMPT") ||
-    categoryOptionId((t) => t.taxability === "EXEMPT" || t.taxability === "ZERO_RATED");
+    categoryOptionId((t) => t.taxability === "ZERO_RATED" || t.taxability === "EXEMPT");
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 pb-28">
@@ -1236,6 +1247,10 @@ export function AdminProductEditPage() {
               <option value="taxable">Taxable — province tax applies at checkout</option>
               <option value="non_taxable">Non-taxable — no tax on this product</option>
             </Select>
+            <p className="text-xs text-yd-muted">
+              Product-level flag controls tax at checkout. Non-taxable groceries are excluded; platform and delivery fees
+              stay taxable.
+            </p>
             <div className="grid gap-3 sm:grid-cols-3">
               <Input
                 label="Cost (¢)"
@@ -2201,10 +2216,24 @@ export function AdminAnalyticsPage() {
   return <AdminDashboardPage />;
 }
 
+const SAME_DAY_WEEKDAY_OPTIONS = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 0, label: "Sun" },
+] as const;
+
 export function AdminSettingsPage() {
+  const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["settings"], queryFn: () => adminApi.settings() });
   const toast = useToastStore((s) => s.push);
-  const settings = (query.data?.data || {}) as Record<string, string | number>;
+  const settings = (query.data?.data || {}) as Record<string, unknown>;
+  const defaultWeekdays = Array.isArray(settings.sameDayWeekdays)
+    ? (settings.sameDayWeekdays as number[])
+    : [1, 2, 3, 4, 5, 6];
   if (query.isLoading) return <Skeleton className="h-40" />;
   return (
     <form
@@ -2212,6 +2241,13 @@ export function AdminSettingsPage() {
       onSubmit={async (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
+        const weekdays = SAME_DAY_WEEKDAY_OPTIONS.map((d) => d.value).filter((value) =>
+          form.getAll("sameDayWeekdays").includes(String(value)),
+        );
+        const prefixes = String(form.get("sameDayPostalPrefixes") || "")
+          .split(/[\s,]+/)
+          .map((item) => item.trim().toUpperCase())
+          .filter(Boolean);
         await adminApi.updateSettings({
           siteName: String(form.get("siteName")),
           currency: String(form.get("currency")),
@@ -2222,8 +2258,15 @@ export function AdminSettingsPage() {
           smallCartFeeCents: Number(form.get("smallCartFeeCents")),
           smallCartThresholdCents: Number(form.get("smallCartThresholdCents")),
           supportEmail: String(form.get("supportEmail")),
+          sameDayDeliveryEnabled: form.get("sameDayDeliveryEnabled") === "on",
+          sameDayCutoffTime: String(form.get("sameDayCutoffTime") || "16:00"),
+          sameDayTimezone: String(form.get("sameDayTimezone") || "America/Edmonton"),
+          sameDayWeekdays: weekdays.length ? weekdays : [1, 2, 3, 4, 5, 6],
+          sameDayPostalPrefixes: prefixes,
         });
         toast("Settings saved");
+        await query.refetch();
+        await queryClient.invalidateQueries({ queryKey: ["public-settings"] });
       }}
     >
       <PageHeader title="Settings" />
@@ -2256,6 +2299,100 @@ export function AdminSettingsPage() {
       <Input label="Small cart fee (cents)" name="smallCartFeeCents" type="number" defaultValue={String(settings.smallCartFeeCents ?? 199)} />
       <Input label="Small cart threshold (cents)" name="smallCartThresholdCents" type="number" defaultValue={String(settings.smallCartThresholdCents ?? 2500)} />
       <Input label="Support email" name="supportEmail" defaultValue={String(settings.supportEmail || "")} />
+
+      <div className="space-y-3 rounded-2xl border border-yd-border bg-white p-4 shadow-soft">
+        <h2 className="font-display text-lg text-yd-forest">Same-day delivery cutoff</h2>
+        <p className="text-xs text-yd-muted">
+          Shows a countdown on the homepage, product pages, cart, and checkout. Separate from Superfast Delivery
+          (paid surcharge) — this is the order-by time for same-day vs next-day promises.
+        </p>
+        <label className="flex items-center gap-2 text-sm font-medium text-yd-ink">
+          <input
+            type="checkbox"
+            name="sameDayDeliveryEnabled"
+            defaultChecked={settings.sameDayDeliveryEnabled !== false}
+            className="accent-yd-green"
+          />
+          Enable same-day delivery timer
+        </label>
+        <Input
+          label="Cutoff time (24h HH:mm)"
+          name="sameDayCutoffTime"
+          defaultValue={String(settings.sameDayCutoffTime || "16:00")}
+          placeholder="16:00"
+        />
+        <Select
+          label="Timezone"
+          name="sameDayTimezone"
+          defaultValue={String(settings.sameDayTimezone || "America/Edmonton")}
+        >
+          {[
+            { value: "America/St_Johns", label: "Newfoundland (St. John’s)" },
+            { value: "America/Halifax", label: "Atlantic (Halifax)" },
+            { value: "America/Glace_Bay", label: "Atlantic (Cape Breton)" },
+            { value: "America/Moncton", label: "Atlantic (Moncton)" },
+            { value: "America/Goose_Bay", label: "Atlantic (Happy Valley–Goose Bay)" },
+            { value: "America/Blanc-Sablon", label: "Atlantic — no DST (Blanc-Sablon, QC)" },
+            { value: "America/Toronto", label: "Eastern (Toronto / Ottawa)" },
+            { value: "America/Iqaluit", label: "Eastern (Iqaluit)" },
+            { value: "America/Nipigon", label: "Eastern (Nipigon, ON)" },
+            { value: "America/Thunder_Bay", label: "Eastern (Thunder Bay)" },
+            { value: "America/Pangnirtung", label: "Eastern (Pangnirtung)" },
+            { value: "America/Winnipeg", label: "Central (Winnipeg)" },
+            { value: "America/Rainy_River", label: "Central (Rainy River)" },
+            { value: "America/Resolute", label: "Central (Resolute)" },
+            { value: "America/Rankin_Inlet", label: "Central (Rankin Inlet)" },
+            { value: "America/Regina", label: "Central — no DST (Saskatchewan)" },
+            { value: "America/Swift_Current", label: "Central — no DST (Swift Current)" },
+            { value: "America/Edmonton", label: "Mountain (Edmonton / Calgary)" },
+            { value: "America/Cambridge_Bay", label: "Mountain (Cambridge Bay)" },
+            { value: "America/Yellowknife", label: "Mountain (Yellowknife)" },
+            { value: "America/Inuvik", label: "Mountain (Inuvik)" },
+            { value: "America/Creston", label: "Mountain — no DST (Creston, BC)" },
+            { value: "America/Dawson_Creek", label: "Mountain — no DST (Dawson Creek)" },
+            { value: "America/Fort_Nelson", label: "Mountain — no DST (Fort Nelson)" },
+            { value: "America/Whitehorse", label: "Mountain — no DST (Whitehorse)" },
+            { value: "America/Dawson", label: "Mountain — no DST (Dawson City)" },
+            { value: "America/Vancouver", label: "Pacific (Vancouver)" },
+          ].map((tz) => (
+            <option key={tz.value} value={tz.value}>
+              {tz.label}
+            </option>
+          ))}
+        </Select>
+        <div>
+          <p className="mb-2 text-sm font-medium text-yd-ink">Applicable days</p>
+          <div className="flex flex-wrap gap-2">
+            {SAME_DAY_WEEKDAY_OPTIONS.map((day) => (
+              <label
+                key={day.value}
+                className="inline-flex items-center gap-1.5 rounded-full border border-yd-border px-3 py-1.5 text-xs font-semibold"
+              >
+                <input
+                  type="checkbox"
+                  name="sameDayWeekdays"
+                  value={day.value}
+                  defaultChecked={defaultWeekdays.includes(day.value)}
+                  className="accent-yd-green"
+                />
+                {day.label}
+              </label>
+            ))}
+          </div>
+        </div>
+        <Input
+          label="Applicable postal prefixes (optional)"
+          name="sameDayPostalPrefixes"
+          defaultValue={
+            Array.isArray(settings.sameDayPostalPrefixes)
+              ? (settings.sameDayPostalPrefixes as string[]).join(", ")
+              : ""
+          }
+          placeholder="T2W, T2X, T3A"
+        />
+        <p className="-mt-1 text-xs text-yd-muted">Leave blank for all delivery areas. Use FSA prefixes like T2W.</p>
+      </div>
+
       <Button>Save</Button>
     </form>
   );
