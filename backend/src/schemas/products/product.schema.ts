@@ -19,10 +19,6 @@ export const createProductSchema = z.object({
   categoryId: z.string().min(1),
   subCategoryId: z.string().optional(),
   brand: z.string().optional(),
-  tasteIndiaRegion: z
-    .enum(["north-india", "south-india", "west-india", "east-india", "northeast-india"])
-    .optional()
-    .nullable(),
   festivalId: z.string().optional().nullable(),
   images: z.array(z.string()).default([]),
   thumbnail: z.string().optional(),
@@ -41,6 +37,7 @@ export const createProductSchema = z.object({
   isVegan: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
   isActive: z.boolean().optional(),
+  unlimitedQuantity: z.boolean().optional(),
   foodType: z.string().optional(),
   dietaryTags: z.array(z.string()).optional(),
   calories: z.number().optional(),
@@ -66,6 +63,7 @@ export const productQuerySchema = z.object({
   page: z.coerce.number().optional(),
   limit: z.coerce.number().optional(),
   search: z.string().optional(),
+  /** Single slug/id, or comma-separated list for multi-category OR filter */
   category: z.string().optional(),
   subcategory: z.string().optional(),
   vendor: z.string().optional(),
@@ -80,7 +78,6 @@ export const productQuerySchema = z.object({
   featured: z.enum(["true", "false"]).optional(),
   inStock: z.enum(["true", "false"]).optional(),
   brand: z.string().optional(),
-  region: z.string().optional(),
   festival: z.string().optional(),
   discount: z.enum(["true", "false"]).optional(),
 });

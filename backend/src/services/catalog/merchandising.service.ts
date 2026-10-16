@@ -6,18 +6,12 @@ import {
 } from "../../models/MerchandisingCollection";
 import { Product, ProductDocument } from "../../models/Product";
 import { slugify } from "../../utils/slug";
-import {
-  FESTIVAL_THEMES,
-  FestivalTheme,
-  TASTE_INDIA_REGIONS,
-  TasteIndiaRegion,
-} from "../../config/constants";
+import { FESTIVAL_THEMES, FestivalTheme } from "../../config/constants";
 
 export interface MerchandisingInput {
   name: string;
   subtitle?: string;
   placement?: MerchandisingPlacement;
-  tasteIndiaRegion?: TasteIndiaRegion | null;
   festivalTheme?: FestivalTheme;
   image?: string;
   images?: string[];
@@ -87,37 +81,8 @@ function isCurrentlyVisible(row: { startDate?: Date | null; endDate?: Date | nul
   return true;
 }
 
-function tasteIndiaSlugFrom(nameOrSlug: string) {
-  const normalized = slugify(nameOrSlug);
-  if ((TASTE_INDIA_REGIONS as readonly string[]).includes(normalized)) {
-    return normalized;
-  }
-  return (TASTE_INDIA_REGIONS as readonly string[]).find(
-    (region) => normalized === region || normalized.startsWith(`${region}-`),
-  );
-}
-
-function resolveTasteIndiaRegion(
-  value: string | null | undefined,
-  placement?: MerchandisingPlacement,
-  name?: string,
-): TasteIndiaRegion | null | undefined {
-  if (value === undefined && placement === undefined && name === undefined) return undefined;
-  if (value === null || value === "") return null;
-  if (value && (TASTE_INDIA_REGIONS as readonly string[]).includes(value)) {
-    return value as TasteIndiaRegion;
-  }
-  if (placement === "region" && name) {
-    return (tasteIndiaSlugFrom(name) as TasteIndiaRegion | undefined) || null;
-  }
-  if (value !== undefined) {
-    throw new BadRequestError("Invalid Taste India region");
-  }
-  return undefined;
-}
-
-async function uniqueSlug(name: string, excludeId?: string, preferredSlug?: string) {
-  const base = preferredSlug || slugify(name);
+async function uniqueSlug(name: string, excludeId?: string) {
+  const base = slugify(name);
   let slug = base;
   let n = 2;
   while (true) {
@@ -196,22 +161,13 @@ export const merchandisingService = {
     const startDate = parseScheduleDate(input.startDate, false) ?? null;
     const endDate = parseScheduleDate(input.endDate, true) ?? null;
     assertSchedule(startDate, endDate);
-    const tasteIndiaRegion = resolveTasteIndiaRegion(
-      input.tasteIndiaRegion,
-      input.placement,
-      input.name,
-    );
-    const preferredSlug =
-      tasteIndiaRegion ||
-      (input.placement === "region" ? tasteIndiaSlugFrom(input.name) : undefined);
     const festivalTheme = resolveFestivalTheme(input.festivalTheme);
     const images = normalizeImages(input.images, input.image) || [];
     const row = await MerchandisingCollection.create({
       name: input.name.trim(),
-      slug: await uniqueSlug(input.name, undefined, preferredSlug || undefined),
+      slug: await uniqueSlug(input.name),
       subtitle: input.subtitle,
       placement: input.placement || "home",
-      tasteIndiaRegion: tasteIndiaRegion || undefined,
       festivalTheme:
         input.placement === "festival" ? festivalTheme || "generic" : festivalTheme || undefined,
       images,
@@ -233,26 +189,9 @@ export const merchandisingService = {
         throw new BadRequestError("Name is required");
       }
       row.name = input.name.trim();
+      row.slug = await uniqueSlug(row.name, id);
     }
     if (input.placement !== undefined) row.placement = input.placement;
-    if (input.tasteIndiaRegion !== undefined || input.placement !== undefined || input.name !== undefined) {
-      const region = resolveTasteIndiaRegion(
-        input.tasteIndiaRegion !== undefined ? input.tasteIndiaRegion : row.tasteIndiaRegion,
-        input.placement ?? row.placement,
-        input.name ?? row.name,
-      );
-      if (region === null) {
-        row.set("tasteIndiaRegion", undefined);
-      } else if (region) {
-        row.tasteIndiaRegion = region;
-      }
-    }
-    if (input.name !== undefined || input.placement !== undefined || input.tasteIndiaRegion !== undefined) {
-      const preferredSlug =
-        row.tasteIndiaRegion ||
-        (row.placement === "region" ? tasteIndiaSlugFrom(row.name) : undefined);
-      row.slug = await uniqueSlug(row.name, id, preferredSlug || undefined);
-    }
     if (input.subtitle !== undefined) row.subtitle = input.subtitle;
     if (input.festivalTheme !== undefined) {
       row.festivalTheme = resolveFestivalTheme(input.festivalTheme) || "generic";
@@ -294,33 +233,6 @@ export const merchandisingService = {
     return MerchandisingCollection.find(filter).sort({ sortOrder: 1, createdAt: -1 });
   },
 
-  /** Active collections targeted to a Taste India region (explicit region, region placement, or tagged products). */
-  async listPublicForRegion(regionSlug: string) {
-    if (!(TASTE_INDIA_REGIONS as readonly string[]).includes(regionSlug)) {
-      return [] as Awaited<ReturnType<typeof this.listPublic>>;
-    }
-    const rows = await this.listPublic();
-    const matched: typeof rows = [];
-    for (const row of rows) {
-      const explicit =
-        row.tasteIndiaRegion === regionSlug ||
-        (row.placement === "region" && tasteIndiaSlugFrom(row.slug) === regionSlug) ||
-        (row.placement === "region" && tasteIndiaSlugFrom(row.name) === regionSlug);
-      if (explicit) {
-        matched.push(row);
-        continue;
-      }
-      if (!row.productIds?.length) continue;
-      const hasTaggedProduct = await Product.exists({
-        _id: { $in: row.productIds },
-        tasteIndiaRegion: regionSlug,
-        $or: [{ isActive: true }, { status: "active" }],
-      });
-      if (hasTaggedProduct) matched.push(row);
-    }
-    return matched;
-  },
-
   async getPublicBySlug(slug: string) {
     const row = await MerchandisingCollection.findOne({ slug, isActive: true });
     if (!row || !isCurrentlyVisible(row)) throw new NotFoundError("Collection not found");
@@ -337,26 +249,21 @@ export const merchandisingService = {
     return ids.map((id) => byId.get(String(id))).filter(Boolean) as ProductDocument[];
   },
 
-  /** Products curated on the collection plus products tagged for this region/festival. */
+  /** Products curated on the collection plus products tagged for this festival. */
   async productsForCollection(row: {
     _id: Types.ObjectId;
     slug: string;
     placement: string;
-    tasteIndiaRegion?: string;
     productIds: Types.ObjectId[];
   }) {
     const explicit = await this.productsFor(row.productIds || []);
-    const taggedQuery: Record<string, unknown> = {
-      $or: [{ isActive: true }, { status: "active" }],
-    };
-    if (row.placement === "region" || row.tasteIndiaRegion) {
-      taggedQuery.tasteIndiaRegion = row.tasteIndiaRegion || tasteIndiaSlugFrom(row.slug) || row.slug;
-    } else if (row.placement === "festival") {
-      taggedQuery.festivalId = row._id;
-    } else {
+    if (row.placement !== "festival") {
       return explicit;
     }
-    const tagged = await Product.find(taggedQuery);
+    const tagged = await Product.find({
+      festivalId: row._id,
+      $or: [{ isActive: true }, { status: "active" }],
+    });
     const seen = new Set(explicit.map((p) => String(p._id)));
     const merged = [...explicit];
     for (const product of tagged) {

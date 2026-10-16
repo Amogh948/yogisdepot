@@ -55,10 +55,6 @@ export const productWizardSchema = z.object({
   storageInstructions: z.string().optional(),
   usageInstructions: z.string().optional(),
   tags: z.array(z.string()).optional(),
-  tasteIndiaRegion: z
-    .enum(["north-india", "south-india", "west-india", "east-india", "northeast-india"])
-    .optional()
-    .nullable(),
   festivalId: z.string().optional().nullable(),
   returnWindowDays: z.number().int().min(0).optional(),
   deliveryEstimateDays: z.number().int().min(1).optional(),
@@ -102,10 +98,7 @@ export const productStackUpdateSchema = z.object({
   isActive: z.boolean().optional(),
   isVegetarian: z.boolean().optional(),
   isVegan: z.boolean().optional(),
-  tasteIndiaRegion: z
-    .enum(["north-india", "south-india", "west-india", "east-india", "northeast-india"])
-    .optional()
-    .nullable(),
+  unlimitedQuantity: z.boolean().optional(),
   festivalId: z.string().optional().nullable(),
   returnWindowDays: z.number().int().min(0).optional(),
   deliveryEstimateDays: z.number().int().min(1).optional(),

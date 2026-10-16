@@ -1,6 +1,6 @@
 import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Leaf, ShieldCheck, Truck } from "lucide-react";
 import { useProducts, useCategories, useWishlist } from "../../hooks/useCatalog";
@@ -12,7 +12,6 @@ import { buildHomeHeroSlides, HomeHeroCarousel } from "../../components/home/Hom
 import { mediaUrl, entityId, type Product, type Category } from "../../types";
 import { Skeleton, SectionHeader } from "../../components/ui/Feedback";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
-import { HomeTasteIndiaSection } from "../../components/discovery/HomeTasteIndiaSection";
 import { HomeFestivalStoreSection } from "../../components/discovery/HomeFestivalStoreSection";
 import { SameDayDeliveryBanner } from "../../components/commerce/SameDayDeliveryBanner";
 
@@ -73,6 +72,45 @@ export function HomePage() {
   const onAdd = (p: Product) => addToCart.mutate({ product: p });
   const onWish = (p: Product) => toggleWishlist.mutate({ product: p, wished: wished.has(entityId(p)) });
 
+  const heroColumnRef = useRef<HTMLDivElement>(null);
+  const categoryProbeRef = useRef<HTMLLIElement>(null);
+  const categoryHeaderRef = useRef<HTMLParagraphElement>(null);
+  const categoryViewAllRef = useRef<HTMLDivElement>(null);
+  const [visibleCategoryCount, setVisibleCategoryCount] = useState(6);
+
+  useLayoutEffect(() => {
+    const column = heroColumnRef.current;
+    if (!column || typeof ResizeObserver === "undefined") return;
+
+    const update = () => {
+      const columnHeight = column.getBoundingClientRect().height;
+      const headerHeight = categoryHeaderRef.current?.getBoundingClientRect().height ?? 24;
+      const viewAllHeight = categoryViewAllRef.current?.getBoundingClientRect().height ?? 40;
+      const itemHeight = categoryProbeRef.current?.getBoundingClientRect().height ?? 44;
+      // nav padding (p-3 = 12*2) + header mb-2 (8) + list/footer gap (4) + row gaps (space-y-0.5 ≈ 2px)
+      const reserved = 24 + headerHeight + 8 + 4 + viewAllHeight;
+      const available = Math.max(0, columnHeight - reserved);
+      const perItem = Math.max(itemHeight + 2, 1);
+      const count = Math.max(0, Math.min(parents.length, Math.floor(available / perItem)));
+      setVisibleCategoryCount((prev) => (prev === count ? prev : count));
+    };
+
+    update();
+    const observer = new ResizeObserver(() => update());
+    observer.observe(column);
+    for (const child of Array.from(column.children)) {
+      observer.observe(child);
+    }
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [parents.length, heroSlides.length]);
+
+  const desktopCategories = parents.slice(0, visibleCategoryCount);
+  const hasMoreCategories = parents.length > visibleCategoryCount;
+
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 lg:space-y-10">
       <Helmet>
@@ -80,31 +118,51 @@ export function HomePage() {
         <meta name="description" content="Everyday favourites from trusted brands of South Asia" />
       </Helmet>
 
-      <div className="flex w-full min-w-0 flex-col gap-6 lg:flex-row">
-        <aside className="hidden w-[220px] shrink-0 lg:block">
-          <nav className="sticky top-28 rounded-[14px] border border-yd-border bg-white p-3 shadow-soft">
-            <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-yd-muted">Categories</p>
-            <ul className="space-y-0.5">
-              {parents.map((cat) => (
+      <div className="flex w-full min-w-0 flex-col gap-6 lg:flex-row lg:items-stretch">
+        <aside className="hidden w-[220px] shrink-0 lg:flex">
+          <nav className="flex h-full min-h-0 w-full flex-col rounded-[14px] border border-yd-border bg-white p-3 shadow-soft">
+            <p
+              ref={categoryHeaderRef}
+              className="mb-2 shrink-0 px-2 text-xs font-semibold uppercase tracking-wide text-yd-muted"
+            >
+              Categories
+            </p>
+            <ul className="min-h-0 flex-1 space-y-0.5 overflow-hidden">
+              {/* Hidden probe row so we can measure a real category link height */}
+              {parents[0] ? (
+                <li ref={categoryProbeRef} className="pointer-events-none absolute -left-[9999px] opacity-0" aria-hidden>
+                  <span className="flex items-center gap-2 rounded-xl px-2 py-2.5 text-sm font-medium">
+                    <CategoryDot category={parents[0]} />
+                    {parents[0].name}
+                  </span>
+                </li>
+              ) : null}
+              {desktopCategories.map((cat) => (
                 <li key={cat.slug}>
-                  <Link to={`/categories/${cat.slug}`} className="flex items-center gap-2 rounded-xl px-2 py-2.5 text-sm font-medium text-yd-ink hover:bg-yd-bg">
+                  <Link
+                    to={`/categories/${cat.slug}`}
+                    className="flex items-center gap-2 rounded-xl px-2 py-2.5 text-sm font-medium text-yd-ink hover:bg-yd-bg"
+                  >
                     <CategoryDot category={cat} />
                     {cat.name}
                   </Link>
                 </li>
               ))}
-              <li>
-                <Link to="/categories" className="flex items-center gap-2 rounded-xl px-2 py-2.5 text-sm font-semibold text-yd-green">
-                  View all →
-                </Link>
-              </li>
             </ul>
+            <div ref={categoryViewAllRef} className="mt-1 shrink-0">
+              <Link
+                to="/categories"
+                className="flex items-center gap-2 rounded-xl px-2 py-2.5 text-sm font-semibold text-yd-green"
+              >
+                {hasMoreCategories ? "View all →" : "All categories →"}
+              </Link>
+            </div>
           </nav>
         </aside>
 
-        <div className="min-w-0 w-full flex-1 space-y-5">
-          <HomeHeroCarousel slides={heroSlides} />
+        <div ref={heroColumnRef} className="min-w-0 w-full flex-1 space-y-5">
           <SameDayDeliveryBanner />
+          <HomeHeroCarousel slides={heroSlides} />
 
           <div className="grid grid-cols-3 gap-2 lg:hidden">
             {TRUST_MOBILE.map((item) => (
@@ -155,7 +213,6 @@ export function HomePage() {
         rails={homeRails}
       />
 
-      <HomeTasteIndiaSection />
       <HomeFestivalStoreSection />
 
       {homeSections.isLoading

@@ -11,6 +11,8 @@ import { ConfirmDialog } from "../../components/ui/Overlay";
 import { entityId, mediaUrl, type Vendor } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
+import { AdminBackLink } from "../../components/admin/AdminBackLink";
+import { useAdminBack } from "../../hooks/useAdminBack";
 
 const CA_PROVINCES = ["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"] as const;
 
@@ -146,6 +148,7 @@ export function AdminVendorFormPage() {
   const { id } = useParams();
   const isNew = !id || id === "new";
   const navigate = useNavigate();
+  const goBack = useAdminBack("/admin/vendors");
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -247,7 +250,7 @@ export function AdminVendorFormPage() {
         title="Vendor not found"
         body="This vendor may have been removed."
         action={
-          <Button variant="outline" onClick={() => navigate("/admin/vendors")}>
+          <Button variant="outline" onClick={goBack}>
             Back
           </Button>
         }
@@ -259,11 +262,7 @@ export function AdminVendorFormPage() {
     <div className="mx-auto max-w-2xl space-y-4 pb-24">
       <PageHeader
         title={isNew ? "Add vendor" : "Edit vendor"}
-        action={
-          <Link to="/admin/vendors" className="text-sm font-semibold text-yd-muted">
-            Back
-          </Link>
-        }
+        action={<AdminBackLink fallback="/admin/vendors" />}
       />
 
       {!isNew ? (
@@ -350,7 +349,7 @@ export function AdminVendorFormPage() {
               Delete
             </Button>
           ) : null}
-          <Button variant="outline" disabled={saving} onClick={() => navigate("/admin/vendors")}>
+          <Button variant="outline" disabled={saving} onClick={goBack}>
             Cancel
           </Button>
           <Button

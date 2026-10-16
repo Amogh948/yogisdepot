@@ -28,6 +28,7 @@ export interface PublicSkuOffer {
   images: string[];
   available: boolean;
   availableQuantity: number;
+  unlimitedQuantity?: boolean;
   shortDescription?: string;
   description?: string;
   taxCategoryId?: string;
@@ -120,8 +121,11 @@ export const skuOfferService = {
       price: sellingPriceCents / 100,
       compareAtPrice: mrpCents > sellingPriceCents ? mrpCents / 100 : undefined,
       images: publicImages(product),
-      available: availableQuantity > 0 && (product.status === "active" || product.isActive !== false),
+      available:
+        product.unlimitedQuantity !== false ||
+        (availableQuantity > 0 && (product.status === "active" || product.isActive !== false)),
       availableQuantity,
+      unlimitedQuantity: product.unlimitedQuantity !== false,
       shortDescription: product.shortDescription,
       description: product.description,
       taxCategoryId: sku.taxCategoryId ? String(sku.taxCategoryId) : undefined,
@@ -162,8 +166,11 @@ export const skuOfferService = {
           price: sellingPriceCents / 100,
           compareAtPrice: mrpCents > sellingPriceCents ? mrpCents / 100 : undefined,
           images: publicImages(product),
-          available: (product.stock ?? 0) > 0 && product.isActive !== false,
+          available:
+            product.unlimitedQuantity !== false ||
+            ((product.stock ?? 0) > 0 && product.isActive !== false),
           availableQuantity: product.stock ?? 0,
+          unlimitedQuantity: product.unlimitedQuantity !== false,
           shortDescription: product.shortDescription,
           description: product.description,
           vendorId: String(product.vendorId),

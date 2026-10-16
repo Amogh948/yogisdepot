@@ -11,6 +11,8 @@ import { ConfirmDialog } from "../../components/ui/Overlay";
 import { entityId, mediaUrl } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
+import { AdminBackLink } from "../../components/admin/AdminBackLink";
+import { useAdminBack } from "../../hooks/useAdminBack";
 
 export function AdminBrandsPage() {
   const query = useQuery({ queryKey: ["admin-brands"], queryFn: () => adminApi.brands() });
@@ -88,6 +90,7 @@ export function AdminBrandFormPage() {
   const { id } = useParams();
   const isNew = !id || id === "new";
   const navigate = useNavigate();
+  const goBack = useAdminBack("/admin/brands");
   const toast = useToastStore((s) => s.push);
   const brands = useQuery({ queryKey: ["admin-brands"], queryFn: () => adminApi.brands() });
   const [saving, setSaving] = useState(false);
@@ -139,11 +142,7 @@ export function AdminBrandFormPage() {
     <div className="mx-auto max-w-lg space-y-4 pb-24">
       <PageHeader
         title={isNew ? "Add brand" : form.name || "Edit brand"}
-        action={
-          <Link to="/admin/brands" className="text-sm font-semibold text-yd-muted">
-            Back
-          </Link>
-        }
+        action={<AdminBackLink fallback="/admin/brands" />}
       />
       <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
         <Input label="Name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
@@ -164,7 +163,7 @@ export function AdminBrandFormPage() {
             Delete
           </Button>
         ) : null}
-        <Button variant="outline" disabled={saving} onClick={() => navigate("/admin/brands")}>
+        <Button variant="outline" disabled={saving} onClick={goBack}>
           Cancel
         </Button>
         <Button className="flex-1" disabled={saving || !form.name.trim()} onClick={() => void save()}>

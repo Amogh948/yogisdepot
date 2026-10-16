@@ -12,6 +12,8 @@ import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { useCategories } from "../../hooks/useCatalog";
 import { formatCad } from "../../utils/money";
+import { BackLink } from "../../components/navigation/BackLink";
+import { useNavigateBack } from "../../hooks/useNavigateBack";
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
@@ -68,6 +70,7 @@ export function VendorProductFormPage() {
   const categories = useCategories();
   const toast = useToastStore((s) => s.push);
   const navigate = useNavigate();
+  const goBack = useNavigateBack("/vendor/products");
   const existing = useQuery({
     queryKey: ["vendor-products"],
     queryFn: () => vendorApi.products({ limit: 100 }),
@@ -111,7 +114,10 @@ export function VendorProductFormPage() {
         }
       }}
     >
-      <PageHeader title={id ? "Edit product" : "Create product"} />
+      <PageHeader
+        title={id ? "Edit product" : "Create product"}
+        action={<BackLink fallback="/vendor/products" />}
+      />
       <Input label="Name" name="name" defaultValue={product?.name} required />
       <Input label="SKU" name="sku" defaultValue={product?.sku} required />
       <Select label="Category" name="categoryId" defaultValue={typeof product?.categoryId === "object" ? undefined : undefined}>
@@ -128,7 +134,12 @@ export function VendorProductFormPage() {
       <Textarea label="Ingredients" name="ingredients" defaultValue={product?.ingredients} />
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="isVegetarian" defaultChecked={product?.isVegetarian ?? true} /> Vegetarian</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="isVegan" defaultChecked={product?.isVegan} /> Vegan</label>
-      <Button>Save product</Button>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" onClick={goBack}>
+          Cancel
+        </Button>
+        <Button>Save product</Button>
+      </div>
     </form>
   );
 }
@@ -157,7 +168,7 @@ export function VendorOrderDetailPage() {
   if (!order) return <Skeleton className="h-40" />;
   return (
     <div className="space-y-3">
-      <PageHeader title={order.orderNumber} />
+      <PageHeader title={order.orderNumber} action={<BackLink fallback="/vendor/orders" />} />
       {order.items.map((item) => (
         <p key={item.productId} className="rounded-2xl bg-white p-3">{item.productName} × {item.quantity}</p>
       ))}

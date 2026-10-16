@@ -11,6 +11,8 @@ import { entityId, mediaUrl } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { formatCad } from "../../utils/money";
+import { AdminBackLink } from "../../components/admin/AdminBackLink";
+import { useAdminBack } from "../../hooks/useAdminBack";
 
 const SECTION_LABELS: Record<AdminHomeSection["key"], string> = {
   bestsellers: "Bestsellers",
@@ -72,6 +74,7 @@ export function AdminHomeSectionsPage() {
 export function AdminHomeSectionFormPage() {
   const { keyOrId } = useParams();
   const navigate = useNavigate();
+  const goBack = useAdminBack("/admin/home-sections");
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
   const existing = useQuery({
@@ -175,11 +178,7 @@ export function AdminHomeSectionFormPage() {
       <EmptyState
         title="Section not found"
         body="This home section could not be loaded."
-        action={
-          <Link to="/admin/home-sections" className="text-sm font-semibold text-yd-green">
-            Back
-          </Link>
-        }
+        action={<AdminBackLink fallback="/admin/home-sections" className="text-sm font-semibold text-yd-green" />}
       />
     );
   }
@@ -191,11 +190,7 @@ export function AdminHomeSectionFormPage() {
     <div className="mx-auto max-w-2xl space-y-4 pb-28">
       <PageHeader
         title={`Edit ${defaultLabel}`}
-        action={
-          <Link to="/admin/home-sections" className="text-sm font-semibold text-yd-muted">
-            Back
-          </Link>
-        }
+        action={<AdminBackLink fallback="/admin/home-sections" />}
       />
       <section className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-wide text-yd-muted">Section key · {sectionKey}</p>
@@ -318,7 +313,7 @@ export function AdminHomeSectionFormPage() {
 
       <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
         <div className="mx-auto flex max-w-2xl gap-2">
-          <Button variant="outline" disabled={saving} onClick={() => navigate("/admin/home-sections")}>
+          <Button variant="outline" disabled={saving} onClick={goBack}>
             Cancel
           </Button>
           <Button className="flex-1" disabled={saving || !form.title.trim()} onClick={() => void save()}>

@@ -25,6 +25,7 @@ import { entityId } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
+import { BackLink } from "../../components/navigation/BackLink";
 
 const accountLinks = [
   { to: "/orders", label: "My Orders", icon: Package },
@@ -49,6 +50,11 @@ export function ProfilePage() {
   if (!user) return null;
   return (
     <div className="mx-auto max-w-lg space-y-5 lg:max-w-none lg:grid lg:grid-cols-[260px_1fr] lg:gap-8 lg:space-y-0">
+      <div className="lg:col-span-2">
+        <BackLink fallback="/" className="text-sm font-semibold text-yd-green">
+          ← Back
+        </BackLink>
+      </div>
       <aside className="space-y-4">
         <section className="rounded-[14px] border border-yd-border bg-white p-5 shadow-soft">
           <div className="flex items-center gap-4">
@@ -183,6 +189,11 @@ export function AddressesPage() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
+      <div className="space-y-3 lg:col-span-2">
+        <BackLink fallback="/profile" className="text-sm font-semibold text-yd-green">
+          ← Back
+        </BackLink>
+      </div>
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="font-display text-3xl text-yd-forest">Addresses</h1>
@@ -245,6 +256,9 @@ export function WishlistPage() {
   }
   return (
     <div>
+      <BackLink fallback="/profile" className="mb-3 text-sm font-semibold text-yd-green">
+        ← Back
+      </BackLink>
       <h1 className="mb-4 font-display text-3xl text-yd-forest">Wishlist</h1>
       <ProductGrid
         products={query.data.data}

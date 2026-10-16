@@ -378,17 +378,6 @@ button {
   }
 }
 
-/* Taste India map */
-.yd-taste-map-region--active {
-  filter: drop-shadow(0 0 8px rgba(216, 91, 11, 0.35));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .yd-taste-map-region--active {
-    filter: none;
-  }
-}
-
 /* Festival page shell — full immersive theme */
 .yd-fest-page {
   position: relative;

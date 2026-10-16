@@ -13,8 +13,9 @@ import { ConfirmDialog, Modal } from "../../components/ui/Overlay";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../services/api/client";
 import { formatCad, formatCadFromCents } from "../../utils/money";
-import { TASTE_INDIA_REGION_OPTIONS } from "../../content/discovery";
 import { Download } from "lucide-react";
+import { AdminBackLink } from "../../components/admin/AdminBackLink";
+import { useAdminBack } from "../../hooks/useAdminBack";
 
 function isGroceryCategory(category: { name?: string; slug?: string }) {
   const hay = `${category.slug || ""} ${category.name || ""}`.toLowerCase();
@@ -52,7 +53,6 @@ type AdminProductStack = {
   brand?: string;
   brandName?: string;
   brandId?: { name?: string; slug?: string; id?: string; _id?: string } | string;
-  tasteIndiaRegion?: string | null;
   festivalId?: string | null;
   categoryId?: { name?: string; slug?: string; id?: string; _id?: string } | string;
   categoryIds?: Array<{ name?: string; slug?: string; id?: string; _id?: string } | string>;
@@ -69,6 +69,7 @@ type AdminProductStack = {
   isFeatured?: boolean;
   isActive?: boolean;
   isVegetarian?: boolean;
+  unlimitedQuantity?: boolean;
   isVegan?: boolean;
   returnWindowDays?: number;
   deliveryEstimateDays?: number;
@@ -412,8 +413,6 @@ export function AdminProductWizardPage() {
     categoryId: "",
     categoryIds: [] as string[],
     vendorId: "",
-    inTasteIndia: false,
-    tasteIndiaRegion: "",
     festivalId: "",
     description: "",
     ingredients: "",
@@ -435,10 +434,6 @@ export function AdminProductWizardPage() {
   const set = (key: keyof typeof form, value: string | number | boolean | string[]) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const submit = async () => {
-    if (form.inTasteIndia && !form.tasteIndiaRegion) {
-      toast("Select a Taste India region", "error");
-      return;
-    }
     if (!form.categoryIds.length) {
       toast("Select at least one category", "error");
       return;
@@ -471,7 +466,6 @@ export function AdminProductWizardPage() {
         categoryId: categoryIds[0],
         categoryIds,
         vendorId: form.vendorId,
-        tasteIndiaRegion: form.inTasteIndia ? form.tasteIndiaRegion || null : null,
         festivalId: form.festivalId || null,
         description: form.description || form.name,
         ingredients: form.ingredients || undefined,
@@ -506,7 +500,7 @@ export function AdminProductWizardPage() {
 
   return (
     <div className="mx-auto max-w-xl space-y-4 pb-24">
-      <PageHeader title="Create product" />
+      <PageHeader title="Create product" action={<AdminBackLink fallback="/admin/products" />} />
       <p className="text-sm text-yd-muted">Step {step} of 7 · amounts in CAD cents (e.g. 399 = $3.99)</p>
       {step === 1 ? (
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
@@ -573,36 +567,6 @@ export function AdminProductWizardPage() {
               )}
             </div>
           </div>
-          <Select
-            label="Taste India"
-            value={form.inTasteIndia ? "yes" : "no"}
-            onChange={(e) => {
-              const enabled = e.target.value === "yes";
-              setForm((prev) => ({
-                ...prev,
-                inTasteIndia: enabled,
-                tasteIndiaRegion: enabled ? prev.tasteIndiaRegion : "",
-              }));
-            }}
-          >
-            <option value="no">Not in Taste India</option>
-            <option value="yes">Taste India</option>
-          </Select>
-          {form.inTasteIndia ? (
-            <Select
-              label="Region"
-              value={form.tasteIndiaRegion}
-              onChange={(e) => set("tasteIndiaRegion", e.target.value)}
-              required
-            >
-              <option value="">Select region</option>
-              {TASTE_INDIA_REGION_OPTIONS.map((region) => (
-                <option key={region.slug} value={region.slug}>
-                  {region.name}
-                </option>
-              ))}
-            </Select>
-          ) : null}
           <Select label="Festival (optional)" value={form.festivalId} onChange={(e) => set("festivalId", e.target.value)}>
             <option value="">None</option>
             {(festivals.data?.data || [])
@@ -727,6 +691,7 @@ function refId(value: unknown): string {
 export function AdminProductEditPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const goBack = useAdminBack("/admin/products");
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
   const vendors = useQuery({ queryKey: ["admin-vendors"], queryFn: () => adminApi.vendors({ limit: "100" }) });
@@ -756,8 +721,6 @@ export function AdminProductEditPage() {
     categoryId: "",
     categoryIds: [] as string[],
     vendorId: "",
-    inTasteIndia: false,
-    tasteIndiaRegion: "",
     festivalId: "",
     description: "",
     shortDescription: "",
@@ -772,6 +735,7 @@ export function AdminProductEditPage() {
     isActive: true,
     isVegetarian: true,
     isVegan: false,
+    unlimitedQuantity: true,
     returnWindowDays: 0,
     deliveryEstimateDays: 5,
   });
@@ -810,8 +774,6 @@ export function AdminProductEditPage() {
       categoryId: fallback,
       categoryIds: fromIds.length ? fromIds : fallback ? [fallback] : [],
       vendorId: refId(product.vendorId),
-      inTasteIndia: Boolean(product.tasteIndiaRegion),
-      tasteIndiaRegion: product.tasteIndiaRegion || "",
       festivalId: refId(product.festivalId),
       description: product.description || "",
       shortDescription: product.shortDescription || "",
@@ -826,6 +788,7 @@ export function AdminProductEditPage() {
       isActive: product.isActive !== false,
       isVegetarian: product.isVegetarian !== false,
       isVegan: Boolean(product.isVegan),
+      unlimitedQuantity: product.unlimitedQuantity !== false,
       returnWindowDays: typeof product.returnWindowDays === "number" ? product.returnWindowDays : 0,
       deliveryEstimateDays: typeof product.deliveryEstimateDays === "number" ? product.deliveryEstimateDays : 5,
     });
@@ -859,11 +822,6 @@ export function AdminProductEditPage() {
   const save = async () => {
     setSaving(true);
     try {
-      if (form.inTasteIndia && !form.tasteIndiaRegion) {
-        toast("Select a Taste India region", "error");
-        setSaving(false);
-        return;
-      }
       if (!form.categoryIds.length) {
         toast("Select at least one category", "error");
         setSaving(false);
@@ -877,7 +835,6 @@ export function AdminProductEditPage() {
         categoryId: categoryIds[0],
         categoryIds,
         vendorId: form.vendorId,
-        tasteIndiaRegion: form.inTasteIndia ? form.tasteIndiaRegion || null : null,
         festivalId: form.festivalId || null,
         description: form.description || form.name,
         shortDescription: form.shortDescription || undefined,
@@ -895,6 +852,7 @@ export function AdminProductEditPage() {
         isActive: form.isActive,
         isVegetarian: form.isVegetarian,
         isVegan: form.isVegan,
+        unlimitedQuantity: form.unlimitedQuantity,
         returnWindowDays: Math.max(0, Math.floor(Number(form.returnWindowDays) || 0)),
         deliveryEstimateDays: Math.max(1, Math.floor(Number(form.deliveryEstimateDays) || 5)),
         variants: variants.map((v) => ({
@@ -906,8 +864,12 @@ export function AdminProductEditPage() {
           mrpCents: Number(v.mrpCents),
           costPriceCents: Number(v.costPriceCents),
           sellingPriceCents: Number(v.sellingPriceCents),
-          availableQuantity: Number(v.availableQuantity),
-          reorderLevel: Number(v.reorderLevel),
+          ...(form.unlimitedQuantity
+            ? {}
+            : {
+                availableQuantity: Number(v.availableQuantity),
+                reorderLevel: Number(v.reorderLevel),
+              }),
         })),
       });
       await adminApi.setProductMerchandising(id, collectionIds);
@@ -930,7 +892,7 @@ export function AdminProductEditPage() {
         title="Product not found"
         body="This product may have been removed."
         action={
-          <Button variant="outline" onClick={() => navigate("/admin/products")}>
+          <Button variant="outline" onClick={goBack}>
             Back to products
           </Button>
         }
@@ -961,11 +923,7 @@ export function AdminProductEditPage() {
     <div className="mx-auto max-w-2xl space-y-4 pb-28">
       <PageHeader
         title="Edit product"
-        action={
-          <Link to="/admin/products" className="text-sm font-semibold text-yd-muted">
-            Back
-          </Link>
-        }
+        action={<AdminBackLink fallback="/admin/products" />}
       />
       <div className="rounded-2xl bg-white p-4 shadow-soft text-sm text-yd-muted">
         <p>
@@ -1037,36 +995,6 @@ export function AdminProductEditPage() {
           </div>
         </div>
         <Select
-          label="Taste India"
-          value={form.inTasteIndia ? "yes" : "no"}
-          onChange={(e) => {
-            const enabled = e.target.value === "yes";
-            setForm((prev) => ({
-              ...prev,
-              inTasteIndia: enabled,
-              tasteIndiaRegion: enabled ? prev.tasteIndiaRegion : "",
-            }));
-          }}
-        >
-          <option value="no">Not in Taste India</option>
-          <option value="yes">Taste India</option>
-        </Select>
-        {form.inTasteIndia ? (
-          <Select
-            label="Region"
-            value={form.tasteIndiaRegion}
-            onChange={(e) => setField("tasteIndiaRegion", e.target.value)}
-            required
-          >
-            <option value="">Select region</option>
-            {TASTE_INDIA_REGION_OPTIONS.map((region) => (
-              <option key={region.slug} value={region.slug}>
-                {region.name}
-              </option>
-            ))}
-          </Select>
-        ) : null}
-        <Select
           label="Festival (optional)"
           value={form.festivalId}
           onChange={(e) => setField("festivalId", e.target.value)}
@@ -1126,6 +1054,21 @@ export function AdminProductEditPage() {
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.isVegan} onChange={(e) => setField("isVegan", e.target.checked)} /> Vegan
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={form.unlimitedQuantity}
+            onChange={(e) => setField("unlimitedQuantity", e.target.checked)}
+          />
+          <span>
+            <span className="font-medium">Unlimited quantity</span>
+            <span className="mt-0.5 block text-xs text-yd-muted">
+              On: no per-order or stock limit; available quantity and reorder level are not used. Off: max 99 per
+              order and stock applies.
+            </span>
+          </span>
         </label>
         <div className="border-t border-yd-border pt-3">
           <p className="mb-2 text-sm font-semibold">Collections</p>
@@ -1285,12 +1228,18 @@ export function AdminProductEditPage() {
                 label="Available quantity"
                 type="number"
                 value={variant.availableQuantity}
+                disabled={form.unlimitedQuantity}
+                hint={form.unlimitedQuantity ? "Not applicable while unlimited quantity is on" : undefined}
+                className={form.unlimitedQuantity ? "cursor-not-allowed bg-yd-cream/60 text-yd-muted" : ""}
                 onChange={(e) => setVariant(variant.variantId, { availableQuantity: Number(e.target.value) })}
               />
               <Input
                 label="Reorder level"
                 type="number"
                 value={variant.reorderLevel}
+                disabled={form.unlimitedQuantity}
+                hint={form.unlimitedQuantity ? "Not applicable while unlimited quantity is on" : undefined}
+                className={form.unlimitedQuantity ? "cursor-not-allowed bg-yd-cream/60 text-yd-muted" : ""}
                 onChange={(e) => setVariant(variant.variantId, { reorderLevel: Number(e.target.value) })}
               />
             </div>
@@ -1300,7 +1249,7 @@ export function AdminProductEditPage() {
 
       <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
         <div className="mx-auto flex max-w-2xl gap-2">
-          <Button variant="outline" disabled={saving} onClick={() => navigate("/admin/products")}>
+          <Button variant="outline" disabled={saving} onClick={goBack}>
             Cancel
           </Button>
           <Button className="flex-1" disabled={saving || !form.name || !form.categoryIds.length || !form.vendorId} onClick={() => void save()}>
@@ -1422,6 +1371,9 @@ export function AdminCategoriesPage() {
                 <div className="space-y-1 p-3 pr-16">
                   <p className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold">{item.name}</p>
                   <p className="truncate text-xs text-yd-muted">{item.slug}</p>
+                  <p className="text-xs font-medium text-yd-ink">
+                    {item.productCount ?? 0} product{(item.productCount ?? 0) === 1 ? "" : "s"}
+                  </p>
                   <Badge tone={item.isActive ? "sage" : "muted"}>{item.isActive ? "Active" : "Inactive"}</Badge>
                 </div>
               </Link>
@@ -1540,6 +1492,7 @@ export function AdminCategoryDetailPage() {
   const { id } = useParams();
   const isNew = !id || id === "new";
   const navigate = useNavigate();
+  const goBack = useAdminBack("/admin/categories");
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -1558,6 +1511,11 @@ export function AdminCategoryDetailPage() {
     queryKey: ["admin-category", id],
     queryFn: async () => (await adminApi.category(id!)).data as AdminCategory,
     enabled: !isNew,
+  });
+  const productsQuery = useQuery({
+    queryKey: ["admin-category-products", id],
+    queryFn: () => adminApi.products({ category: id, limit: 100 }),
+    enabled: !isNew && Boolean(id),
   });
 
   useEffect(() => {
@@ -1614,7 +1572,7 @@ export function AdminCategoryDetailPage() {
         title="Category not found"
         body="This category may have been removed."
         action={
-          <Button variant="outline" onClick={() => navigate("/admin/categories")}>
+          <Button variant="outline" onClick={goBack}>
             Back
           </Button>
         }
@@ -1622,15 +1580,14 @@ export function AdminCategoryDetailPage() {
     );
   }
 
+  const categoryProducts = productsQuery.data?.items || [];
+  const productTotal = productsQuery.data?.pagination?.total ?? categoryProducts.length;
+
   return (
-    <div className="mx-auto max-w-lg space-y-4 pb-24">
+    <div className="mx-auto max-w-2xl space-y-4 pb-24">
       <PageHeader
         title={isNew ? "Add category" : form.name || "Edit category"}
-        action={
-          <Link to="/admin/categories" className="text-sm font-semibold text-yd-muted">
-            Back
-          </Link>
-        }
+        action={<AdminBackLink fallback="/admin/categories" />}
       />
       {!isNew && form.image ? <img src={mediaUrl(form.image)} alt="" className="h-32 w-full rounded-2xl object-cover" /> : null}
       <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
@@ -1668,14 +1625,73 @@ export function AdminCategoryDetailPage() {
           Active
         </label>
       </div>
+
+      {!isNew ? (
+        <section className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg">Products in this category</h2>
+            <p className="text-xs text-yd-muted">
+              {productTotal} product{productTotal === 1 ? "" : "s"}
+            </p>
+          </div>
+          {productsQuery.isLoading ? <Skeleton className="h-24" /> : null}
+          {!productsQuery.isLoading && !categoryProducts.length ? (
+            <EmptyState title="No products yet" body="Assign products to this category from the product editor." />
+          ) : null}
+          <ul className="divide-y divide-yd-border/70">
+            {categoryProducts.map((product) => {
+              const productId = entityId(product);
+              const thumb = productThumb(product);
+              return (
+                <li key={productId}>
+                  <Link
+                    to={`/admin/products/${productId}/edit`}
+                    className="flex items-center gap-3 py-3 transition hover:bg-yd-cream/40"
+                  >
+                    {thumb ? (
+                      <img
+                        src={mediaUrl(thumb)}
+                        alt=""
+                        className="h-12 w-12 shrink-0 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-yd-cream text-[10px] text-yd-muted">
+                        No img
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-yd-ink">{product.name}</p>
+                      <p className="text-xs text-yd-muted">
+                        {formatCad(product.price)}
+                        {product.stock != null ? ` · Stock ${product.stock}` : ""}
+                      </p>
+                    </div>
+                    <Badge tone={product.isActive ? "sage" : "muted"}>
+                      {product.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                    <span className="text-xs font-semibold text-yd-green">Edit</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          {productTotal > categoryProducts.length ? (
+            <p className="text-xs text-yd-muted">
+              Showing first {categoryProducts.length} of {productTotal}. Open Products and filter by this category for the
+              full list.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
-        <div className="mx-auto flex max-w-lg gap-2">
+        <div className="mx-auto flex max-w-2xl gap-2">
           {!isNew ? (
             <Button variant="danger" disabled={saving} onClick={() => setConfirmDelete(true)}>
               Delete
             </Button>
           ) : null}
-          <Button variant="outline" disabled={saving} onClick={() => navigate("/admin/categories")}>
+          <Button variant="outline" disabled={saving} onClick={goBack}>
             Cancel
           </Button>
           <Button className="flex-1" disabled={saving || !form.name.trim()} onClick={() => void save()}>
@@ -1769,11 +1785,7 @@ export function AdminOrderDetailPage() {
     <div className="mx-auto max-w-2xl space-y-4">
       <PageHeader
         title={order.orderNumber}
-        action={
-          <Link to="/admin/orders" className="text-sm font-semibold text-yd-muted">
-            Back
-          </Link>
-        }
+        action={<AdminBackLink fallback="/admin/orders" />}
       />
       <div className="rounded-2xl bg-white p-4 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1971,6 +1983,7 @@ const emptyCustomerForm: CustomerFormState = {
 export function AdminCustomerFormPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const goBack = useAdminBack("/admin/customers");
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -2063,7 +2076,7 @@ export function AdminCustomerFormPage() {
       <div>
         <PageHeader title="Customer" />
         <EmptyState title="Customer not found" body="This customer may have been removed." />
-        <Button className="mt-4" variant="outline" onClick={() => navigate("/admin/customers")}>
+        <Button className="mt-4" variant="outline" onClick={goBack}>
           Back to customers
         </Button>
       </div>
@@ -2075,7 +2088,7 @@ export function AdminCustomerFormPage() {
       <PageHeader
         title="Edit customer"
         action={
-          <Button variant="outline" onClick={() => navigate("/admin/customers")}>
+          <Button variant="outline" onClick={goBack}>
             Back
           </Button>
         }
@@ -2139,7 +2152,7 @@ export function AdminCustomerFormPage() {
         <Button onClick={save} disabled={saving}>
           {saving ? "Saving…" : "Save changes"}
         </Button>
-        <Button variant="outline" onClick={() => navigate("/admin/customers")}>
+        <Button variant="outline" onClick={goBack}>
           Cancel
         </Button>
       </div>

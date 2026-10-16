@@ -6,7 +6,7 @@ import { ProductCarousel, ProductGrid } from "../../components/product/ProductCa
 import { SectionHeader, Skeleton, EmptyState } from "../../components/ui/Feedback";
 import { Button } from "../../components/ui/Button";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
-import { GIFT_BANDS, HELP_FAQS, OFFER_SECTIONS, REGIONS } from "../../content/discovery";
+import { GIFT_BANDS, HELP_FAQS, OFFER_SECTIONS } from "../../content/discovery";
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { scratchApi } from "../../services/api/commerce.api";
@@ -17,8 +17,7 @@ import { ApiError } from "../../services/api/client";
 import { formatMoneyFromCents } from "../../utils/money";
 import { useCurrencyCode } from "../../hooks/useSettings";
 import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
-import { MerchandisingCard } from "../../components/merchandising/MerchandisingCard";
-import { TasteIndiaMap } from "../../components/discovery/TasteIndiaMap";
+import { BackLink } from "../../components/navigation/BackLink";
 import {
   FestivalAtmosphere,
   FestivalThemeShell,
@@ -135,95 +134,6 @@ export function OffersPage() {
   );
 }
 
-export function RegionsPage() {
-  return (
-    <div className="space-y-6">
-      <Helmet>
-        <title>Taste India | Yogi&apos;s Depot</title>
-      </Helmet>
-      <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: "Taste India" }]} />
-      <SectionHeader title="Taste India" subtitle="Regional favourites from kitchens across the country" />
-      <TasteIndiaMap />
-    </div>
-  );
-}
-
-export function RegionDetailPage() {
-  const { slug = "" } = useParams();
-  const region = REGIONS.find((item) => item.slug === slug);
-  const merch = useQuery({
-    queryKey: ["merchandising", "region-target", slug],
-    queryFn: () => merchandisingApi.list(undefined, { region: slug }),
-    enabled: Boolean(region),
-  });
-  const productsQuery = useProducts({ region: slug, limit: 24 });
-  const { addToCart } = useCommerceActions();
-
-  const rails = merch.data?.data || [];
-  const loading = merch.isLoading;
-
-  if (!region) {
-    return (
-      <div>
-        <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: "Taste India", to: "/discover/regions" }, { label: "Not found" }]} />
-        <p className="font-display text-2xl">Region not found</p>
-        <Link to="/discover/regions" className="text-sm font-semibold text-yd-green">
-          Back to Taste India
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <Helmet>
-        <title>{region.name} | Taste India</title>
-      </Helmet>
-      <Breadcrumbs
-        items={[
-          { label: "Home", to: "/" },
-          { label: "Taste India", to: "/discover/regions" },
-          { label: region.name },
-        ]}
-      />
-      <section className="rounded-card bg-yd-forest p-6 text-white">
-        <p className="text-xs uppercase tracking-wide text-white/70">Taste India</p>
-        <h1 className="mt-1 font-display text-3xl">{region.name}</h1>
-        <p className="mt-2 max-w-xl text-sm text-white/80">{region.description}</p>
-      </section>
-
-      {loading ? <Skeleton className="h-48 rounded-card" /> : null}
-
-      {!loading && rails.length ? (
-        <section className="space-y-3">
-          <SectionHeader title="Collections" subtitle={`Merchandising for ${region.name}`} />
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {rails.map((rail) => (
-              <MerchandisingCard key={rail.id} rail={rail} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {!loading && !rails.length ? (
-        <EmptyState
-          title={`No collections for ${region.name} yet`}
-          body="Browse products from this region below, or check back soon for curated merchandising."
-        />
-      ) : null}
-
-      <section className="space-y-3">
-        <SectionHeader title={`${region.name} products`} subtitle="Products tagged for this region" />
-        <ProductGrid
-          products={productsQuery.data?.items || []}
-          loading={productsQuery.isLoading}
-          onAdd={(p) => addToCart.mutate({ product: p })}
-        />
-      </section>
-    </div>
-  );
-}
-
 export function MerchandisingCollectionPage() {
   const { slug = "" } = useParams();
   const { addToCart } = useCommerceActions();
@@ -250,9 +160,9 @@ export function MerchandisingCollectionPage() {
         <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: "Collection" }]} />
         <p className="font-display text-2xl text-yd-forest">Collection not found</p>
         <p className="text-sm text-yd-muted">This merchandising may be inactive or outside its schedule.</p>
-        <Link to="/" className="text-sm font-semibold text-yd-green">
+        <BackLink fallback="/" className="text-sm font-semibold text-yd-green">
           Back to home
-        </Link>
+        </BackLink>
       </div>
     );
   }
@@ -262,6 +172,9 @@ export function MerchandisingCollectionPage() {
       <Helmet>
         <title>{`${collection.name} | Yogi's Depot`}</title>
       </Helmet>
+      <BackLink fallback="/" className="text-sm font-semibold text-yd-green">
+        ← Back
+      </BackLink>
       <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: collection.name }]} />
       <section className="relative overflow-hidden rounded-card bg-yd-forest p-6 text-white">
         {collection.image ? (
@@ -354,9 +267,9 @@ export function FestivalDetailPage() {
           items={[{ label: "Home", to: "/" }, { label: "Festival store", to: "/festival" }, { label: "Not found" }]}
         />
         <p className="font-display text-2xl">Festival not found</p>
-        <Link to="/festival" className="text-sm font-semibold text-yd-green">
+        <BackLink fallback="/festival" className="text-sm font-semibold text-yd-green">
           Back to Festival store
-        </Link>
+        </BackLink>
       </div>
     );
   }
@@ -366,6 +279,9 @@ export function FestivalDetailPage() {
       <Helmet>
         <title>{name || "Festival"} | Festival store</title>
       </Helmet>
+      <BackLink fallback="/festival" className="text-sm font-semibold text-yd-green">
+        ← Back
+      </BackLink>
       <Breadcrumbs
         items={[
           { label: "Home", to: "/" },

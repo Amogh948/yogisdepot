@@ -6,6 +6,7 @@ import { Price, QuantitySelector, Rating } from "../ui/Feedback";
 import { useCartQuantity } from "../../hooks/useCatalog";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { productImageUrl } from "../../utils/productImage";
+import { maxOrderQuantity } from "../../utils/quantity";
 
 interface ProductCardProps {
   product: Product;
@@ -27,7 +28,7 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
   const quantity = useCartQuantity(productId);
   const { setCartQuantity } = useCommerceActions();
   const weight = productWeight(product);
-  const outOfStock = product.stock <= 0;
+  const outOfStock = product.unlimitedQuantity === false && product.stock <= 0;
 
   return (
     <article className="flex flex-col overflow-visible rounded-[14px] border border-yd-border/60 bg-white shadow-soft">
@@ -76,7 +77,7 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
                 size="sm"
                 value={quantity}
                 min={0}
-                max={Math.max(1, product.stock)}
+                max={maxOrderQuantity(product)}
                 onChange={(next) => setCartQuantity.mutate({ product, quantity: next })}
               />
             ) : (

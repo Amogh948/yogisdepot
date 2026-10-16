@@ -16,8 +16,6 @@ import {
   HelpPage,
   MerchandisingCollectionPage,
   OffersPage,
-  RegionDetailPage,
-  RegionsPage,
 } from "./pages/public/DiscoveryPages";
 import { CartPage } from "./pages/customer/CartPage";
 import { CheckoutPage } from "./pages/customer/CheckoutPage";
@@ -72,8 +70,6 @@ export default function App() {
         <Route path="search" element={<ProductListingPage mode="search" />} />
         <Route path="offers" element={<OffersPage />} />
         <Route path="collections/:slug" element={<MerchandisingCollectionPage />} />
-        <Route path="discover/regions" element={<RegionsPage />} />
-        <Route path="discover/regions/:slug" element={<RegionDetailPage />} />
         <Route path="festival" element={<FestivalPage />} />
         <Route path="festival/:slug" element={<FestivalDetailPage />} />
         <Route path="gifts" element={<GiftsPage />} />

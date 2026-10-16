@@ -29,6 +29,7 @@ import {
   useSameDayDeliveryStatus,
 } from "../../components/commerce/SameDayDeliveryBanner";
 import { formatPostalCode, isValidPostalCode, postalCodeForSquare } from "../../utils/postalCode";
+import { BackLink } from "../../components/navigation/BackLink";
 
 type SquareCheckoutSession = {
   orderId: string;
@@ -485,6 +486,11 @@ export function CheckoutPage() {
   return (
     <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
       <div>
+        <div className="mb-3">
+          <BackLink fallback="/cart" className="text-sm font-semibold text-yd-green">
+            ← Back
+          </BackLink>
+        </div>
         <ol className="mb-5 flex items-center gap-0 overflow-x-auto text-xs font-semibold">
           {steps.map((label, index) => {
             const stepNumber = index + 1;

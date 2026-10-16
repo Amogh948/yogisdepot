@@ -10,6 +10,7 @@ import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { entityId } from "../../types";
 import { SearchBar } from "../../components/navigation/SearchBar";
 import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
+import { BackLink } from "../../components/navigation/BackLink";
 import { TRENDING_SEARCHES } from "../../content/navigation";
 
 export function ProductListingPage({ mode }: { mode: "all" | "search" | "category" }) {
@@ -27,11 +28,23 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
   const discount = params.get("discount") || undefined;
   const brand = params.get("brand") || undefined;
 
+  const selectedCategories = useMemo(() => {
+    const fromQuery = (params.get("category") || "")
+      .split(",")
+      .map((token) => token.trim())
+      .filter(Boolean);
+    if (fromQuery.length) return Array.from(new Set(fromQuery));
+    if (mode === "category" && slug) return [slug];
+    return [] as string[];
+  }, [params, mode, slug]);
+
+  const categoryParam = selectedCategories.length ? selectedCategories.join(",") : undefined;
+
   const list = useProducts({
     page,
     limit: 12,
     search: mode === "search" ? query : undefined,
-    category: mode === "category" ? slug : undefined,
+    category: categoryParam,
     sort,
     vegetarian,
     minPrice,
@@ -44,16 +57,22 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
   const { addToCart, toggleWishlist } = useCommerceActions();
   const wishlist = useWishlist();
   const wished = new Set((wishlist.data?.data || []).map((p) => entityId(p)));
-  const categoryName = (categories.data?.data || []).find((c) => c.slug === slug)?.name;
+  const allCategories = categories.data?.data || [];
+  const parentCategories = allCategories.filter((c) => !c.parentId);
+  const categoryName =
+    allCategories.find((c) => c.slug === slug)?.name ||
+    allCategories.find((c) => c.slug === selectedCategories[0])?.name;
 
   const title =
     mode === "search"
       ? query
         ? `Results for “${query}”`
         : "Search"
-      : mode === "category"
-        ? categoryName || slug || "Category"
-        : "All products";
+      : selectedCategories.length > 1
+        ? "Products"
+        : selectedCategories.length === 1
+          ? categoryName || selectedCategories[0]
+          : "All products";
 
   const set = (key: string, value?: string) => {
     const next = new URLSearchParams(params);
@@ -63,10 +82,18 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
     setParams(next);
   };
 
+  const toggleCategory = (categorySlug: string) => {
+    const next = selectedCategories.includes(categorySlug)
+      ? selectedCategories.filter((item) => item !== categorySlug)
+      : [...selectedCategories, categorySlug];
+    set("category", next.length ? next.join(",") : undefined);
+  };
+
   const clearFilters = () => {
     const next = new URLSearchParams();
     if (query) next.set("q", query);
     if (sort && sort !== "relevance") next.set("sort", sort);
+    if (mode === "category" && slug) next.set("category", slug);
     setParams(next);
     setFiltersOpen(false);
   };
@@ -99,18 +126,23 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
           </select>
         </label>
         <div className="space-y-1 text-sm">
-          <p className="font-medium">Category</p>
-          {(categories.data?.data || [])
-            .filter((c) => !c.parentId)
-            .map((cat) => (
-              <Link key={cat.slug} className="block py-2 text-yd-muted hover:text-yd-green" to={`/categories/${cat.slug}`} onClick={() => setFiltersOpen(false)}>
+          <p className="font-medium">Categories</p>
+          <div className="max-h-56 space-y-0.5 overflow-y-auto pr-1">
+            {parentCategories.map((cat) => (
+              <label key={cat.slug} className="flex min-h-11 items-center gap-2 font-medium">
+                <input
+                  type="checkbox"
+                  checked={selectedCategories.includes(cat.slug)}
+                  onChange={() => toggleCategory(cat.slug)}
+                />
                 {cat.name}
-              </Link>
+              </label>
             ))}
+          </div>
         </div>
       </div>
     ),
-    [vegetarian, discount, minPrice, maxPrice, rating, categories.data],
+    [vegetarian, discount, minPrice, maxPrice, rating, parentCategories, selectedCategories],
   );
 
   const total = list.data?.pagination?.total;
@@ -120,6 +152,14 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
       <Helmet>
         <title>{`${title} | Yogi's Depot`}</title>
       </Helmet>
+      <div className="mb-3">
+        <BackLink
+          fallback={mode === "category" ? "/categories" : mode === "search" ? "/" : "/"}
+          className="text-sm font-semibold text-yd-green"
+        >
+          ← Back
+        </BackLink>
+      </div>
       <Breadcrumbs
         items={[
           { label: "Home", to: "/" },

@@ -15,6 +15,7 @@ import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { formatCad } from "../../utils/money";
 import { formatEstimatedDeliveryDate, returnPolicyLabel } from "../../utils/dates";
 import { emptyCart } from "../../utils/cartOptimistic";
+import { maxOrderQuantity } from "../../utils/quantity";
 import type { ApiSuccess, Cart } from "../../types";
 
 export function CartPage() {
@@ -100,7 +101,7 @@ export function CartPage() {
                 <QuantitySelector
                   value={item.quantity}
                   min={0}
-                  max={Math.max(1, item.product.stock ?? item.quantity)}
+                  max={maxOrderQuantity(item.product)}
                   onChange={(quantity) => setCartQuantity.mutate({ product: item.product, quantity })}
                 />
                 <button

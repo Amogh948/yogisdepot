@@ -35,8 +35,6 @@ export interface ProductListQuery {
   featured?: string;
   inStock?: string;
   brand?: string;
-  /** Taste India region collection id or slug */
-  region?: string;
   /** Festival store collection id or slug */
   festival?: string;
   discount?: string;
@@ -200,22 +198,34 @@ export const productService = {
     }
     if (query.vendor) filter.vendorId = query.vendor;
     if (query.category) {
-      const categoryFilter: Record<string, unknown>[] = [{ slug: query.category }];
-      if (/^[a-f0-9]{24}$/i.test(query.category)) {
-        categoryFilter.push({ _id: query.category });
-      }
-      const category = await Category.findOne({ $or: categoryFilter });
-      if (category) {
-        const children = await Category.find({ parentId: category._id }).select("_id");
-        const ids = [category._id, ...children.map((c) => c._id)];
-        const categoryClause = {
-          $or: [{ categoryId: { $in: ids } }, { categoryIds: { $in: ids } }],
-        };
-        if (filter.$or) {
-          filter.$and = [...(Array.isArray(filter.$and) ? filter.$and : []), { $or: filter.$or }, categoryClause];
-          delete filter.$or;
+      const tokens = String(query.category)
+        .split(",")
+        .map((token) => token.trim())
+        .filter(Boolean);
+      if (tokens.length) {
+        const orFilters: Record<string, unknown>[] = [];
+        for (const token of tokens) {
+          orFilters.push({ slug: token });
+          if (/^[a-f0-9]{24}$/i.test(token)) {
+            orFilters.push({ _id: token });
+          }
+        }
+        const matched = await Category.find({ $or: orFilters }).select("_id");
+        if (matched.length) {
+          const parentIds = matched.map((category) => category._id);
+          const children = await Category.find({ parentId: { $in: parentIds } }).select("_id");
+          const ids = [...parentIds, ...children.map((child) => child._id)];
+          const categoryClause = {
+            $or: [{ categoryId: { $in: ids } }, { categoryIds: { $in: ids } }],
+          };
+          if (filter.$or) {
+            filter.$and = [...(Array.isArray(filter.$and) ? filter.$and : []), { $or: filter.$or }, categoryClause];
+            delete filter.$or;
+          } else {
+            Object.assign(filter, categoryClause);
+          }
         } else {
-          Object.assign(filter, categoryClause);
+          filter._id = { $in: [] };
         }
       }
     }
@@ -241,18 +251,6 @@ export const productService = {
         filter.$or = [{ brandId: brandDoc._id }, { brand: brandDoc.name }];
       } else {
         filter.brand = { $regex: query.brand, $options: "i" };
-      }
-    }
-    if (query.region) {
-      const regionSlug = /^[a-f0-9]{24}$/i.test(query.region)
-        ? (
-            await MerchandisingCollection.findOne({ _id: query.region, placement: "region" }).select("slug")
-          )?.slug
-        : query.region;
-      if (regionSlug) {
-        filter.tasteIndiaRegion = regionSlug;
-      } else {
-        filter._id = { $in: [] };
       }
     }
     if (query.festival) {

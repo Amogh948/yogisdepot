@@ -143,7 +143,36 @@ export const categoryService = {
   },
 
   async listFlat() {
-    return Category.find().sort({ name: 1 });
+    const categories = await Category.find().sort({ name: 1 }).lean();
+    const counts = await Product.aggregate<{ _id: Types.ObjectId; count: number }>([
+      {
+        $project: {
+          ids: {
+            $setUnion: [
+              {
+                $cond: [{ $ne: [{ $ifNull: ["$categoryId", null] }, null] }, ["$categoryId"], []],
+              },
+              { $ifNull: ["$categoryIds", []] },
+              {
+                $cond: [
+                  { $ne: [{ $ifNull: ["$subCategoryId", null] }, null] },
+                  ["$subCategoryId"],
+                  [],
+                ],
+              },
+            ],
+          },
+        },
+      },
+      { $unwind: "$ids" },
+      { $group: { _id: "$ids", count: { $sum: 1 } } },
+    ]);
+    const countById = new Map(counts.map((row) => [String(row._id), row.count]));
+    return categories.map((category) => ({
+      ...category,
+      id: String(category._id),
+      productCount: countById.get(String(category._id)) || 0,
+    }));
   },
 
   async ensureUniqueName(_name: string) {

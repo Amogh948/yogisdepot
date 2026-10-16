@@ -16,7 +16,6 @@ const sections = [
   {
     title: "Discover",
     links: [
-      { to: "/discover/regions", label: "Taste India" },
       { to: "/festival", label: "Festival store" },
       { to: "/brands", label: "Brands" },
     ],

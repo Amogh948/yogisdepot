@@ -50,6 +50,7 @@ export async function toPublicProduct(product: ProductDocument) {
     return rest;
   });
   json.currency = "CAD";
+  json.unlimitedQuantity = product.unlimitedQuantity !== false;
   json.returnWindowDays = Math.max(0, Number(product.returnWindowDays ?? 0));
   json.deliveryEstimateDays = Math.max(1, Number(product.deliveryEstimateDays ?? 5));
   return json;

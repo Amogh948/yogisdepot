@@ -13,28 +13,16 @@ import { entityId, mediaUrl } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { formatCad } from "../../utils/money";
-import { TASTE_INDIA_REGION_OPTIONS } from "../../content/discovery";
 import { FESTIVAL_THEME_OPTIONS, type FestivalTheme } from "../../content/festivalThemes";
+import { AdminBackLink } from "../../components/admin/AdminBackLink";
+import { useAdminBack } from "../../hooks/useAdminBack";
 
 const PLACEMENTS = [
   { value: "home", label: "Home" },
   { value: "offers", label: "Offers" },
   { value: "gifts", label: "Gift hampers" },
-  { value: "region", label: "Taste India (region)" },
   { value: "festival", label: "Festival store" },
 ] as const;
-
-function regionSlugFromName(nameOrSlug: string) {
-  const normalized = nameOrSlug.trim().toLowerCase();
-  const exact = TASTE_INDIA_REGION_OPTIONS.find(
-    (region) => region.name.toLowerCase() === normalized || region.slug === normalized,
-  );
-  if (exact) return exact.slug;
-  const prefixed = TASTE_INDIA_REGION_OPTIONS.find(
-    (region) => normalized === region.slug || normalized.startsWith(`${region.slug}-`),
-  );
-  return prefixed?.slug || "";
-}
 
 type SelectedProduct = {
   id: string;
@@ -85,7 +73,7 @@ export function AdminMerchandisingPage({ placementFilter }: { placementFilter?: 
       <p className="mb-4 text-sm text-yd-muted">
         {isFestivals
           ? "Add festivals for the Festival Store, assign products, and they appear as festival cards on the storefront."
-          : "Curate collection cards for Home, Offers, Gift hampers, Taste India regions, and Festival store. Active Home, Offers, and Gift rails (within their start/end dates) appear as cards above the product sections on the homepage. Use Home sections to control Bestsellers, Deals, Featured, and New Arrivals."}
+          : "Curate collection cards for Home, Offers, Gift hampers, and Festival store. Active Home, Offers, and Gift rails (within their start/end dates) appear as cards above the product sections on the homepage. Use Home sections to control Bestsellers, Deals, Featured, and New Arrivals."}
       </p>
       {query.isLoading ? <Skeleton className="h-40" /> : null}
       {!query.isLoading && !items.length ? (
@@ -178,6 +166,7 @@ export function AdminMerchandisingFormPage({
   const queryClient = useQueryClient();
   const isFestival = lockedPlacement === "festival";
   const listPath = isFestival ? "/admin/festivals" : "/admin/merchandising";
+  const goBack = useAdminBack(listPath);
   const existing = useQuery({
     queryKey: ["admin-merchandising", id],
     queryFn: () => adminApi.merchandisingItem(id!),
@@ -190,7 +179,6 @@ export function AdminMerchandisingFormPage({
     name: "",
     subtitle: "",
     placement: (lockedPlacement || "home") as AdminMerchandising["placement"],
-    regionSlug: "",
     festivalTheme: "generic" as FestivalTheme,
     image: "",
     images: [] as string[],
@@ -216,9 +204,6 @@ export function AdminMerchandisingFormPage({
       name: data.name || "",
       subtitle: data.subtitle || "",
       placement: lockedPlacement || data.placement || "home",
-      regionSlug:
-        data.tasteIndiaRegion ||
-        (data.placement === "region" ? regionSlugFromName(data.slug || data.name || "") : ""),
       festivalTheme: (data.festivalTheme || "generic") as FestivalTheme,
       image: data.image || "",
       images:
@@ -260,15 +245,7 @@ export function AdminMerchandisingFormPage({
   };
 
   const save = async () => {
-    if (form.placement === "region" && !form.regionSlug) {
-      toast("Select a Taste India region", "error");
-      return;
-    }
-    const region = TASTE_INDIA_REGION_OPTIONS.find((item) => item.slug === form.regionSlug);
-    const name =
-      form.placement === "region"
-        ? form.name.trim() || region?.name || ""
-        : form.name.trim();
+    const name = form.name.trim();
     if (!name) {
       toast("Name is required", "error");
       return;
@@ -279,7 +256,6 @@ export function AdminMerchandisingFormPage({
         name,
         subtitle: form.subtitle || undefined,
         placement: lockedPlacement || form.placement,
-        tasteIndiaRegion: form.placement === "region" ? form.regionSlug || null : null,
         festivalTheme: isFestival || form.placement === "festival" ? form.festivalTheme : undefined,
         ...(isFestival || form.placement === "festival"
           ? {
@@ -322,11 +298,7 @@ export function AdminMerchandisingFormPage({
     <div className="mx-auto max-w-2xl space-y-4 pb-28">
       <PageHeader
         title={isNew ? (isFestival ? "New festival" : "New merchandising") : isFestival ? "Edit festival" : "Edit merchandising"}
-        action={
-          <Link to={listPath} className="text-sm font-semibold text-yd-muted">
-            Back
-          </Link>
-        }
+        action={<AdminBackLink fallback={listPath} />}
       />
       <section className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
         {!isFestival ? (
@@ -335,11 +307,7 @@ export function AdminMerchandisingFormPage({
             value={form.placement}
             onChange={(e) => {
               const placement = e.target.value as AdminMerchandising["placement"];
-              setForm((p) => ({
-                ...p,
-                placement,
-                regionSlug: placement === "region" ? p.regionSlug : "",
-              }));
+              setForm((p) => ({ ...p, placement }));
             }}
           >
             {PLACEMENTS.map((item) => (
@@ -349,34 +317,11 @@ export function AdminMerchandisingFormPage({
             ))}
           </Select>
         ) : null}
-        {form.placement === "region" && !isFestival ? (
-          <Select
-            label="Region"
-            value={form.regionSlug}
-            onChange={(e) => {
-              const regionSlug = e.target.value;
-              const region = TASTE_INDIA_REGION_OPTIONS.find((item) => item.slug === regionSlug);
-              setForm((p) => ({
-                ...p,
-                regionSlug,
-                name: region?.name || p.name,
-              }));
-            }}
-            required
-          >
-            <option value="">Select region</option>
-            {TASTE_INDIA_REGION_OPTIONS.map((region) => (
-              <option key={region.slug} value={region.slug}>
-                {region.name}
-              </option>
-            ))}
-          </Select>
-        ) : null}
         <Input
           label="Name"
           value={form.name}
           onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-          placeholder={isFestival ? "Diwali" : form.placement === "region" ? "North India" : "Diwali sweets"}
+          placeholder={isFestival ? "Diwali" : "Diwali sweets"}
         />
         <Textarea
           label="Subtitle"
@@ -412,7 +357,7 @@ export function AdminMerchandisingFormPage({
             label="Collection image"
             value={form.image}
             onChange={(url) => setForm((p) => ({ ...p, image: url }))}
-            hint="Used on Offers, Gifts, Taste India, and Festival cards"
+            hint="Used on Offers, Gifts, and Festival cards"
           />
         )}
         <Input
@@ -517,17 +462,12 @@ export function AdminMerchandisingFormPage({
 
       <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
         <div className="mx-auto flex max-w-2xl gap-2">
-          <Button variant="outline" disabled={saving} onClick={() => navigate(listPath)}>
+          <Button variant="outline" disabled={saving} onClick={goBack}>
             Cancel
           </Button>
           <Button
             className="flex-1"
-            disabled={
-              saving ||
-              (form.placement === "region"
-                ? !form.regionSlug || !form.name.trim()
-                : !form.name.trim())
-            }
+            disabled={saving || !form.name.trim()}
             onClick={() => void save()}
           >
             {saving

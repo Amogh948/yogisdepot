@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useNavigate, useParams } from "react-router-dom";
 import { Heart, RotateCcw, Truck } from "lucide-react";
@@ -9,18 +9,21 @@ import { reviewsApi } from "../../services/api/commerce.api";
 import { Button } from "../../components/ui/Button";
 import { Badge, EmptyState, ErrorState, Price, QuantitySelector, Rating, Skeleton, SectionHeader } from "../../components/ui/Feedback";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
+import { ProductImageGallery } from "../../components/product/ProductImageGallery";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
-import { entityId, mediaUrl } from "../../types";
+import { entityId } from "../../types";
 import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
+import { BackLink } from "../../components/navigation/BackLink";
 import { formatEstimatedDeliveryDate, returnPolicyLabel } from "../../utils/dates";
+import { maxOrderQuantity } from "../../utils/quantity";
 import { SameDayDeliveryBanner } from "../../components/commerce/SameDayDeliveryBanner";
+import { scrollToTop } from "../../utils/scroll";
 
 export function ProductDetailPage() {
   const { slug = "" } = useParams();
   const productQuery = useProduct(slug);
   const product = productQuery.data?.data;
   const [qty, setQty] = useState(1);
-  const [active, setActive] = useState(0);
   const { addToCart, toggleWishlist } = useCommerceActions();
   const navigate = useNavigate();
   const wishlist = useWishlist();
@@ -36,6 +39,12 @@ export function ProductDetailPage() {
     enabled: Boolean(product),
   });
 
+  // Home (and other) carousels leave the window scrolled mid-page — animate to top on open.
+  useEffect(() => {
+    scrollToTop("smooth");
+    setQty(1);
+  }, [slug]);
+
   if (productQuery.isLoading) return <Skeleton className="h-96" />;
   if (productQuery.isError || !product) return <ErrorState message="Product not found" />;
 
@@ -50,6 +59,11 @@ export function ProductDetailPage() {
         <meta name="description" content={product.shortDescription || product.description.slice(0, 140)} />
       </Helmet>
 
+      <div className="mb-3 flex items-center gap-3">
+        <BackLink fallback="/products" className="text-sm font-semibold text-yd-green">
+          ← Back
+        </BackLink>
+      </div>
       <Breadcrumbs
         items={[
           { label: "Home", to: "/" },
@@ -62,23 +76,7 @@ export function ProductDetailPage() {
       />
 
       <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
-        <div>
-          <div className="aspect-square overflow-hidden rounded-card border border-yd-border bg-yd-cream">
-            {images[active] ? <img src={mediaUrl(images[active])} alt={product.name} className="h-full w-full object-cover" /> : null}
-          </div>
-          <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
-            {images.map((src, index) => (
-              <button
-                key={src + index}
-                type="button"
-                className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border ${index === active ? "border-yd-green ring-2 ring-yd-green/30" : "border-yd-border"}`}
-                onClick={() => setActive(index)}
-              >
-                <img src={mediaUrl(src)} alt="" className="h-full w-full object-cover" />
-              </button>
-            ))}
-          </div>
-        </div>
+        <ProductImageGallery images={images} alt={product.name} />
 
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
@@ -126,13 +124,18 @@ export function ProductDetailPage() {
           </div>
 
           <div className="flex items-center gap-3 pt-2">
-            <QuantitySelector value={qty} onChange={setQty} max={Math.max(1, product.stock)} />
+            <QuantitySelector value={qty} onChange={setQty} max={maxOrderQuantity(product)} />
             <button type="button" aria-label="Wishlist" className="grid h-11 w-11 place-items-center rounded-full border border-yd-border" onClick={() => toggleWishlist.mutate({ product, wished })}>
               <Heart className={`h-5 w-5 ${wished ? "fill-yd-error text-yd-error" : "text-yd-ink"}`} />
             </button>
           </div>
           <div className="hidden flex-col gap-2 pt-1 lg:flex">
-            <Button size="lg" className="w-full" onClick={() => addToCart.mutate({ product, quantity: qty })} disabled={product.stock <= 0}>
+            <Button
+              size="lg"
+              className="w-full"
+              onClick={() => addToCart.mutate({ product, quantity: qty })}
+              disabled={product.unlimitedQuantity === false && product.stock <= 0}
+            >
               Add to cart
             </Button>
             <Button
@@ -143,7 +146,7 @@ export function ProductDetailPage() {
                 addToCart.mutate({ product, quantity: qty });
                 navigate("/checkout");
               }}
-              disabled={product.stock <= 0}
+              disabled={product.unlimitedQuantity === false && product.stock <= 0}
             >
               Buy now
             </Button>
@@ -211,7 +214,12 @@ export function ProductDetailPage() {
 
       <div className="fixed bottom-[calc(3.25rem+env(safe-area-inset-bottom))] left-0 right-0 z-30 w-full max-w-[100%] border-t border-yd-border bg-white px-4 py-3 lg:hidden">
         <div className="mx-auto flex w-full max-w-store flex-col gap-2">
-          <Button size="lg" className="w-full" onClick={() => addToCart.mutate({ product, quantity: qty })} disabled={product.stock <= 0}>
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={() => addToCart.mutate({ product, quantity: qty })}
+            disabled={product.unlimitedQuantity === false && product.stock <= 0}
+          >
             Add to cart
           </Button>
           <Button
@@ -222,7 +230,7 @@ export function ProductDetailPage() {
               addToCart.mutate({ product, quantity: qty });
               navigate("/checkout");
             }}
-            disabled={product.stock <= 0}
+            disabled={product.unlimitedQuantity === false && product.stock <= 0}
           >
             Buy now
           </Button>

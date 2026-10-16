@@ -5,6 +5,7 @@ export interface ProductQuery {
   page?: number;
   limit?: number;
   search?: string;
+  /** Single slug/id, or comma-separated list for multi-category filter */
   category?: string;
   vendor?: string;
   minPrice?: number;
@@ -16,7 +17,6 @@ export interface ProductQuery {
   featured?: string;
   inStock?: string;
   brand?: string;
-  region?: string;
   festival?: string;
   discount?: string;
 }
@@ -36,7 +36,6 @@ export type MerchandisingRail = {
   slug: string;
   subtitle?: string;
   placement: string;
-  tasteIndiaRegion?: string | null;
   festivalTheme?: string | null;
   image?: string;
   images?: string[];
@@ -47,10 +46,8 @@ export type MerchandisingRail = {
 };
 
 export const merchandisingApi = {
-  list: (placement?: string, opts?: { region?: string }) =>
-    unwrap<MerchandisingRail[]>(
-      api.get("/merchandising", { params: { placement, region: opts?.region } }),
-    ),
+  list: (placement?: string) =>
+    unwrap<MerchandisingRail[]>(api.get("/merchandising", { params: { placement } })),
   bySlug: (slug: string) => unwrap<MerchandisingRail>(api.get(`/merchandising/${slug}`)),
 };
 

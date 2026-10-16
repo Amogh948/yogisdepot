@@ -12,6 +12,8 @@ import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { formatCadFromCents } from "../../utils/money";
 import { Plus, Trash2 } from "lucide-react";
+import { AdminBackLink } from "../../components/admin/AdminBackLink";
+import { useAdminBack } from "../../hooks/useAdminBack";
 
 export function AdminDeliveryLocationsPage() {
   const queryClient = useQueryClient();
@@ -94,6 +96,7 @@ export function AdminDeliveryLocationFormPage() {
   const { id } = useParams();
   const isNew = !id || id === "new";
   const navigate = useNavigate();
+  const goBack = useAdminBack("/admin/delivery-locations");
   const queryClient = useQueryClient();
   const toast = useToastStore((s) => s.push);
   const existing = useQuery({
@@ -201,11 +204,7 @@ export function AdminDeliveryLocationFormPage() {
     <div className="mx-auto max-w-lg space-y-4">
       <PageHeader
         title={isNew ? "Add delivery area" : "Edit delivery area"}
-        action={
-          <Link to="/admin/delivery-locations" className="text-sm font-semibold text-yd-muted">
-            Back
-          </Link>
-        }
+        action={<AdminBackLink fallback="/admin/delivery-locations" />}
       />
       <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
         <Input
@@ -288,7 +287,7 @@ export function AdminDeliveryLocationFormPage() {
         </label>
         <p className="text-xs text-yd-muted">Areas are matched by postal code for Canada checkout (Calgary, AB).</p>
         <div className="flex gap-2 pt-2">
-          <Button variant="outline" disabled={saving} onClick={() => navigate("/admin/delivery-locations")}>
+          <Button variant="outline" disabled={saving} onClick={goBack}>
             Cancel
           </Button>
           <Button

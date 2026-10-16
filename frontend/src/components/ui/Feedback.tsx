@@ -123,7 +123,7 @@ export function QuantitySelector({
   value,
   onChange,
   min = 1,
-  max = 99,
+  max,
   size = "md",
   disabled = false,
 }: {
@@ -134,6 +134,7 @@ export function QuantitySelector({
   size?: "sm" | "md";
   disabled?: boolean;
 }) {
+  const resolvedMax = max ?? 99;
   const compact = size === "sm";
   return (
     <div
@@ -159,8 +160,8 @@ export function QuantitySelector({
         type="button"
         className={compact ? "h-8 w-7 text-base leading-none" : "h-11 w-11"}
         aria-label="Increase quantity"
-        disabled={disabled || value >= max}
-        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={disabled || value >= resolvedMax}
+        onClick={() => onChange(Math.min(resolvedMax, value + 1))}
       >
         +
       </button>

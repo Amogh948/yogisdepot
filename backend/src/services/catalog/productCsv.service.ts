@@ -8,7 +8,6 @@ import { Pricing } from "../../models/Pricing";
 import { Product } from "../../models/Product";
 import { Sku } from "../../models/Sku";
 import { Vendor } from "../../models/Vendor";
-import { TASTE_INDIA_REGIONS } from "../../config/constants";
 import { catalogAdminService } from "./catalogAdmin.service";
 
 export const PRODUCT_CSV_HEADERS = [
@@ -28,7 +27,6 @@ export const PRODUCT_CSV_HEADERS = [
   "manufacturer",
   "countryOfOrigin",
   "tags",
-  "tasteIndiaRegion",
   "mrpCents",
   "costPriceCents",
   "sellingPriceCents",
@@ -169,7 +167,6 @@ export const productCsvService = {
         manufacturer: product.manufacturer || "",
         countryOfOrigin: product.countryOfOrigin || "",
         tags: (product.tags || []).join("|"),
-        tasteIndiaRegion: product.tasteIndiaRegion || "",
         mrpCents: String(pricing?.mrpCents ?? Math.round((product.compareAtPrice || 0) * 100)),
         costPriceCents: String(pricing?.costPriceCents ?? Math.round((product.costPrice || 0) * 100)),
         sellingPriceCents: String(pricing?.sellingPriceCents ?? Math.round((product.price || 0) * 100)),
@@ -270,11 +267,6 @@ export const productCsvService = {
       const vendor = vendorSlug ? vendorBySlug.get(vendorSlug) : defaultVendor;
       if (!vendor && !existing) errors.push("vendorSlug is required (or create a vendor first)");
 
-      const tasteIndiaRegion = row.tasteIndiaRegion?.trim().toLowerCase() || "";
-      if (tasteIndiaRegion && !(TASTE_INDIA_REGIONS as readonly string[]).includes(tasteIndiaRegion)) {
-        errors.push("tasteIndiaRegion is invalid");
-      }
-
       const imageUrls = splitImageUrls(row.imageUrls);
       for (const url of imageUrls) {
         if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) {
@@ -344,13 +336,6 @@ export const productCsvService = {
             countryOfOrigin: row.countryOfOrigin?.trim() || undefined,
             tags: splitList(row.tags),
             images: row.imageUrls !== undefined && row.imageUrls !== "" ? imageUrls : undefined,
-            tasteIndiaRegion: (tasteIndiaRegion || null) as
-              | "north-india"
-              | "south-india"
-              | "west-india"
-              | "east-india"
-              | "northeast-india"
-              | null,
             isActive: parseBool(row.isActive, existing.isActive !== false),
             isFeatured: parseBool(row.isFeatured, Boolean(existing.isFeatured)),
             isVegetarian: parseBool(row.isVegetarian, existing.isVegetarian !== false),
@@ -394,7 +379,6 @@ export const productCsvService = {
             countryOfOrigin: row.countryOfOrigin?.trim() || undefined,
             tags: splitList(row.tags),
             images: imageUrls.length ? imageUrls : undefined,
-            tasteIndiaRegion: (tasteIndiaRegion || null) as never,
             variants: [
               {
                 name: "Default",

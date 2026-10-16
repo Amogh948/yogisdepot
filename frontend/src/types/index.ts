@@ -38,6 +38,8 @@ export interface Category {
   image?: string;
   parentId?: string | null;
   isActive: boolean;
+  /** Products assigned to this category (admin list). */
+  productCount?: number;
   children?: Category[];
 }
 
@@ -60,7 +62,6 @@ export interface Product {
   vendorId: VendorSummary | string;
   categoryId: { name: string; slug: string } | string;
   brand?: string;
-  tasteIndiaRegion?: string | null;
   festivalId?: string | null;
   images: string[];
   thumbnail?: string;
@@ -85,6 +86,8 @@ export interface Product {
   isVegan: boolean;
   isFeatured: boolean;
   isActive: boolean;
+  /** When true, skip the per-order quantity cap (stock still applies). */
+  unlimitedQuantity?: boolean;
   foodType?: string;
   dietaryTags?: string[];
   calories?: number;

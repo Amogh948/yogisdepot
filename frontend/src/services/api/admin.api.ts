@@ -7,8 +7,7 @@ export type AdminMerchandising = {
   name: string;
   slug: string;
   subtitle?: string;
-  placement: "home" | "offers" | "gifts" | "region" | "festival";
-  tasteIndiaRegion?: string | null;
+  placement: "home" | "offers" | "gifts" | "festival";
   festivalTheme?: "diwali" | "navratri" | "holi" | "eid" | "generic" | null;
   image?: string;
   images?: string[];

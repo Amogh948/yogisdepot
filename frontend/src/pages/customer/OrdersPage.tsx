@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
 import { ordersApi, reviewsApi } from "../../services/api/commerce.api";
@@ -11,6 +11,7 @@ import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { useMemo, useState } from "react";
 import { formatCad } from "../../utils/money";
+import { BackLink } from "../../components/navigation/BackLink";
 
 type CancellationReason =
   | "changed_my_mind"
@@ -199,6 +200,9 @@ export function OrdersPage() {
 
   return (
     <div className="space-y-4">
+      <BackLink fallback="/profile" className="text-sm font-semibold text-yd-green">
+        ← Back
+      </BackLink>
       <h1 className="font-display text-3xl text-yd-forest">My orders</h1>
       <div className="no-scrollbar flex gap-2 overflow-x-auto">
         {(
@@ -268,7 +272,6 @@ export function OrderDetailPage() {
   const { id = "" } = useParams();
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [reviewFor, setReviewFor] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [rating, setRating] = useState(5);
@@ -333,9 +336,9 @@ export function OrderDetailPage() {
 
   return (
     <div className="space-y-5">
-      <button className="text-sm font-semibold text-yd-green" onClick={() => navigate(-1)} type="button">
+      <BackLink fallback="/orders" className="text-sm font-semibold text-yd-green">
         ← Back
-      </button>
+      </BackLink>
       <div>
         <h1 className="font-display text-3xl text-yd-forest">{order.orderNumber}</h1>
         <p className="mt-1 capitalize text-yd-muted">

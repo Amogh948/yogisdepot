@@ -1,9 +1,21 @@
+import { MAX_ORDER_QUANTITY } from "../../config/constants";
 import { BadRequestError, NotFoundError } from "../../errors/AppError";
 import { Cart, type CartItem } from "../../models/Cart";
 import { Product } from "../../models/Product";
 import { Sku } from "../../models/Sku";
 import { inventoryReservationService } from "../inventory/inventoryReservation.service";
 import { skuOfferService } from "../catalog/skuOffer.service";
+
+/** Missing / undefined defaults to unlimited (checked by default for all products). */
+function isUnlimitedQuantity(value?: boolean | null) {
+  return value !== false;
+}
+
+function assertOrderQuantityAllowed(quantity: number, unlimitedQuantity?: boolean | null) {
+  if (!isUnlimitedQuantity(unlimitedQuantity) && quantity > MAX_ORDER_QUANTITY) {
+    throw new BadRequestError(`Maximum quantity per order is ${MAX_ORDER_QUANTITY}`);
+  }
+}
 
 export const cartService = {
   async getOrCreate(userId: string) {
@@ -41,11 +53,14 @@ export const cartService = {
               stock: offer.availableQuantity,
               brand: offer.brand,
               sku: offer.sku,
+              unlimitedQuantity: isUnlimitedQuantity(offer.unlimitedQuantity),
             },
             offer,
             lineTotal: (offer.sellingPriceCents * item.quantity) / 100,
             lineTotalCents: offer.sellingPriceCents * item.quantity,
-            inStock: offer.available && offer.availableQuantity >= item.quantity,
+            inStock:
+              isUnlimitedQuantity(offer.unlimitedQuantity) ||
+              (offer.available && offer.availableQuantity >= item.quantity),
           });
         } catch {
           continue;
@@ -59,7 +74,9 @@ export const cartService = {
           product,
           lineTotal: (product.price ?? 0) * item.quantity,
           lineTotalCents: Math.round((product.price ?? 0) * 100) * item.quantity,
-          inStock: (product.stock ?? 0) >= item.quantity && product.isActive !== false,
+          inStock:
+            isUnlimitedQuantity(product.unlimitedQuantity) ||
+            ((product.stock ?? 0) >= item.quantity && product.isActive !== false),
         });
       }
     }
@@ -86,12 +103,16 @@ export const cartService = {
       const sku = await Sku.findById(skuId);
       if (!sku || sku.status !== "active") throw new NotFoundError("SKU not available");
       productId = String(sku.productId);
-      const available = await inventoryReservationService.availableQuantity(skuId);
+      const product = await Product.findById(productId).select("unlimitedQuantity");
       const cart = await this.getOrCreate(userId);
       const existing = cart.items.find((item) => String(item.skuId) === skuId);
       const nextQty = (existing?.quantity ?? 0) + input.quantity;
-      if (nextQty > available) {
-        throw new BadRequestError("Requested quantity exceeds available stock");
+      assertOrderQuantityAllowed(nextQty, product?.unlimitedQuantity);
+      if (!isUnlimitedQuantity(product?.unlimitedQuantity)) {
+        const available = await inventoryReservationService.availableQuantity(skuId);
+        if (nextQty > available) {
+          throw new BadRequestError("Requested quantity exceeds available stock");
+        }
       }
       if (existing) {
         existing.quantity = nextQty;
@@ -111,7 +132,8 @@ export const cartService = {
     const cart = await this.getOrCreate(userId);
     const existing = cart.items.find((item) => String(item.productId) === productId && !item.skuId);
     const nextQty = (existing?.quantity ?? 0) + input.quantity;
-    if (nextQty > (product.stock ?? 0)) {
+    assertOrderQuantityAllowed(nextQty, product.unlimitedQuantity);
+    if (!isUnlimitedQuantity(product.unlimitedQuantity) && nextQty > (product.stock ?? 0)) {
       throw new BadRequestError("Requested quantity exceeds available stock");
     }
     if (existing) existing.quantity = nextQty;
@@ -130,13 +152,18 @@ export const cartService = {
     }
     const existing = cart.items.find(match);
     if (existing?.skuId) {
-      const available = await inventoryReservationService.availableQuantity(String(existing.skuId));
-      if (quantity > available) throw new BadRequestError("Requested quantity exceeds available stock");
+      const product = await Product.findById(existing.productId || key).select("unlimitedQuantity");
+      assertOrderQuantityAllowed(quantity, product?.unlimitedQuantity);
+      if (!isUnlimitedQuantity(product?.unlimitedQuantity)) {
+        const available = await inventoryReservationService.availableQuantity(String(existing.skuId));
+        if (quantity > available) throw new BadRequestError("Requested quantity exceeds available stock");
+      }
       existing.quantity = quantity;
     } else {
       const product = await Product.findById(key);
       if (!product || product.isActive === false) throw new NotFoundError("Product not available");
-      if (quantity > (product.stock ?? 0)) {
+      assertOrderQuantityAllowed(quantity, product.unlimitedQuantity);
+      if (!isUnlimitedQuantity(product.unlimitedQuantity) && quantity > (product.stock ?? 0)) {
         throw new BadRequestError("Requested quantity exceeds available stock");
       }
       if (!existing) cart.items.push({ productId: product._id, quantity });

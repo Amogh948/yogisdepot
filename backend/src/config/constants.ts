@@ -24,16 +24,6 @@ export type VendorStatus = (typeof VENDOR_STATUSES)[number];
 export const ADDRESS_TYPES = ["home", "work", "other"] as const;
 export type AddressType = (typeof ADDRESS_TYPES)[number];
 
-/** Fixed Taste India regions shown when a product is tagged for Taste India. */
-export const TASTE_INDIA_REGIONS = [
-  "north-india",
-  "south-india",
-  "west-india",
-  "east-india",
-  "northeast-india",
-] as const;
-export type TasteIndiaRegion = (typeof TASTE_INDIA_REGIONS)[number];
-
 /** Visual atmosphere for Festival Store detail pages. */
 export const FESTIVAL_THEMES = ["diwali", "navratri", "holi", "eid", "generic"] as const;
 export type FestivalTheme = (typeof FESTIVAL_THEMES)[number];
@@ -78,6 +68,11 @@ export const COOKIE_NAME = "yd_token";
 export const DEFAULT_PAGE = 1;
 export const DEFAULT_LIMIT = 20;
 export const MAX_LIMIT = 100;
+
+/** Per-order quantity cap when a product does not have unlimitedQuantity enabled. */
+export const MAX_ORDER_QUANTITY = 99;
+/** Absolute ceiling accepted by cart APIs (stock / per-order rules still apply in the service). */
+export const ABSOLUTE_MAX_ORDER_QUANTITY = 9999;
 
 /** @deprecated Checkout tax uses CanadianTaxRate — not this flat rate. */
 export const DEFAULT_TAX_RATE = 0;

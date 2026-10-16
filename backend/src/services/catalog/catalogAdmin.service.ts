@@ -14,7 +14,7 @@ import { buildSkuCode, nextProductCode, nextVariantCode } from "../../utils/busi
 import { uniqueSlug } from "../../utils/slug";
 import { inventoryReservationService } from "../inventory/inventoryReservation.service";
 import { skuOfferService } from "./skuOffer.service";
-import { DEFAULT_WAREHOUSE_CODE, TASTE_INDIA_REGIONS, TasteIndiaRegion } from "../../config/constants";
+import { DEFAULT_WAREHOUSE_CODE } from "../../config/constants";
 
 export interface WizardVariantInput {
   name: string;
@@ -57,8 +57,6 @@ export interface ProductWizardInput {
   usageInstructions?: string;
   tags?: string[];
   images?: Array<string | ProductImage>;
-  /** Optional Taste India region slug. */
-  tasteIndiaRegion?: TasteIndiaRegion | null;
   /** Optional Festival Store merchandising collection id. */
   festivalId?: string | null;
   returnWindowDays?: number;
@@ -99,8 +97,8 @@ export interface ProductStackUpdateInput {
   isActive?: boolean;
   isVegetarian?: boolean;
   isVegan?: boolean;
-  /** Pass null or "" to clear. */
-  tasteIndiaRegion?: TasteIndiaRegion | null | "";
+  /** When true, skip the per-order quantity cap (stock still applies). */
+  unlimitedQuantity?: boolean;
   /** Pass null or "" to clear. */
   festivalId?: string | null;
   returnWindowDays?: number;
@@ -127,18 +125,6 @@ async function resolveBrandId(input: ProductWizardInput): Promise<Types.ObjectId
     brand = await Brand.create({ name: input.brandName, slug, isActive: true });
   }
   return brand._id;
-}
-
-/** Returns slug to set, null to clear, undefined to leave unchanged. */
-function resolveTasteIndiaRegion(
-  value: string | null | undefined,
-): TasteIndiaRegion | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === "") return null;
-  if (!(TASTE_INDIA_REGIONS as readonly string[]).includes(value)) {
-    throw new BadRequestError("Invalid Taste India region");
-  }
-  return value as TasteIndiaRegion;
 }
 
 /** Returns ObjectId to set, null to clear, undefined to leave unchanged. */
@@ -219,7 +205,6 @@ export const catalogAdminService = {
     }
 
     const brandId = await resolveBrandId(input);
-    const tasteIndiaRegion = resolveTasteIndiaRegion(input.tasteIndiaRegion);
     const festivalId = await resolveFestivalId(input.festivalId);
     const categoryIds = resolveCategoryIds(input);
     const productCode = await nextProductCode();
@@ -250,7 +235,6 @@ export const catalogAdminService = {
       slug: uniqueSlug(input.name),
       brandId,
       brand: input.brandName,
-      tasteIndiaRegion: tasteIndiaRegion || undefined,
       festivalId: festivalId || undefined,
       categoryId: categoryIds[0],
       categoryIds,
@@ -447,7 +431,6 @@ export const catalogAdminService = {
     return {
       ...productJson,
       brandName,
-      tasteIndiaRegion: product.tasteIndiaRegion || null,
       festivalId: asObjectIdString(product.festivalId) || null,
       categoryId: categoryIds[0] || asObjectIdString(product.categoryId) || null,
       categoryIds,
@@ -485,6 +468,7 @@ export const catalogAdminService = {
     if (input.isFeatured !== undefined) product.isFeatured = input.isFeatured;
     if (input.isVegetarian !== undefined) product.isVegetarian = input.isVegetarian;
     if (input.isVegan !== undefined) product.isVegan = input.isVegan;
+    if (input.unlimitedQuantity !== undefined) product.unlimitedQuantity = Boolean(input.unlimitedQuantity);
     if (input.isActive !== undefined) {
       product.isActive = input.isActive;
       product.status = input.isActive ? "active" : "inactive";
@@ -494,15 +478,6 @@ export const catalogAdminService = {
     }
     if (input.deliveryEstimateDays !== undefined) {
       product.deliveryEstimateDays = Math.max(1, Math.floor(input.deliveryEstimateDays));
-    }
-
-    if (input.tasteIndiaRegion !== undefined) {
-      const region = resolveTasteIndiaRegion(input.tasteIndiaRegion);
-      if (region === null) {
-        product.set("tasteIndiaRegion", undefined);
-      } else if (region) {
-        product.tasteIndiaRegion = region;
-      }
     }
 
     if (input.festivalId !== undefined) {
@@ -588,7 +563,10 @@ export const catalogAdminService = {
           });
         }
 
-        if (patch.availableQuantity !== undefined || patch.reorderLevel !== undefined) {
+        if (
+          product.unlimitedQuantity === false &&
+          (patch.availableQuantity !== undefined || patch.reorderLevel !== undefined)
+        ) {
           const existing = await Inventory.findOne({ skuId: sku._id, warehouseId: warehouse._id });
           if (!existing) {
             await Inventory.create({

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useCategories } from "../../hooks/useCatalog";
 import { EmptyState, ErrorState, Skeleton } from "../../components/ui/Feedback";
 import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
+import { BackLink } from "../../components/navigation/BackLink";
 import { mediaUrl } from "../../types";
 
 export function CategoriesPage() {
@@ -14,6 +15,11 @@ export function CategoriesPage() {
       <Helmet>
         <title>All Categories | Yogi&apos;s Depot</title>
       </Helmet>
+      <div className="mb-3">
+        <BackLink fallback="/" className="text-sm font-semibold text-yd-green">
+          ← Back
+        </BackLink>
+      </div>
       <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: "Categories" }]} />
       <h1 className="mb-5 font-display text-3xl text-yd-forest">All Categories</h1>
       {categories.isLoading ? (

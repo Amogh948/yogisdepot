@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import { FESTIVAL_THEMES, TASTE_INDIA_REGIONS } from "../../config/constants";
+import { FESTIVAL_THEMES } from "../../config/constants";
 import { MERCHANDISING_PLACEMENTS } from "../../models/MerchandisingCollection";
 import { merchandisingService } from "../../services/catalog/merchandising.service";
 import { sendSuccess } from "../../utils/apiResponse";
@@ -11,7 +11,6 @@ export const merchandisingSchema = z.object({
   name: z.string().min(2).max(80),
   subtitle: z.string().max(160).optional(),
   placement: z.enum(MERCHANDISING_PLACEMENTS).optional(),
-  tasteIndiaRegion: z.enum(TASTE_INDIA_REGIONS).optional().nullable(),
   festivalTheme: z.enum(FESTIVAL_THEMES).optional(),
   image: z.string().optional(),
   images: z.array(z.string().min(1)).max(12).optional(),
@@ -35,7 +34,6 @@ function publicMerchPayload(
     slug: string;
     subtitle?: string;
     placement: string;
-    tasteIndiaRegion?: string;
     festivalTheme?: string;
     image?: string;
     images?: string[];
@@ -56,7 +54,6 @@ function publicMerchPayload(
     slug: row.slug,
     subtitle: row.subtitle,
     placement: row.placement,
-    tasteIndiaRegion: row.tasteIndiaRegion || null,
     festivalTheme: row.festivalTheme || "generic",
     image: images[0] || row.image || undefined,
     images,
@@ -70,10 +67,7 @@ function publicMerchPayload(
 export const publicMerchandisingController = {
   list: asyncHandler(async (req: Request, res: Response) => {
     const placement = z.enum(MERCHANDISING_PLACEMENTS).optional().parse(req.query.placement);
-    const region = z.enum(TASTE_INDIA_REGIONS).optional().parse(req.query.region);
-    const rows = region
-      ? await merchandisingService.listPublicForRegion(region)
-      : await merchandisingService.listPublic(placement);
+    const rows = await merchandisingService.listPublic(placement);
     const data = await Promise.all(
       rows.map(async (row) => {
         const products = await merchandisingService.productsForCollection(row);
