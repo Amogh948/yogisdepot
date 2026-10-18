@@ -45,10 +45,10 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const PAYMENT_STATUSES = ["pending", "paid", "failed", "refunded"] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
-/** Methods accepted for new checkouts. */
-export const PAYMENT_METHODS = ["cod", "square", "mock_online"] as const;
+/** Methods accepted for new checkouts (card-only; COD removed from storefront). */
+export const PAYMENT_METHODS = ["square", "mock_online"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
-/** Includes legacy values stored on older orders. */
+/** Includes legacy values stored on older orders (COD kept for history). */
 export const ORDER_PAYMENT_METHODS = ["cod", "square", "mock_online", "razorpay"] as const;
 export type OrderPaymentMethod = (typeof ORDER_PAYMENT_METHODS)[number];
 

@@ -20,24 +20,6 @@ export type {
   RefundResult,
 } from "./payment.types";
 
-class CodProvider implements PaymentProvider {
-  async createPayment(input: PaymentIntentInput): Promise<PaymentIntent> {
-    return {
-      provider: "cod",
-      status: "pending",
-      reference: `cod_${input.orderNumber}`,
-    };
-  }
-
-  async verifyPayment(reference: string): Promise<PaymentResult> {
-    return { success: true, reference, status: "pending" };
-  }
-
-  async refundPayment(reference: string): Promise<RefundResult> {
-    return { success: true, reference };
-  }
-}
-
 class MockOnlineProvider implements PaymentProvider {
   async createPayment(input: PaymentIntentInput): Promise<PaymentIntent> {
     const reference = `mock_${input.orderNumber}_${Date.now()}`;
@@ -67,7 +49,6 @@ class MockOnlineProvider implements PaymentProvider {
 
 function providers(): Record<PaymentMethod, PaymentProvider> {
   return {
-    cod: new CodProvider(),
     mock_online: new MockOnlineProvider(),
     square: new SquareProvider(),
   };

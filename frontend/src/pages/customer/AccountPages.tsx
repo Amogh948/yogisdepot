@@ -235,7 +235,7 @@ export function AddressesPage() {
         <Input label="Address" {...form.register("addressLine1")} />
         <Input label="City" {...form.register("city")} />
         <Input label="State" {...form.register("state")} />
-        <Input label="Postal code" {...form.register("postalCode")} />
+        <Input label="Postal Code" type="text" inputMode="text" autoComplete="postal-code" placeholder="T2W 1A1" {...form.register("postalCode")} />
         <Button loading={create.isPending}>Save address</Button>
       </form>
     </div>
@@ -324,7 +324,7 @@ export function VendorApplyPage() {
         <Input label="Address" {...form.register("addressLine1")} />
         <Input label="City" {...form.register("city")} />
         <Input label="State" {...form.register("state")} />
-        <Input label="Postal code" {...form.register("postalCode")} />
+        <Input label="Postal Code" type="text" inputMode="text" autoComplete="postal-code" placeholder="T2W 1A1" {...form.register("postalCode")} />
         <Button>Submit application</Button>
       </form>
     </div>

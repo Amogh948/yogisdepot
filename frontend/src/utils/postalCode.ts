@@ -1,5 +1,5 @@
-/** Canadian postal: A1A 1A1 (optional space). */
-export const CA_POSTAL_REGEX = /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/;
+/** Canadian postal: A1A 1A1 (optional single space). */
+export const CA_POSTAL_REGEX = /^[A-Za-z]\d[A-Za-z] ?\d[A-Za-z]\d$/;
 
 /** US ZIP or ZIP+4. */
 export const US_ZIP_REGEX = /^\d{5}(-\d{4})?$/;

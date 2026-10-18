@@ -90,7 +90,7 @@ export function CheckoutPage() {
     if (step === 1) return;
     scrollToTop();
   }, [step]);
-  const [paymentMethod, setPaymentMethod] = useState<"cod" | "square">("square");
+  const paymentMethod = "square" as const;
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
   const [scratchRewardId, setScratchRewardId] = useState("");
@@ -99,6 +99,7 @@ export function CheckoutPage() {
   const [cardReady, setCardReady] = useState(false);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [detecting, setDetecting] = useState(false);
+  const autoStartedCardCheckout = useRef(false);
   const squareCardRef = useRef<{
     tokenize: (details: SquareVerificationDetails) => Promise<{
       sourceId: string;
@@ -111,12 +112,6 @@ export function CheckoutPage() {
   const addresses = useQuery({ queryKey: ["addresses"], queryFn: () => addressApi.list() });
   const paymentConfig = useQuery({ queryKey: ["payments-config"], queryFn: () => paymentsApi.config() });
   const squareEnabled = paymentConfig.data?.data.squareEnabled === true;
-
-  useEffect(() => {
-    if (paymentConfig.isSuccess && !squareEnabled && paymentMethod === "square") {
-      setPaymentMethod("cod");
-    }
-  }, [paymentConfig.isSuccess, squareEnabled, paymentMethod]);
 
   const savedAddresses = addresses.data?.data || [];
   const selected = useMemo(
@@ -314,23 +309,20 @@ export function CheckoutPage() {
     },
     onSuccess: async (result) => {
       const orderId = entityId(result.data.order);
-      if (paymentMethod !== "square") {
-        // COD (and other non-Square methods): order is placed successfully — celebrate.
-        await finish(orderId, "Order placed successfully", { celebrate: true });
-        return;
-      }
       const payload = result.data.payment.clientPayload;
       const applicationId = String(payload?.applicationId || "");
       const locationId = String(payload?.locationId || "");
       if (!payload || !applicationId || !locationId) {
         toast("Unable to start card checkout", "error");
         await abandonPayment(orderId);
+        autoStartedCardCheckout.current = false;
         return;
       }
       const amountCents = Number(payload.amountCents);
       if (!Number.isFinite(amountCents) || amountCents <= 0) {
         toast("Unable to start card checkout (invalid amount)", "error");
         await abandonPayment(orderId);
+        autoStartedCardCheckout.current = false;
         return;
       }
       setSquareSession({
@@ -342,7 +334,10 @@ export function CheckoutPage() {
         currency: String(payload.currency || "CAD"),
       });
     },
-    onError: (error) => toast(error instanceof ApiError ? error.message : "Checkout failed", "error"),
+    onError: (error) => {
+      autoStartedCardCheckout.current = false;
+      toast(error instanceof ApiError ? error.message : "Checkout failed", "error");
+    },
   });
 
   const payWithSquare = async () => {
@@ -405,7 +400,20 @@ export function CheckoutPage() {
     toast("Payment was cancelled. Your cart is still saved.", "info");
     await abandonPayment(squareSession.orderId);
     setSquareSession(null);
+    autoStartedCardCheckout.current = false;
   };
+
+  // Card-only checkout: start Square session as soon as the payment step opens.
+  useEffect(() => {
+    if (step !== 3) {
+      autoStartedCardCheckout.current = false;
+      return;
+    }
+    if (!squareEnabled || undeliverable || !selected || squareSession || placeOrder.isPending) return;
+    if (autoStartedCardCheckout.current) return;
+    autoStartedCardCheckout.current = true;
+    placeOrder.mutate();
+  }, [step, squareEnabled, undeliverable, selected, squareSession, placeOrder.isPending]);
 
   const cartData = cart.data?.data?.items.length ? cart.data.data : paying ? cartHold.current : cart.data?.data;
 
@@ -581,7 +589,7 @@ export function CheckoutPage() {
                     ))}
                   </Select>
                   <Input
-                    label="Postal code"
+                    label="Postal Code"
                     type="text"
                     inputMode="text"
                     autoComplete="postal-code"
@@ -595,7 +603,7 @@ export function CheckoutPage() {
                       },
                     })}
                     error={form.formState.errors.postalCode?.message}
-                    hint="Canadian format: letter-number-letter number-letter-number"
+                    hint="Canadian format: letter-number-letter number-letter-number (e.g. T2W 1A1)"
                   />
                   <Input label="Country" {...form.register("country")} error={form.formState.errors.country?.message} />
                   <Select label="Address type" {...form.register("addressType")}>
@@ -710,7 +718,7 @@ export function CheckoutPage() {
                       ))}
                     </Select>
                     <Input
-                      label="Postal code"
+                      label="Postal Code"
                       type="text"
                       inputMode="text"
                       autoComplete="postal-code"
@@ -838,66 +846,77 @@ export function CheckoutPage() {
                 {undeliverableMessage}
               </p>
             ) : null}
-            {squareEnabled ? (
-              <label className={`flex cursor-pointer gap-3 rounded-[12px] border p-4 ${paymentMethod === "square" ? "border-yd-green bg-yd-green/5" : "border-yd-border"}`}>
-                <input
-                  type="radio"
-                  className="accent-yd-green"
-                  checked={paymentMethod === "square"}
-                  disabled={Boolean(squareSession)}
-                  onChange={() => setPaymentMethod("square")}
-                />
+            {!squareEnabled && paymentConfig.isSuccess ? (
+              <p className="rounded-[12px] border border-yd-error/30 bg-yd-error/10 px-4 py-3 text-sm font-medium text-yd-error">
+                Card payments are not available right now. Please try again later.
+              </p>
+            ) : null}
+            <div className="rounded-[12px] border border-yd-green bg-yd-green/5 p-4">
+              <div className="flex items-start gap-3">
+                <input type="radio" className="mt-1 accent-yd-green" checked readOnly aria-label="Pay by card" />
                 <span>
                   <p className="font-semibold">Pay by card</p>
                   <p className="text-xs text-yd-muted">Secure card payment via Square</p>
                 </span>
-              </label>
-            ) : null}
-            <label className={`flex cursor-pointer gap-3 rounded-[12px] border p-4 ${paymentMethod === "cod" ? "border-yd-green bg-yd-green/5" : "border-yd-border"}`}>
-              <input
-                type="radio"
-                className="accent-yd-green"
-                checked={paymentMethod === "cod"}
-                disabled={Boolean(squareSession)}
-                onChange={() => setPaymentMethod("cod")}
-              />
-              <span>
-                <p className="font-semibold">Cash on Delivery</p>
-                <p className="text-xs text-yd-muted">Pay when your order arrives</p>
-              </span>
-            </label>
-            {squareSession ? (
-              <div className="space-y-3 rounded-[12px] border border-yd-border bg-yd-cream/40 p-4">
-                <p className="text-sm font-semibold text-yd-ink">Enter your card details</p>
-                <p className="text-xs text-yd-muted">
-                  Postal code is prefilled from your delivery address
-                  {selected?.postalCode
-                    ? ` (${postalCodeForSquare(selected.postalCode, selected.country)})`
-                    : ""}
-                  . Canadian cards accept letter–number format (e.g. T2W 1A1).
-                </p>
-                <div id="square-card-container" className="min-h-[56px]" />
-                {!cardReady ? <p className="text-xs text-yd-muted">Loading secure card form…</p> : null}
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button type="button" variant="outline" className="flex-1" disabled={paying} onClick={() => void cancelSquareCheckout()}>
-                    Cancel
-                  </Button>
-                  <Button className="flex-1" size="lg" loading={paying} disabled={!cardReady || undeliverable} onClick={() => void payWithSquare()}>
-                    Pay now →
-                  </Button>
-                </div>
               </div>
-            ) : (
-              <Button
-                className="w-full"
-                size="lg"
-                loading={placeOrder.isPending || paying}
-                disabled={undeliverable}
-                onClick={() => placeOrder.mutate()}
-              >
-                Place order →
-              </Button>
-            )}
+              {squareEnabled && !undeliverable ? (
+                <div className="mt-4 space-y-3 border-t border-yd-green/20 pt-4">
+                  <p className="text-sm font-semibold text-yd-ink">Enter your card details</p>
+                  <p className="text-xs text-yd-muted">
+                    Postal Code is prefilled from your delivery address
+                    {selected?.postalCode
+                      ? ` (${postalCodeForSquare(selected.postalCode, selected.country)})`
+                      : ""}
+                    . Canadian postal codes are alphanumeric (e.g. T2W 1A1).
+                  </p>
+                  <div id="square-card-container" className="min-h-[56px]" />
+                  {placeOrder.isPending || (squareSession && !cardReady) ? (
+                    <p className="text-xs text-yd-muted">Loading secure card form…</p>
+                  ) : null}
+                  {placeOrder.isError && !squareSession ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-yd-error">
+                        {(placeOrder.error as ApiError)?.message || "Unable to start card checkout."}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => {
+                          autoStartedCardCheckout.current = false;
+                          placeOrder.reset();
+                          placeOrder.mutate();
+                        }}
+                      >
+                        Try again
+                      </Button>
+                    </div>
+                  ) : null}
+                  {squareSession ? (
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1"
+                        disabled={paying}
+                        onClick={() => void cancelSquareCheckout()}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        size="lg"
+                        loading={paying}
+                        disabled={!cardReady || undeliverable}
+                        onClick={() => void payWithSquare()}
+                      >
+                        Pay now →
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
