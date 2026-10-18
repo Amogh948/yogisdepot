@@ -30,6 +30,7 @@ export interface OrderTaxSnapshot {
   excludesNonTaxableItems?: boolean;
   excludesGroceries?: boolean;
   groceryOnlyCart?: boolean;
+  hasTaxableGrocery?: boolean;
   deliveryFeeTaxed?: boolean;
 }
 
@@ -176,6 +177,7 @@ const orderSchema = new Schema<OrderDocument>(
       excludesNonTaxableItems: Boolean,
       excludesGroceries: Boolean,
       groceryOnlyCart: Boolean,
+      hasTaxableGrocery: Boolean,
       deliveryFeeTaxed: Boolean,
     },
     coupon: {

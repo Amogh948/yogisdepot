@@ -445,6 +445,7 @@ export function CheckoutPage() {
       excludesNonTaxableItems?: boolean;
       excludesGroceries?: boolean;
       groceryOnlyCart?: boolean;
+      hasTaxableGrocery?: boolean;
       deliveryFeeTaxed?: boolean;
     };
   };
@@ -905,10 +906,27 @@ export function CheckoutPage() {
         <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
           {cartData.items.slice(0, 4).map((item) => {
             const src = mediaUrl(item.product.thumbnail || item.product.images[0]);
-            return src ? <img key={item.productId} src={src} alt="" className="h-12 w-12 rounded-lg object-cover bg-yd-cream" /> : null;
+            const qty = Math.max(1, Number(item.quantity) || 1);
+            return (
+              <div key={item.productId} className="flex w-12 shrink-0 flex-col items-center gap-1">
+                {src ? (
+                  <img src={src} alt="" className="h-12 w-12 rounded-lg object-cover bg-yd-cream" />
+                ) : (
+                  <div className="h-12 w-12 rounded-lg bg-yd-cream" />
+                )}
+                <span className="rounded-full bg-yd-forest px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-soft">
+                  x{qty}
+                </span>
+              </div>
+            );
           })}
         </div>
         <h3 className="mt-4 text-sm font-semibold text-yd-muted">Price Details</h3>
+        {quote.isError ? (
+          <p className="mt-2 rounded-xl border border-yd-error/30 bg-yd-error/5 px-3 py-2 text-xs text-yd-error">
+            {(quote.error as ApiError)?.message || "Unable to calculate tax and fees. Refresh and try again."}
+          </p>
+        ) : null}
         <dl className="mt-2 space-y-1.5 text-sm">
           <div className="flex justify-between">
             <dt className="text-yd-muted">Total MRP</dt>
@@ -943,10 +961,10 @@ export function CheckoutPage() {
               Tax
               {quoteData.taxSnapshot?.jurisdiction ? ` (${quoteData.taxSnapshot.jurisdiction})` : ""}
               <span className="mt-0.5 block text-[11px] font-normal leading-snug">
-                {quoteData.taxSnapshot?.groceryOnlyCart
-                  ? "Groceries excluded; platform fee only (delivery not taxed)"
+                {quoteData.taxSnapshot?.groceryOnlyCart && !quoteData.taxSnapshot?.deliveryFeeTaxed
+                  ? "Non-taxable groceries excluded; tax on platform fee only (delivery not taxed)"
                   : quoteData.taxSnapshot?.excludesGroceries
-                    ? "Excludes groceries; includes platform & delivery fees"
+                    ? "Excludes non-taxable groceries; includes taxable items, platform & delivery fees"
                     : "On items + platform & delivery fees"}
               </span>
             </dt>

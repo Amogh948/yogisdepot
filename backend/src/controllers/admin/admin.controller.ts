@@ -168,6 +168,8 @@ export const settingsUpdateSchema = z.object({
   handlingFeeCents: z.coerce.number().int().min(0).optional(),
   smallCartFeeCents: z.coerce.number().int().min(0).optional(),
   smallCartThresholdCents: z.coerce.number().int().min(0).optional(),
+  lowStockDisplayThreshold: z.coerce.number().int().min(0).optional(),
+  inStockDisplayThreshold: z.coerce.number().int().min(0).optional(),
   sameDayDeliveryEnabled: z.coerce.boolean().optional(),
   sameDayCutoffTime: z
     .string()

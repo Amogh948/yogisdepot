@@ -85,6 +85,10 @@ export const DEFAULT_PLATFORM_FEE_CENTS = 99; // $0.99
 export const DEFAULT_HANDLING_FEE_CENTS = 49; // $0.49
 export const DEFAULT_SMALL_CART_FEE_CENTS = 199; // $1.99
 export const DEFAULT_SMALL_CART_THRESHOLD_CENTS = 2500; // $25.00
+/** PDP stock label: 1..this → yellow "{n} available" */
+export const DEFAULT_LOW_STOCK_DISPLAY_THRESHOLD = 5;
+/** PDP stock label: above this → green "In stock" */
+export const DEFAULT_IN_STOCK_DISPLAY_THRESHOLD = 10;
 export const DELIVERY_SPEEDS = ["standard", "superfast"] as const;
 export type DeliverySpeed = (typeof DELIVERY_SPEEDS)[number];
 

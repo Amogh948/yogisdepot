@@ -10,6 +10,10 @@ export type PublicSettings = {
   sameDayTimezone?: string;
   sameDayWeekdays?: number[];
   sameDayPostalPrefixes?: string[];
+  /** Stock 1..this → yellow "{n} available" on PDP. */
+  lowStockDisplayThreshold?: number;
+  /** Stock above this → green "In stock" on PDP. */
+  inStockDisplayThreshold?: number;
 };
 
 export function usePublicSettings() {

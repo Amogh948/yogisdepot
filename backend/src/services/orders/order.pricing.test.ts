@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { addCents, applyBps, clampNonNegativeCents } from "../../utils/money";
 import { buildGroceryAwareTaxLines } from "../checkout/groceryTax.util";
+import type { Taxability } from "../../models/TaxCategory";
 
 /** Mirrors checkout total assembly using grocery-aware tax lines. */
 function checkoutTotal(input: {
   groceryItemCents: number;
+  groceryTaxability?: Taxability;
+  taxableGroceryItemCents?: number;
   nonGroceryItemCents: number;
   couponDiscountCents: number;
   scratchDiscountCents: number;
@@ -14,7 +17,8 @@ function checkoutTotal(input: {
   taxBps: number;
   freeShippingThresholdCents: number;
 }) {
-  const subtotalCents = input.groceryItemCents + input.nonGroceryItemCents;
+  const taxableGroceryItemCents = input.taxableGroceryItemCents ?? 0;
+  const subtotalCents = input.groceryItemCents + taxableGroceryItemCents + input.nonGroceryItemCents;
   const afterDiscounts = clampNonNegativeCents(
     subtotalCents - input.couponDiscountCents - input.scratchDiscountCents,
   );
@@ -28,6 +32,19 @@ function checkoutTotal(input: {
             productId: "pg",
             lineTotalCents: input.groceryItemCents,
             isGrocery: true as const,
+            taxability: input.groceryTaxability ?? ("ZERO_RATED" as const),
+          },
+        ]
+      : []),
+    ...(taxableGroceryItemCents
+      ? [
+          {
+            skuId: "g2",
+            productId: "pg2",
+            lineTotalCents: taxableGroceryItemCents,
+            taxCategoryId: "standard",
+            isGrocery: true as const,
+            taxability: "TAXABLE" as const,
           },
         ]
       : []),
@@ -38,6 +55,7 @@ function checkoutTotal(input: {
             productId: "ps",
             lineTotalCents: input.nonGroceryItemCents,
             isGrocery: false as const,
+            taxability: "TAXABLE" as const,
           },
         ]
       : []),
@@ -65,6 +83,7 @@ function checkoutTotal(input: {
     taxCents,
     totalCents,
     groceryOnlyCart: groceryTax.groceryOnlyCart,
+    hasTaxableGrocery: groceryTax.hasTaxableGrocery,
     deliveryFeeTaxed: groceryTax.deliveryFeeTaxed,
   };
 }
@@ -89,7 +108,7 @@ describe("checkout pricing cents assembly", () => {
     expect(result.totalCents).toBe(9250 + 99 + 49 + 1215);
   });
 
-  it("taxes only platform fee for grocery-only carts (delivery excluded from tax)", () => {
+  it("Rule 1: taxes only platform fee for non-taxable grocery-only carts", () => {
     const result = checkoutTotal({
       groceryItemCents: 5000,
       nonGroceryItemCents: 0,
@@ -102,13 +121,54 @@ describe("checkout pricing cents assembly", () => {
       freeShippingThresholdCents: 7500,
     });
     expect(result.groceryOnlyCart).toBe(true);
+    expect(result.hasTaxableGrocery).toBe(false);
     expect(result.deliveryFeeTaxed).toBe(false);
     expect(result.taxableAmountCents).toBe(99);
     expect(result.taxCents).toBe(13);
     expect(result.totalCents).toBe(5000 + 499 + 99 + 13);
   });
 
-  it("taxes mixed carts: non-grocery subtotal + platform + delivery", () => {
+  it("Rule 2: taxes taxable grocery subtotal + platform + delivery", () => {
+    const result = checkoutTotal({
+      groceryItemCents: 2000,
+      taxableGroceryItemCents: 3000,
+      nonGroceryItemCents: 0,
+      couponDiscountCents: 0,
+      scratchDiscountCents: 0,
+      deliveryFeeCents: 499,
+      platformFeeCents: 99,
+      handlingFeeCents: 0,
+      taxBps: 1300,
+      freeShippingThresholdCents: 7500,
+    });
+    expect(result.groceryOnlyCart).toBe(true);
+    expect(result.hasTaxableGrocery).toBe(true);
+    expect(result.deliveryFeeTaxed).toBe(true);
+    expect(result.taxableAmountCents).toBe(3000 + 99 + 499);
+    expect(result.taxCents).toBe(468);
+  });
+
+  it("Rule 3: taxes taxable groceries + other items + platform + delivery", () => {
+    const result = checkoutTotal({
+      groceryItemCents: 2000,
+      taxableGroceryItemCents: 1000,
+      nonGroceryItemCents: 3000,
+      couponDiscountCents: 0,
+      scratchDiscountCents: 0,
+      deliveryFeeCents: 499,
+      platformFeeCents: 99,
+      handlingFeeCents: 0,
+      taxBps: 1300,
+      freeShippingThresholdCents: 7500,
+    });
+    expect(result.groceryOnlyCart).toBe(false);
+    expect(result.hasTaxableGrocery).toBe(true);
+    expect(result.deliveryFeeTaxed).toBe(true);
+    expect(result.taxableAmountCents).toBe(1000 + 3000 + 99 + 499);
+    expect(result.taxCents).toBe(598);
+  });
+
+  it("taxes mixed carts with only non-taxable groceries: other + platform + delivery", () => {
     const result = checkoutTotal({
       groceryItemCents: 2000,
       nonGroceryItemCents: 3000,
@@ -121,6 +181,7 @@ describe("checkout pricing cents assembly", () => {
       freeShippingThresholdCents: 7500,
     });
     expect(result.groceryOnlyCart).toBe(false);
+    expect(result.hasTaxableGrocery).toBe(false);
     expect(result.deliveryFeeTaxed).toBe(true);
     expect(result.taxableAmountCents).toBe(3000 + 99 + 499);
     expect(result.taxCents).toBe(468);

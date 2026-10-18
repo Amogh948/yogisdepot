@@ -223,6 +223,9 @@ export const orderService = {
       order = created[0];
 
       for (const line of quote.lines) {
+        if (line.unlimitedQuantity) {
+          continue;
+        }
         if (line.skuId) {
           await inventoryReservationService.reserve({
             skuId: line.skuId,

@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import { ordersApi, reviewsApi } from "../../services/api/commerce.api";
+import { ordersApi } from "../../services/api/commerce.api";
 import { EmptyState, ErrorState, Skeleton, Badge } from "../../components/ui/Feedback";
 import { Button } from "../../components/ui/Button";
 import { ConfirmDialog, Modal } from "../../components/ui/Overlay";
@@ -59,11 +59,12 @@ function OrderBillBreakdown({ order }: { order: Order }) {
   const tax = dollarsFromCents(order.taxCents, order.tax);
   const total = dollarsFromCents(order.totalCents, order.total);
   const taxLabel = order.taxSnapshot?.jurisdiction ? `Tax (${order.taxSnapshot.jurisdiction})` : "Tax";
-  const taxNote = order.taxSnapshot?.groceryOnlyCart
-    ? "Groceries excluded; platform fee only (delivery not taxed)"
-    : order.taxSnapshot?.excludesGroceries
-      ? "Excludes groceries; includes platform & delivery fees"
-      : "On items + platform & delivery fees";
+  const taxNote =
+    order.taxSnapshot?.groceryOnlyCart && !order.taxSnapshot?.deliveryFeeTaxed
+      ? "Non-taxable groceries excluded; tax on platform fee only (delivery not taxed)"
+      : order.taxSnapshot?.excludesGroceries
+        ? "Excludes non-taxable groceries; includes taxable items, platform & delivery fees"
+        : "On items + platform & delivery fees";
   const paymentLabel =
     order.paymentMethod === "cod"
       ? "Cash on delivery"
@@ -272,9 +273,6 @@ export function OrderDetailPage() {
   const { id = "" } = useParams();
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
-  const [reviewFor, setReviewFor] = useState<string | null>(null);
-  const [comment, setComment] = useState("");
-  const [rating, setRating] = useState(5);
   const [cancelDialog, setCancelDialog] = useState<CancelDialog>(null);
   const [cancelReason, setCancelReason] = useState<CancellationReason | "">("");
   const [betterDealDetails, setBetterDealDetails] = useState("");
@@ -314,15 +312,6 @@ export function OrderDetailPage() {
     },
     onError: (error) => toast(error instanceof ApiError ? error.message : "Could not save feedback", "error"),
   });
-  const review = useMutation({
-    mutationFn: () => reviewsApi.create({ productId: reviewFor, orderId: id, rating, comment }),
-    onSuccess: () => {
-      toast("Review submitted");
-      setReviewFor(null);
-    },
-    onError: (error) => toast(error instanceof ApiError ? error.message : "Review failed", "error"),
-  });
-
   if (query.isLoading) return <Skeleton className="h-64" />;
   if (query.isError || !query.data) return <ErrorState message="Order not found" />;
   const order = query.data.data;
@@ -385,11 +374,6 @@ export function OrderDetailPage() {
               <p className="text-sm text-yd-muted">
                 {formatCad(item.unitPrice)} × {item.quantity}
               </p>
-              {order.orderStatus === "delivered" ? (
-                <button className="mt-1 text-sm font-semibold text-yd-saffron" type="button" onClick={() => setReviewFor(item.productId)}>
-                  Write a review
-                </button>
-              ) : null}
             </div>
           </article>
         ))}
@@ -471,31 +455,6 @@ export function OrderDetailPage() {
         </div>
       </Modal>
 
-      {reviewFor ? (
-        <form
-          className="rounded-card border border-yd-border bg-white p-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            review.mutate();
-          }}
-        >
-          <p className="font-semibold">Review product</p>
-          <label className="mt-2 block text-sm">
-            Rating
-            <select className="mt-1 h-11 w-full rounded-xl border border-yd-border px-3" value={rating} onChange={(e) => setRating(Number(e.target.value))}>
-              {[5, 4, 3, 2, 1].map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <textarea className="mt-3 min-h-24 w-full rounded-xl border border-yd-border p-3 text-sm" value={comment} onChange={(e) => setComment(e.target.value)} required minLength={8} />
-          <Button className="mt-3" loading={review.isPending}>
-            Submit review
-          </Button>
-        </form>
-      ) : null}
     </div>
   );
 }

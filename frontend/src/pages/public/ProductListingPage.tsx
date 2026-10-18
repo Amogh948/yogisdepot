@@ -24,7 +24,6 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
   const vegetarian = params.get("vegetarian") || undefined;
   const minPrice = params.get("minPrice") ? Number(params.get("minPrice")) : undefined;
   const maxPrice = params.get("maxPrice") ? Number(params.get("maxPrice")) : undefined;
-  const rating = params.get("rating") ? Number(params.get("rating")) : undefined;
   const discount = params.get("discount") || undefined;
   const brand = params.get("brand") || undefined;
 
@@ -49,7 +48,6 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
     vegetarian,
     minPrice,
     maxPrice,
-    rating,
     discount,
     brand,
   });
@@ -117,14 +115,6 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
           Max price
           <input className="mt-1 h-11 w-full rounded-xl border border-yd-border px-3" type="number" defaultValue={maxPrice} onBlur={(e) => set("maxPrice", e.target.value || undefined)} />
         </label>
-        <label className="block text-sm font-medium">
-          Minimum rating
-          <select className="mt-1 h-11 w-full rounded-xl border border-yd-border px-3" value={rating || ""} onChange={(e) => set("rating", e.target.value || undefined)}>
-            <option value="">Any</option>
-            <option value="4">4+</option>
-            <option value="3">3+</option>
-          </select>
-        </label>
         <div className="space-y-1 text-sm">
           <p className="font-medium">Categories</p>
           <div className="max-h-56 space-y-0.5 overflow-y-auto pr-1">
@@ -142,7 +132,7 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
         </div>
       </div>
     ),
-    [vegetarian, discount, minPrice, maxPrice, rating, parentCategories, selectedCategories],
+    [vegetarian, discount, minPrice, maxPrice, parentCategories, selectedCategories],
   );
 
   const total = list.data?.pagination?.total;
@@ -222,7 +212,6 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
                 <option value="relevance">Relevance</option>
                 <option value="price_asc">Price: Low to High</option>
                 <option value="price_desc">Price: High to Low</option>
-                <option value="rating">Rating</option>
                 <option value="newest">Newest</option>
                 <option value="popular">Popular</option>
                 <option value="discount">Discount</option>
@@ -284,7 +273,6 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
             ["popular", "Popular"],
             ["price_asc", "Price: Low to High"],
             ["price_desc", "Price: High to Low"],
-            ["rating", "Rating"],
             ["newest", "Newest"],
             ["discount", "Discount"],
           ].map(([value, label]) => (

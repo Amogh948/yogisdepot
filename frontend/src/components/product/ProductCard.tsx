@@ -2,7 +2,7 @@ import { Heart, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { Product } from "../../types";
 import { entityId } from "../../types";
-import { Price, QuantitySelector, Rating } from "../ui/Feedback";
+import { Price, QuantitySelector } from "../ui/Feedback";
 import { useCartQuantity } from "../../hooks/useCatalog";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { productImageUrl } from "../../utils/productImage";
@@ -68,7 +68,6 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
           {product.name}
         </Link>
         {weight ? <p className="text-[11px] text-yd-muted">{weight}</p> : null}
-        <Rating value={product.rating || 0} count={product.reviewCount} />
         <div className="mt-auto flex min-h-8 items-center justify-between gap-1.5 pt-2">
           <Price price={product.price} compareAt={product.compareAtPrice} showBadge size="sm" />
           {onAdd ? (

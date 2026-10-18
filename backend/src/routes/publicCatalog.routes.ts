@@ -29,6 +29,8 @@ export const publicSettingsController = {
         sameDayPostalPrefixes: Array.isArray(settings.sameDayPostalPrefixes)
           ? settings.sameDayPostalPrefixes
           : [],
+        lowStockDisplayThreshold: settings.lowStockDisplayThreshold ?? 5,
+        inStockDisplayThreshold: settings.inStockDisplayThreshold ?? 10,
       },
       "Settings fetched",
     );

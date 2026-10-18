@@ -8,6 +8,7 @@ import { Cart } from "../../models/Cart";
 import { getPlatformSettings } from "../../models/PlatformSettings";
 import { Product } from "../../models/Product";
 import { Sku } from "../../models/Sku";
+import { TaxCategory, type Taxability } from "../../models/TaxCategory";
 import { UserScratchReward } from "../../models/UserScratchReward";
 import { addCents, applyBps, clampNonNegativeCents, dollarsToCents } from "../../utils/money";
 import { couponService } from "../coupons/coupon.service";
@@ -33,6 +34,8 @@ export interface CheckoutLine {
   taxCategoryId?: string;
   /** True when product is under Groceries (or a grocery subcategory). */
   isGrocery?: boolean;
+  /** When true, inventory quantity is not enforced at quote/checkout. */
+  unlimitedQuantity?: boolean;
 }
 
 export interface CheckoutBreakdown {
@@ -147,7 +150,8 @@ export const checkoutPricingService = {
 
       if (skuId) {
         const offer = await skuOfferService.getOfferBySkuId(skuId);
-        if (!offer.available || offer.availableQuantity < item.quantity) {
+        const unlimited = offer.unlimitedQuantity !== false;
+        if (!offer.available || (!unlimited && offer.availableQuantity < item.quantity)) {
           throw new BadRequestError(`${offer.name} does not have enough stock`);
         }
         const lineProductDiscountCents = offer.discountCents * item.quantity;
@@ -166,6 +170,7 @@ export const checkoutPricingService = {
           lineProductDiscountCents,
           lineTotalCents,
           taxCategoryId: offer.taxCategoryId,
+          unlimitedQuantity: unlimited,
         });
       } else if (item.productId) {
         // Legacy product path
@@ -173,7 +178,8 @@ export const checkoutPricingService = {
         if (!product || product.isActive === false) {
           throw new BadRequestError("One or more products are no longer available");
         }
-        if ((product.stock ?? 0) < item.quantity) {
+        const unlimited = product.unlimitedQuantity !== false;
+        if (!unlimited && (product.stock ?? 0) < item.quantity) {
           throw new BadRequestError(`${product.name} does not have enough stock`);
         }
         const unitPriceCents = dollarsToCents(product.price ?? 0);
@@ -190,6 +196,7 @@ export const checkoutPricingService = {
           unitPriceCents,
           lineProductDiscountCents: Math.max(0, mrpCents - unitPriceCents) * item.quantity,
           lineTotalCents: unitPriceCents * item.quantity,
+          unlimitedQuantity: unlimited,
         });
       } else {
         throw new BadRequestError("Cart item is missing skuId");
@@ -276,13 +283,25 @@ export const checkoutPricingService = {
 
     const feesCents = addCents(deliveryFeeCents, platformFeeCents, handlingFeeCents, smallCartFeeCents);
 
-    // Groceries are always excluded from the item tax base.
-    // Grocery-only cart → tax platform fee only (delivery not taxed).
-    // Mixed / non-grocery cart → tax non-grocery items + platform + delivery (if any).
+    // Grocery tax rules:
+    // - Non-taxable groceries are excluded from the product tax base.
+    // - Taxable groceries (admin Taxable flag → TAXABLE category) are included.
+    // - Platform fee is always taxed.
+    // - Delivery is taxed when the cart has taxable groceries and/or any non-grocery items.
     const groceryProductIds = await resolveGroceryProductIds(lines.map((line) => line.productId));
     for (const line of lines) {
       line.isGrocery = groceryProductIds.has(line.productId);
     }
+
+    const taxCategoryIds = [
+      ...new Set(lines.map((line) => line.taxCategoryId).filter((id): id is string => Boolean(id))),
+    ];
+    const taxCategories = taxCategoryIds.length
+      ? await TaxCategory.find({ _id: { $in: taxCategoryIds } }).select("_id taxability").lean()
+      : [];
+    const taxabilityByCategoryId = new Map(
+      taxCategories.map((category) => [String(category._id), category.taxability as Taxability]),
+    );
 
     const discountPool = couponDiscountCents + scratchDiscountCents;
     const groceryTax = buildGroceryAwareTaxLines({
@@ -292,6 +311,7 @@ export const checkoutPricingService = {
         lineTotalCents: line.lineTotalCents,
         taxCategoryId: line.taxCategoryId,
         isGrocery: Boolean(line.isGrocery),
+        taxability: line.taxCategoryId ? taxabilityByCategoryId.get(line.taxCategoryId) : null,
       })),
       subtotalCents,
       discountPoolCents: discountPool,
@@ -314,8 +334,9 @@ export const checkoutPricingService = {
         calculatedTax.excludesNonTaxableItems || groceryTax.excludedGroceryAmountCents > 0,
       excludedNonTaxableAmountCents:
         calculatedTax.excludedNonTaxableAmountCents + groceryTax.excludedGroceryAmountCents,
-      excludesGroceries: groceryTax.hasGrocery,
+      excludesGroceries: groceryTax.excludedGroceryAmountCents > 0,
       groceryOnlyCart: groceryTax.groceryOnlyCart,
+      hasTaxableGrocery: groceryTax.hasTaxableGrocery,
       deliveryFeeTaxed: groceryTax.deliveryFeeTaxed,
     };
 

@@ -92,7 +92,7 @@ export function zonedWallTimeToUtc(
   return new Date(utc);
 }
 
-function addCalendarDays(
+export function addCalendarDays(
   parts: { year: number; month: number; day: number },
   days: number,
 ): { year: number; month: number; day: number; weekday: number } {
@@ -103,6 +103,51 @@ function addCalendarDays(
     day: base.getUTCDate(),
     weekday: base.getUTCDay(),
   };
+}
+
+/** Format a calendar day in an IANA timezone (not the browser's local zone). */
+export function formatZonedCalendarDate(
+  parts: { year: number; month: number; day: number },
+  timeZone: string,
+): string {
+  const noon = zonedWallTimeToUtc(
+    { year: parts.year, month: parts.month, day: parts.day, hour: 12, minute: 0, second: 0 },
+    timeZone,
+  );
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(noon);
+}
+
+/**
+ * Estimated delivery label synced with the same-day cutoff timer.
+ * - Timer running (same_day) → today's date in the admin timezone
+ * - Timer stopped (next_day) → tomorrow's date in the admin timezone
+ * - Otherwise → fallback days from "today" in that timezone
+ */
+export function resolveEstimatedDeliveryLabel(input: {
+  status: SameDayStatus | null | undefined;
+  timeZone: string;
+  fallbackDaysFromNow?: number;
+  now?: Date;
+}): string {
+  const timeZone = input.timeZone || "America/Edmonton";
+  const now = input.now || new Date();
+  const today = zonedParts(now, timeZone);
+
+  if (input.status?.mode === "same_day" && input.status.sameDayAvailable) {
+    return formatZonedCalendarDate(today, timeZone);
+  }
+
+  if (input.status?.mode === "next_day") {
+    return formatZonedCalendarDate(addCalendarDays(today, 1), timeZone);
+  }
+
+  const days = Math.max(1, Math.floor(input.fallbackDaysFromNow || 5));
+  return formatZonedCalendarDate(addCalendarDays(today, days), timeZone);
 }
 
 export function formatCutoffLabel(cutoffTime: string, timeZone: string): string {

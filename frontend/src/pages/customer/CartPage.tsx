@@ -6,14 +6,19 @@ import { cartApi } from "../../services/api/commerce.api";
 import { Button } from "../../components/ui/Button";
 import { EmptyState, Price, QuantitySelector, Skeleton } from "../../components/ui/Feedback";
 import { DeliveryProgress } from "../../components/commerce/DeliveryProgress";
-import { SameDayDeliveryBanner } from "../../components/commerce/SameDayDeliveryBanner";
+import {
+  SameDayDeliveryBanner,
+  useSameDayDeliveryStatus,
+} from "../../components/commerce/SameDayDeliveryBanner";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { mediaUrl } from "../../types";
 import { useAuthStore } from "../../store/auth.store";
 import { useToastStore } from "../../store/toast.store";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
+import { usePublicSettings } from "../../hooks/useSettings";
 import { formatCad } from "../../utils/money";
-import { formatEstimatedDeliveryDate, returnPolicyLabel } from "../../utils/dates";
+import { returnPolicyLabel } from "../../utils/dates";
+import { resolveEstimatedDeliveryLabel } from "../../utils/sameDayDelivery";
 import { emptyCart } from "../../utils/cartOptimistic";
 import { maxOrderQuantity } from "../../utils/quantity";
 import type { ApiSuccess, Cart } from "../../types";
@@ -26,6 +31,9 @@ export function CartPage() {
   const queryClient = useQueryClient();
   const recommended = useProducts({ sort: "popular", limit: 8 });
   const { addToCart, setCartQuantity } = useCommerceActions();
+  const publicSettings = usePublicSettings();
+  const sameDayStatus = useSameDayDeliveryStatus();
+  const deliveryTimeZone = publicSettings.data?.sameDayTimezone || "America/Edmonton";
 
   const clear = useMutation({
     mutationFn: async () => {
@@ -93,7 +101,12 @@ export function CartPage() {
                 <p className="text-xs text-yd-muted">{item.product.unit}</p>
               <Price price={item.product.price} compareAt={item.product.compareAtPrice} showBadge size="sm" />
               <p className="mt-1 text-[11px] text-yd-muted">
-                Estimated delivery: {formatEstimatedDeliveryDate(item.product.deliveryEstimateDays ?? 5)}
+                Estimated delivery:{" "}
+                {resolveEstimatedDeliveryLabel({
+                  status: sameDayStatus,
+                  timeZone: deliveryTimeZone,
+                  fallbackDaysFromNow: item.product.deliveryEstimateDays ?? 5,
+                })}
               </p>
               <p className="text-[11px] text-yd-muted">{returnPolicyLabel(item.product.returnWindowDays)}</p>
               {!item.inStock ? <p className="text-xs text-yd-error">Stock changed — update quantity</p> : null}

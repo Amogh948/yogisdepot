@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { Category } from "../../models/Category";
 import { Product } from "../../models/Product";
+import type { Taxability } from "../../models/TaxCategory";
 
 export function looksLikeGroceryCategory(category: { name?: string; slug?: string }): boolean {
   const hay = `${category.slug || ""} ${category.name || ""}`.toLowerCase();
@@ -75,7 +76,28 @@ export async function resolveGroceryProductIds(productIds: string[]): Promise<Se
   return groceryIds;
 }
 
-/** Build tax line inputs for grocery / mixed cart rules. */
+/**
+ * Groceries default to non-taxable in Canada unless the SKU tax category is explicitly TAXABLE.
+ * Non-grocery lines are always passed through to the tax engine (which may still zero-rate them).
+ */
+export function isTaxableCheckoutLine(input: {
+  isGrocery: boolean;
+  taxability?: Taxability | null;
+}): boolean {
+  if (!input.isGrocery) return true;
+  return input.taxability === "TAXABLE";
+}
+
+/**
+ * Build tax line inputs for grocery / mixed cart rules.
+ *
+ * Rule 1 — only non-taxable groceries:
+ *   tax base = platform fee (delivery excluded)
+ * Rule 2 — taxable + non-taxable groceries (no other items):
+ *   tax base = taxable grocery subtotal + delivery + platform
+ * Rule 3 — groceries + other products:
+ *   tax base = taxable grocery subtotal + other products + delivery + platform
+ */
 export function buildGroceryAwareTaxLines(input: {
   lines: Array<{
     skuId: string;
@@ -83,6 +105,8 @@ export function buildGroceryAwareTaxLines(input: {
     lineTotalCents: number;
     taxCategoryId?: string;
     isGrocery: boolean;
+    /** Resolved TaxCategory.taxability; groceries without TAXABLE are excluded. */
+    taxability?: Taxability | null;
   }>;
   subtotalCents: number;
   discountPoolCents: number;
@@ -93,6 +117,7 @@ export function buildGroceryAwareTaxLines(input: {
   groceryOnlyCart: boolean;
   hasGrocery: boolean;
   hasNonGrocery: boolean;
+  hasTaxableGrocery: boolean;
   excludedGroceryAmountCents: number;
   deliveryFeeTaxed: boolean;
 } {
@@ -101,6 +126,7 @@ export function buildGroceryAwareTaxLines(input: {
   const groceryOnlyCart = hasGrocery && !hasNonGrocery;
 
   let excludedGroceryAmountCents = 0;
+  let hasTaxableGrocery = false;
   const taxLines: Array<{ skuId: string; taxCategoryId?: string; taxableAmountCents: number }> = [];
 
   for (const line of input.lines) {
@@ -109,10 +135,20 @@ export function buildGroceryAwareTaxLines(input: {
         ? Math.round((line.lineTotalCents / input.subtotalCents) * input.discountPoolCents)
         : 0;
     const amount = Math.max(0, Math.trunc(line.lineTotalCents - share));
-    if (line.isGrocery) {
+    const taxable = isTaxableCheckoutLine({
+      isGrocery: line.isGrocery,
+      taxability: line.taxability,
+    });
+
+    if (line.isGrocery && !taxable) {
       excludedGroceryAmountCents += amount;
       continue;
     }
+
+    if (line.isGrocery && taxable) {
+      hasTaxableGrocery = true;
+    }
+
     taxLines.push({
       skuId: line.skuId || line.productId,
       taxCategoryId: line.taxCategoryId,
@@ -127,8 +163,9 @@ export function buildGroceryAwareTaxLines(input: {
     });
   }
 
-  // Delivery is taxable only when the cart has non-grocery items.
-  const deliveryFeeTaxed = hasNonGrocery && input.deliveryFeeCents > 0;
+  // Delivery is taxed when the cart has taxable groceries and/or any non-grocery items.
+  // Grocery-only carts of only non-taxable groceries keep delivery out of the tax base.
+  const deliveryFeeTaxed = (hasTaxableGrocery || hasNonGrocery) && input.deliveryFeeCents > 0;
   if (deliveryFeeTaxed) {
     taxLines.push({
       skuId: "__delivery_fee__",
@@ -141,6 +178,7 @@ export function buildGroceryAwareTaxLines(input: {
     groceryOnlyCart,
     hasGrocery,
     hasNonGrocery,
+    hasTaxableGrocery,
     excludedGroceryAmountCents,
     deliveryFeeTaxed,
   };

@@ -186,6 +186,7 @@ export interface Order {
     excludesNonTaxableItems?: boolean;
     excludesGroceries?: boolean;
     groceryOnlyCart?: boolean;
+    hasTaxableGrocery?: boolean;
     deliveryFeeTaxed?: boolean;
   };
   coupon?: { code: string; amount: number; amountCents?: number };

@@ -11,6 +11,8 @@ import {
   DEFAULT_SAME_DAY_WEEKDAYS,
   DEFAULT_SMALL_CART_FEE_CENTS,
   DEFAULT_SMALL_CART_THRESHOLD_CENTS,
+  DEFAULT_LOW_STOCK_DISPLAY_THRESHOLD,
+  DEFAULT_IN_STOCK_DISPLAY_THRESHOLD,
   DEFAULT_SUPERFAST_DELIVERY_FEE_CENTS,
 } from "../config/constants";
 
@@ -28,6 +30,10 @@ export interface PlatformSettingsDocument extends Document {
   handlingFeeCents: number;
   smallCartFeeCents: number;
   smallCartThresholdCents: number;
+  /** When tracked stock is 1..this, PDP shows yellow "{n} available". */
+  lowStockDisplayThreshold: number;
+  /** When tracked stock is above this, PDP shows green "In stock". */
+  inStockDisplayThreshold: number;
   /** Same-day delivery promise (cutoff timer). Independent of Superfast surcharge. */
   sameDayDeliveryEnabled: boolean;
   /** Local cutoff time HH:mm (24h) in sameDayTimezone. */
@@ -67,6 +73,16 @@ const platformSettingsSchema = new Schema<PlatformSettingsDocument>(
     smallCartThresholdCents: {
       type: Number,
       default: DEFAULT_SMALL_CART_THRESHOLD_CENTS,
+      min: 0,
+    },
+    lowStockDisplayThreshold: {
+      type: Number,
+      default: DEFAULT_LOW_STOCK_DISPLAY_THRESHOLD,
+      min: 0,
+    },
+    inStockDisplayThreshold: {
+      type: Number,
+      default: DEFAULT_IN_STOCK_DISPLAY_THRESHOLD,
       min: 0,
     },
     sameDayDeliveryEnabled: { type: Boolean, default: DEFAULT_SAME_DAY_DELIVERY_ENABLED },

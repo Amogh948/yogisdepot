@@ -5,24 +5,31 @@ import { Heart, RotateCcw, Truck } from "lucide-react";
 import { useProduct, useWishlist } from "../../hooks/useCatalog";
 import { useQuery } from "@tanstack/react-query";
 import { productsApi } from "../../services/api/products.api";
-import { reviewsApi } from "../../services/api/commerce.api";
 import { Button } from "../../components/ui/Button";
-import { Badge, EmptyState, ErrorState, Price, QuantitySelector, Rating, Skeleton, SectionHeader } from "../../components/ui/Feedback";
+import { Badge, ErrorState, Price, QuantitySelector, Skeleton, SectionHeader } from "../../components/ui/Feedback";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { ProductImageGallery } from "../../components/product/ProductImageGallery";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { entityId } from "../../types";
 import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
 import { BackLink } from "../../components/navigation/BackLink";
-import { formatEstimatedDeliveryDate, returnPolicyLabel } from "../../utils/dates";
+import { returnPolicyLabel } from "../../utils/dates";
 import { maxOrderQuantity } from "../../utils/quantity";
-import { SameDayDeliveryBanner } from "../../components/commerce/SameDayDeliveryBanner";
+import { resolveStockDisplay } from "../../utils/stockDisplay";
+import { resolveEstimatedDeliveryLabel } from "../../utils/sameDayDelivery";
+import {
+  SameDayDeliveryBanner,
+  useSameDayDeliveryStatus,
+} from "../../components/commerce/SameDayDeliveryBanner";
 import { scrollToTop } from "../../utils/scroll";
+import { usePublicSettings } from "../../hooks/useSettings";
 
 export function ProductDetailPage() {
   const { slug = "" } = useParams();
   const productQuery = useProduct(slug);
   const product = productQuery.data?.data;
+  const publicSettings = usePublicSettings();
+  const sameDayStatus = useSameDayDeliveryStatus();
   const [qty, setQty] = useState(1);
   const { addToCart, toggleWishlist } = useCommerceActions();
   const navigate = useNavigate();
@@ -31,11 +38,6 @@ export function ProductDetailPage() {
   const related = useQuery({
     queryKey: ["related", product ? entityId(product) : ""],
     queryFn: () => productsApi.related(entityId(product!)),
-    enabled: Boolean(product),
-  });
-  const reviews = useQuery({
-    queryKey: ["reviews", product ? entityId(product) : ""],
-    queryFn: () => reviewsApi.forProduct(entityId(product!)),
     enabled: Boolean(product),
   });
 
@@ -51,6 +53,32 @@ export function ProductDetailPage() {
   const images = product.images.length ? product.images : [product.thumbnail || ""];
   const vendor = typeof product.vendorId === "object" ? product.vendorId : undefined;
   const weight = (product as typeof product & { weight?: number }).weight;
+  const stockDisplay = resolveStockDisplay({
+    unlimitedQuantity: product.unlimitedQuantity,
+    stock: product.stock,
+    lowStockDisplayThreshold: publicSettings.data?.lowStockDisplayThreshold,
+    inStockDisplayThreshold: publicSettings.data?.inStockDisplayThreshold,
+  });
+  const stockToneClass =
+    stockDisplay.tone === "red"
+      ? "text-yd-error"
+      : stockDisplay.tone === "yellow"
+        ? "text-yd-saffron"
+        : "text-yd-success";
+  const stockBadgeTone =
+    stockDisplay.tone === "red" ? "red" : stockDisplay.tone === "yellow" ? "saffron" : "sage";
+  const deliveryTimeZone = publicSettings.data?.sameDayTimezone || "America/Edmonton";
+  const estimatedDeliveryLabel = resolveEstimatedDeliveryLabel({
+    status: sameDayStatus,
+    timeZone: deliveryTimeZone,
+    fallbackDaysFromNow: product.deliveryEstimateDays ?? 5,
+  });
+  const estimatedDeliveryHint =
+    sameDayStatus?.mode === "same_day"
+      ? "Same-day delivery while the timer is running."
+      : sameDayStatus?.mode === "next_day"
+        ? "Same-day cutoff has passed — next calendar day."
+        : "Estimate from order date.";
 
   return (
       <div className="min-w-0 pb-28 lg:pb-8">
@@ -81,12 +109,11 @@ export function ProductDetailPage() {
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
             {product.isVegetarian ? <Badge tone="veg">Veg</Badge> : null}
-            {product.stock > 0 ? <Badge tone="sage">In stock</Badge> : <Badge tone="red">Out of stock</Badge>}
+            <Badge tone={stockBadgeTone}>{stockDisplay.label}</Badge>
             {product.discount > 0 ? <Badge tone="saffron">{product.discount}% OFF</Badge> : null}
           </div>
           {product.brand ? <p className="text-sm font-medium text-yd-muted">{product.brand}</p> : null}
           <h1 className="font-display text-3xl text-yd-forest lg:text-4xl">{product.name}</h1>
-          <Rating value={product.rating} count={product.reviewCount} />
           <Price price={product.price} compareAt={product.compareAtPrice} showBadge />
           <p className="text-sm leading-relaxed text-yd-muted">{product.shortDescription || product.description}</p>
           {weight || product.unit ? (
@@ -95,9 +122,7 @@ export function ProductDetailPage() {
               {weight ? `${weight}${product.unit || "g"}` : product.unit}
             </p>
           ) : null}
-          <p className={`text-sm font-semibold ${product.stock > 0 ? "text-yd-success" : "text-yd-error"}`}>
-            {product.stock > 0 ? (product.stock <= product.lowStockThreshold ? `Only ${product.stock} left` : "Available now") : "Currently unavailable"}
-          </p>
+          <p className={`text-sm font-semibold ${stockToneClass}`}>{stockDisplay.label}</p>
           {vendor ? (
             <p className="text-sm text-yd-muted">
               Sold by <span className="font-semibold text-yd-ink">{vendor.businessName}</span>
@@ -109,10 +134,8 @@ export function ProductDetailPage() {
             <Truck className="mt-0.5 h-4 w-4 shrink-0 text-yd-green" />
             <div>
               <p className="font-semibold text-yd-ink">Estimated delivery</p>
-              <p className="text-yd-muted">
-                Estimated delivery: {formatEstimatedDeliveryDate(product.deliveryEstimateDays ?? 5)}
-              </p>
-              <p className="mt-1 text-xs text-yd-muted">Estimate from order date — not a guaranteed delivery date.</p>
+              <p className="text-yd-muted">Estimated delivery: {estimatedDeliveryLabel}</p>
+              <p className="mt-1 text-xs text-yd-muted">{estimatedDeliveryHint}</p>
             </div>
           </div>
           <div className="flex items-start gap-2 rounded-card border border-yd-border bg-white p-3 text-sm">
@@ -189,23 +212,6 @@ export function ProductDetailPage() {
             )}
           </div>
         ) : null}
-      </section>
-
-      <section className="mt-8">
-        <SectionHeader title="Reviews" />
-        {!reviews.data?.length ? (
-          <EmptyState title="No reviews yet" body="Verified buyers can share tasting notes after delivery." />
-        ) : (
-          <div className="space-y-3">
-            {reviews.data.map((review) => (
-              <article key={review.createdAt} className="rounded-card border border-yd-border bg-white p-4">
-                <Rating value={review.rating} />
-                <p className="mt-1 font-semibold">{review.title}</p>
-                <p className="text-sm text-yd-muted">{review.comment}</p>
-              </article>
-            ))}
-          </div>
-        )}
       </section>
 
       <div className="mt-8">

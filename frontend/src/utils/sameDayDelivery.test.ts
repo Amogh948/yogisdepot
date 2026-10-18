@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatCountdown, getSameDayStatus, zonedParts } from "./sameDayDelivery";
+import {
+  formatCountdown,
+  getSameDayStatus,
+  resolveEstimatedDeliveryLabel,
+  zonedParts,
+} from "./sameDayDelivery";
 
 const baseConfig = {
   enabled: true,
@@ -54,5 +59,31 @@ describe("getSameDayStatus", () => {
     const status = getSameDayStatus({ ...baseConfig, enabled: false }, new Date());
     expect(status.mode).toBe("disabled");
     expect(status.enabled).toBe(false);
+  });
+});
+
+describe("resolveEstimatedDeliveryLabel", () => {
+  it("shows today in admin timezone while the timer is running", () => {
+    const now = new Date("2026-06-15T18:00:00.000Z"); // Mon ~12:00 MDT
+    const status = getSameDayStatus(baseConfig, now);
+    const label = resolveEstimatedDeliveryLabel({
+      status,
+      timeZone: "America/Edmonton",
+      now,
+    });
+    expect(label).toMatch(/Jun/);
+    expect(label).toMatch(/15/);
+  });
+
+  it("shows the next calendar day after cutoff in admin timezone", () => {
+    const now = new Date("2026-06-15T23:00:00.000Z"); // Mon ~17:00 MDT
+    const status = getSameDayStatus(baseConfig, now);
+    const label = resolveEstimatedDeliveryLabel({
+      status,
+      timeZone: "America/Edmonton",
+      now,
+    });
+    expect(label).toMatch(/Jun/);
+    expect(label).toMatch(/16/);
   });
 });

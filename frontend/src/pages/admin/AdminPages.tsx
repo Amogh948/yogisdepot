@@ -2270,6 +2270,8 @@ export function AdminSettingsPage() {
           handlingFeeCents: Number(form.get("handlingFeeCents")),
           smallCartFeeCents: Number(form.get("smallCartFeeCents")),
           smallCartThresholdCents: Number(form.get("smallCartThresholdCents")),
+          lowStockDisplayThreshold: Number(form.get("lowStockDisplayThreshold")),
+          inStockDisplayThreshold: Number(form.get("inStockDisplayThreshold")),
           supportEmail: String(form.get("supportEmail")),
           sameDayDeliveryEnabled: form.get("sameDayDeliveryEnabled") === "on",
           sameDayCutoffTime: String(form.get("sameDayCutoffTime") || "16:00"),
@@ -2312,6 +2314,29 @@ export function AdminSettingsPage() {
       <Input label="Small cart fee (cents)" name="smallCartFeeCents" type="number" defaultValue={String(settings.smallCartFeeCents ?? 199)} />
       <Input label="Small cart threshold (cents)" name="smallCartThresholdCents" type="number" defaultValue={String(settings.smallCartThresholdCents ?? 2500)} />
       <Input label="Support email" name="supportEmail" defaultValue={String(settings.supportEmail || "")} />
+
+      <div className="space-y-3 rounded-2xl border border-yd-border bg-white p-4 shadow-soft">
+        <h2 className="font-display text-lg text-yd-forest">Product stock labels</h2>
+        <p className="text-xs text-yd-muted">
+          Controls the product detail page when Unlimited quantity is off. Stock 0 is always red
+          &quot;Currently Out of stock&quot;. At or below the low threshold shows yellow &quot;N available&quot;.
+          Above the in-stock threshold shows green &quot;In stock&quot;.
+        </p>
+        <Input
+          label="Low stock threshold (yellow)"
+          name="lowStockDisplayThreshold"
+          type="number"
+          min={0}
+          defaultValue={String(settings.lowStockDisplayThreshold ?? 5)}
+        />
+        <Input
+          label='In stock threshold (green "In stock" above this)'
+          name="inStockDisplayThreshold"
+          type="number"
+          min={0}
+          defaultValue={String(settings.inStockDisplayThreshold ?? 10)}
+        />
+      </div>
 
       <div className="space-y-3 rounded-2xl border border-yd-border bg-white p-4 shadow-soft">
         <h2 className="font-display text-lg text-yd-forest">Same-day delivery cutoff</h2>
