@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 
 export function DashboardShell({
@@ -12,13 +12,24 @@ export function DashboardShell({
   links: Array<{ to: string; label: string }>;
 }) {
   const [open, setOpen] = useState(false);
-  const nav = (
+
+  // Prevent background scroll while the mobile drawer is open (iOS Safari).
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+
+  const navLinks = (onNavigate?: () => void) => (
     <nav className="space-y-1">
       {links.map((link) => (
         <NavLink
           key={link.to}
           to={link.to}
-          onClick={() => setOpen(false)}
+          onClick={onNavigate}
           className={({ isActive }) =>
             `block rounded-xl px-3 py-2 text-sm font-medium ${isActive ? "bg-saffron-100 text-saffron-800" : "text-charcoal-800 hover:bg-cream-100"}`
           }
@@ -40,28 +51,44 @@ export function DashboardShell({
         </button>
       </header>
       {open ? (
-        <div className="fixed inset-0 z-40 bg-black/40 lg:hidden">
-          <div className="h-full w-72 bg-white p-4">
-            <div className="mb-4 flex items-center justify-between">
+        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label={`${title} menu`}>
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close menu"
+            onClick={() => setOpen(false)}
+          />
+          <div className="relative flex h-dvh max-h-dvh w-[min(18rem,85vw)] flex-col bg-white pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-soft">
+            <div className="flex shrink-0 items-center justify-between border-b border-cream-200 px-4 py-3">
               <p className="font-display text-lg">{title}</p>
               <button type="button" aria-label="Close menu" onClick={() => setOpen(false)}>
                 <X className="h-5 w-5" />
               </button>
             </div>
-            {nav}
-            <Link to="/" className="mt-6 block text-sm font-semibold text-saffron-700">
-              Back to shop
-            </Link>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 [-webkit-overflow-scrolling:touch]">
+              {navLinks(() => setOpen(false))}
+            </div>
+            <div className="shrink-0 border-t border-cream-200 px-4 py-3">
+              <Link
+                to="/"
+                onClick={() => setOpen(false)}
+                className="block text-sm font-semibold text-saffron-700"
+              >
+                Back to shop
+              </Link>
+            </div>
           </div>
         </div>
       ) : null}
       <div className="flex w-full">
-        <aside className="hidden w-60 shrink-0 border-r border-cream-200 bg-white p-4 lg:block">
-          <Link to={homeHref} className="mb-6 block font-display text-2xl text-saffron-700">
+        <aside className="hidden w-60 shrink-0 self-start border-r border-cream-200 bg-white p-4 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:max-h-dvh lg:flex-col">
+          <Link to={homeHref} className="mb-6 block shrink-0 font-display text-2xl text-saffron-700">
             {title}
           </Link>
-          {nav}
-          <Link to="/" className="mt-8 block text-sm font-semibold text-saffron-700">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {navLinks()}
+          </div>
+          <Link to="/" className="mt-6 block shrink-0 pt-2 text-sm font-semibold text-saffron-700">
             Back to shop
           </Link>
         </aside>
