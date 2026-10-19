@@ -55,7 +55,7 @@ export function DashboardShell({
           </div>
         </div>
       ) : null}
-      <div className="mx-auto flex max-w-7xl">
+      <div className="flex w-full">
         <aside className="hidden w-60 shrink-0 border-r border-cream-200 bg-white p-4 lg:block">
           <Link to={homeHref} className="mb-6 block font-display text-2xl text-saffron-700">
             {title}

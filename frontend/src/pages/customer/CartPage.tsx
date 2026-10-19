@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,7 +15,11 @@ import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { mediaUrl } from "../../types";
 import { useAuthStore } from "../../store/auth.store";
 import { useToastStore } from "../../store/toast.store";
-import { useCommerceActions } from "../../hooks/useCommerceActions";
+import {
+  ensureCartSynced,
+  useCartSyncPending,
+  useCommerceActions,
+} from "../../hooks/useCommerceActions";
 import { usePublicSettings } from "../../hooks/useSettings";
 import { formatCad } from "../../utils/money";
 import { returnPolicyLabel } from "../../utils/dates";
@@ -31,9 +36,25 @@ export function CartPage() {
   const queryClient = useQueryClient();
   const recommended = useProducts({ sort: "popular", limit: 8 });
   const { addToCart, setCartQuantity } = useCommerceActions();
+  const cartSyncPending = useCartSyncPending();
+  const [checkoutStarting, setCheckoutStarting] = useState(false);
   const publicSettings = usePublicSettings();
   const sameDayStatus = useSameDayDeliveryStatus();
   const deliveryTimeZone = publicSettings.data?.sameDayTimezone || "America/Edmonton";
+
+  const goToCheckout = async () => {
+    if (checkoutStarting) return;
+    setCheckoutStarting(true);
+    try {
+      await ensureCartSynced(queryClient);
+      navigate("/checkout");
+    } catch {
+      toast("Could not sync cart. Please try again.", "error");
+    } finally {
+      setCheckoutStarting(false);
+    }
+  };
+  const checkoutBusy = cartSyncPending || checkoutStarting;
 
   const clear = useMutation({
     mutationFn: async () => {
@@ -153,12 +174,12 @@ export function CartPage() {
             Total bill with taxes will be calculated on the checkout page.
           </p>
           <div className="mt-4 hidden lg:mt-auto lg:block">
-            <Button className="w-full" size="lg" onClick={() => navigate("/checkout")}>
-              Proceed to checkout
+            <Button className="w-full" size="lg" loading={checkoutBusy} disabled={checkoutBusy} onClick={() => void goToCheckout()}>
+              {cartSyncPending ? "Updating cart…" : "Proceed to checkout"}
             </Button>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px] font-medium text-yd-muted">
               <span>Secure Payments</span>
-              <span>Easy Returns</span>
+              <span>Home delivery</span>
               <span>Support</span>
             </div>
           </div>
@@ -175,8 +196,8 @@ export function CartPage() {
             <p className="text-xs text-yd-muted">Total</p>
             <p className="text-lg font-bold text-yd-ink">{formatCad(data.subtotal)}</p>
           </div>
-          <Button variant="accent" className="flex-1" onClick={() => navigate("/checkout")}>
-            Checkout →
+          <Button variant="accent" className="flex-1" loading={checkoutBusy} disabled={checkoutBusy} onClick={() => void goToCheckout()}>
+            {cartSyncPending ? "Updating…" : "Checkout →"}
           </Button>
         </div>
       </div>

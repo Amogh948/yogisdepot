@@ -56,18 +56,25 @@ export function CheckoutCouponsSection({
   appliedCoupon,
   onApply,
   onRemove,
+  cartFingerprint = "",
+  enabled = true,
 }: {
   appliedCoupon: string;
   onApply: (code: string) => Promise<void>;
   onRemove: () => Promise<void>;
+  /** Include cart lines so eligibility refreshes when quantities change. */
+  cartFingerprint?: string;
+  /** False while cart sync / barrier is pending. */
+  enabled?: boolean;
 }) {
   const toast = useToastStore((s) => s.push);
   const [expanded, setExpanded] = useState(true);
   const [viewAll, setViewAll] = useState(false);
   const [busyCode, setBusyCode] = useState<string | null>(null);
   const eligible = useQuery({
-    queryKey: ["coupons-eligible"],
+    queryKey: ["coupons-eligible", cartFingerprint],
     queryFn: () => couponsApi.eligible(),
+    enabled: Boolean(cartFingerprint) && enabled,
   });
 
   const offers = eligible.data?.data || [];

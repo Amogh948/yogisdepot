@@ -358,17 +358,51 @@ button {
   }
 }
 
+/* Checkout quote loading — bike loops until tax/totals API settles */
+.yd-checkout-bike--loop {
+  animation: yd-checkout-bike-loop 2200ms linear infinite;
+}
+
+.yd-checkout-bike--loop .yd-order-bike-wheel {
+  animation: yd-order-wheel-spin 480ms linear infinite;
+}
+
+.yd-checkout-bike--loop .yd-order-bike-box,
+.yd-checkout-bike--loop .yd-order-bike-rider {
+  animation: yd-order-bike-bob 420ms ease-in-out infinite alternate;
+}
+
+.yd-checkout-road--loop {
+  bottom: 42%;
+  animation: yd-order-road-scroll 900ms linear infinite;
+}
+
+@keyframes yd-checkout-bike-loop {
+  0% {
+    transform: translate3d(-110%, -50%, 0);
+  }
+  100% {
+    transform: translate3d(118%, -50%, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .yd-order-bike--ride,
   .yd-order-bike--ride .yd-order-bike-wheel,
   .yd-order-bike--ride .yd-order-bike-box,
   .yd-order-bike--ride .yd-order-bike-rider,
   .yd-order-road--scroll,
-  .yd-order-confetti {
+  .yd-order-confetti,
+  .yd-checkout-bike--loop,
+  .yd-checkout-bike--loop .yd-order-bike-wheel,
+  .yd-checkout-bike--loop .yd-order-bike-box,
+  .yd-checkout-bike--loop .yd-order-bike-rider,
+  .yd-checkout-road--loop {
     animation: none !important;
   }
 
-  .yd-order-bike--ride {
+  .yd-order-bike--ride,
+  .yd-checkout-bike--loop {
     left: 50%;
     transform: translate3d(-50%, -50%, 0);
   }

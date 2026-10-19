@@ -3,14 +3,16 @@ import { Helmet } from "react-helmet-async";
 import { useNavigate, useParams } from "react-router-dom";
 import { Heart, RotateCcw, Truck } from "lucide-react";
 import { useProduct, useWishlist } from "../../hooks/useCatalog";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { productsApi } from "../../services/api/products.api";
 import { Button } from "../../components/ui/Button";
 import { Badge, ErrorState, Price, QuantitySelector, Skeleton, SectionHeader } from "../../components/ui/Feedback";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { ProductImageGallery } from "../../components/product/ProductImageGallery";
-import { useCommerceActions } from "../../hooks/useCommerceActions";
+import { ensureCartSynced, useCommerceActions } from "../../hooks/useCommerceActions";
 import { entityId } from "../../types";
+import { useToastStore } from "../../store/toast.store";
+import { ApiError } from "../../services/api/client";
 import { Breadcrumbs } from "../../components/navigation/Breadcrumbs";
 import { BackLink } from "../../components/navigation/BackLink";
 import { returnPolicyLabel } from "../../utils/dates";
@@ -31,8 +33,11 @@ export function ProductDetailPage() {
   const publicSettings = usePublicSettings();
   const sameDayStatus = useSameDayDeliveryStatus();
   const [qty, setQty] = useState(1);
+  const [buyingNow, setBuyingNow] = useState(false);
   const { addToCart, toggleWishlist } = useCommerceActions();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const toast = useToastStore((s) => s.push);
   const wishlist = useWishlist();
   const wished = Boolean(product && (wishlist.data?.data || []).some((item) => entityId(item) === entityId(product)));
   const related = useQuery({
@@ -40,6 +45,20 @@ export function ProductDetailPage() {
     queryFn: () => productsApi.related(entityId(product!)),
     enabled: Boolean(product),
   });
+
+  const buyNow = async () => {
+    if (!product || buyingNow) return;
+    setBuyingNow(true);
+    try {
+      await addToCart.mutateAsync({ product, quantity: qty });
+      await ensureCartSynced(queryClient);
+      navigate("/checkout");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not start checkout", "error");
+    } finally {
+      setBuyingNow(false);
+    }
+  };
 
   // Home (and other) carousels leave the window scrolled mid-page — animate to top on open.
   useEffect(() => {
@@ -165,11 +184,9 @@ export function ProductDetailPage() {
               variant="accent"
               size="lg"
               className="w-full"
-              onClick={() => {
-                addToCart.mutate({ product, quantity: qty });
-                navigate("/checkout");
-              }}
-              disabled={product.unlimitedQuantity === false && product.stock <= 0}
+              loading={buyingNow}
+              onClick={() => void buyNow()}
+              disabled={(product.unlimitedQuantity === false && product.stock <= 0) || buyingNow}
             >
               Buy now
             </Button>
@@ -232,11 +249,9 @@ export function ProductDetailPage() {
             variant="accent"
             size="lg"
             className="w-full"
-            onClick={() => {
-              addToCart.mutate({ product, quantity: qty });
-              navigate("/checkout");
-            }}
-            disabled={product.unlimitedQuantity === false && product.stock <= 0}
+            loading={buyingNow}
+            onClick={() => void buyNow()}
+            disabled={(product.unlimitedQuantity === false && product.stock <= 0) || buyingNow}
           >
             Buy now
           </Button>

@@ -139,7 +139,7 @@ export function AdminBrandFormPage() {
   if (!isNew && brands.isLoading) return <Skeleton className="h-40" />;
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 pb-24">
+    <div className="w-full space-y-4 pb-24">
       <PageHeader
         title={isNew ? "Add brand" : form.name || "Edit brand"}
         action={<AdminBackLink fallback="/admin/brands" />}

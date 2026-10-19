@@ -9,6 +9,7 @@ import { Button } from "../../components/ui/Button";
 import { Input, Select } from "../../components/ui/Input";
 import { EmptyState } from "../../components/ui/Feedback";
 import { CheckoutCouponsSection, SavingsBanner } from "../../components/commerce/CheckoutCoupons";
+import { CheckoutQuoteLoading } from "../../components/commerce/CheckoutQuoteLoading";
 import { entityId, mediaUrl } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
@@ -30,6 +31,11 @@ import {
 } from "../../components/commerce/SameDayDeliveryBanner";
 import { formatPostalCode, isValidPostalCode, postalCodeForSquare } from "../../utils/postalCode";
 import { BackLink } from "../../components/navigation/BackLink";
+import {
+  cartFingerprint,
+  ensureCartSynced,
+  useCartSyncPending,
+} from "../../hooks/useCommerceActions";
 
 type SquareCheckoutSession = {
   orderId: string;
@@ -85,6 +91,11 @@ export function CheckoutPage() {
   const effectiveDeliverySpeed = SUPERFAST_DELIVERY_ENABLED ? deliverySpeed : "standard";
   const sameDayStatus = useSameDayDeliveryStatus();
 
+  // Land at the top so the bike loading animation (and later the totals) are in view.
+  useEffect(() => {
+    scrollToTop("auto");
+  }, []);
+
   // When advancing to Delivery (or Payment), start at the top of the new step content.
   useEffect(() => {
     if (step === 1) return;
@@ -93,7 +104,6 @@ export function CheckoutPage() {
   const paymentMethod = "square" as const;
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState("");
-  const [scratchRewardId, setScratchRewardId] = useState("");
   const [paying, setPaying] = useState(false);
   const [squareSession, setSquareSession] = useState<SquareCheckoutSession | null>(null);
   const [cardReady, setCardReady] = useState(false);
@@ -108,10 +118,24 @@ export function CheckoutPage() {
     destroy: () => Promise<void>;
   } | null>(null);
 
+  const cartSyncPending = useCartSyncPending();
+  const [cartBarrierReady, setCartBarrierReady] = useState(false);
   const cart = useQuery({ queryKey: ["cart"], queryFn: () => cartApi.get() });
   const addresses = useQuery({ queryKey: ["addresses"], queryFn: () => addressApi.list() });
   const paymentConfig = useQuery({ queryKey: ["payments-config"], queryFn: () => paymentsApi.config() });
   const squareEnabled = paymentConfig.data?.data.squareEnabled === true;
+
+  // Barrier: flush any in-flight qty sync before quote / pay can use the cart.
+  useEffect(() => {
+    let cancelled = false;
+    if (cartSyncPending) setCartBarrierReady(false);
+    void ensureCartSynced(queryClient).finally(() => {
+      if (!cancelled) setCartBarrierReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cartSyncPending, queryClient]);
 
   const savedAddresses = addresses.data?.data || [];
   const selected = useMemo(
@@ -119,19 +143,31 @@ export function CheckoutPage() {
     [savedAddresses, addressId],
   );
   const resolvedAddressId = addressId || (selected ? entityId(selected) : "");
+  const fingerprint = useMemo(() => cartFingerprint(cart.data?.data), [cart.data?.data]);
+  const cartReady = cartBarrierReady && !cartSyncPending;
 
   const quote = useQuery({
-    queryKey: ["checkout-quote", appliedCoupon, scratchRewardId, resolvedAddressId, effectiveDeliverySpeed],
+    queryKey: [
+      "checkout-quote",
+      fingerprint,
+      appliedCoupon,
+      resolvedAddressId,
+      effectiveDeliverySpeed,
+    ],
     queryFn: () =>
       ordersApi.quote({
         coupon: appliedCoupon || undefined,
-        scratchRewardId: scratchRewardId || undefined,
         addressId: resolvedAddressId || undefined,
         deliverySpeed: effectiveDeliverySpeed,
       }),
-    enabled: Boolean(cart.data?.data?.items.length),
-    placeholderData: (previous) => previous,
+    enabled: Boolean(fingerprint) && cartReady,
   });
+
+  // After tax/quote settles, jump back to top so the amount breakdown is visible.
+  useEffect(() => {
+    if (!cartReady || !quote.isSuccess) return;
+    scrollToTop("auto");
+  }, [cartReady, quote.isSuccess]);
 
   const deliveryCheck = useQuery({
     queryKey: [
@@ -255,6 +291,24 @@ export function CheckoutPage() {
     await queryClient.invalidateQueries({ queryKey: ["orders"] });
   };
 
+  // If cart changed after a Square session started, abandon stale payment amount.
+  useEffect(() => {
+    if (!squareSession || !fingerprint) return;
+    const sessionKey = `square-fp:${squareSession.orderId}`;
+    const prior = sessionStorage.getItem(sessionKey);
+    if (!prior) {
+      sessionStorage.setItem(sessionKey, fingerprint);
+      return;
+    }
+    if (prior !== fingerprint) {
+      sessionStorage.removeItem(sessionKey);
+      void abandonPayment(squareSession.orderId);
+      setSquareSession(null);
+      autoStartedCardCheckout.current = false;
+      toast("Cart changed — refreshing payment amount", "info");
+    }
+  }, [fingerprint, squareSession, toast]);
+
   useEffect(() => {
     if (!squareSession) {
       setCardReady(false);
@@ -295,16 +349,16 @@ export function CheckoutPage() {
   }, [squareSession, toast, selected?.postalCode, selected?.country]);
 
   const placeOrder = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (undeliverable) {
         throw new ApiError(undeliverableMessage, 400);
       }
+      await ensureCartSynced(queryClient);
       return ordersApi.create({
         addressId: entityId(selected!),
         paymentMethod,
         deliverySpeed: effectiveDeliverySpeed,
         couponCode: appliedCoupon || couponCode || undefined,
-        scratchRewardId: scratchRewardId || undefined,
       });
     },
     onSuccess: async (result) => {
@@ -403,17 +457,36 @@ export function CheckoutPage() {
     autoStartedCardCheckout.current = false;
   };
 
-  // Card-only checkout: start Square session as soon as the payment step opens.
+  // Card-only checkout: start Square session once cart is synced and quote is current.
   useEffect(() => {
     if (step !== 3) {
       autoStartedCardCheckout.current = false;
       return;
     }
-    if (!squareEnabled || undeliverable || !selected || squareSession || placeOrder.isPending) return;
+    if (
+      !squareEnabled ||
+      undeliverable ||
+      !selected ||
+      squareSession ||
+      placeOrder.isPending ||
+      !cartReady ||
+      !quote.isSuccess
+    ) {
+      return;
+    }
     if (autoStartedCardCheckout.current) return;
     autoStartedCardCheckout.current = true;
     placeOrder.mutate();
-  }, [step, squareEnabled, undeliverable, selected, squareSession, placeOrder.isPending]);
+  }, [
+    step,
+    squareEnabled,
+    undeliverable,
+    selected,
+    squareSession,
+    placeOrder.isPending,
+    cartReady,
+    quote.isSuccess,
+  ]);
 
   const cartData = cart.data?.data?.items.length ? cart.data.data : paying ? cartHold.current : cart.data?.data;
 
@@ -427,6 +500,44 @@ export function CheckoutPage() {
 
   if (!cartData?.items.length) {
     return <EmptyState title="Nothing to checkout" body="Add items to your cart first." />;
+  }
+
+  // Hold the whole checkout behind the bike until cart sync + tax quote have settled
+  // so totals never flash with stale / zero tax values.
+  const awaitingQuote =
+    !cartReady ||
+    (Boolean(fingerprint) && !quote.isSuccess && !quote.isError) ||
+    (quote.isFetching && !quote.isSuccess);
+
+  if (awaitingQuote) {
+    return (
+      <CheckoutQuoteLoading
+        message={!cartReady ? "Updating your cart…" : "Calculating tax & totals…"}
+      />
+    );
+  }
+
+  if (quote.isError) {
+    return (
+      <div className="space-y-4">
+        <BackLink fallback="/cart" className="text-sm font-semibold text-yd-green">
+          ← Back to cart
+        </BackLink>
+        <EmptyState
+          title="Couldn’t calculate totals"
+          body={(quote.error as ApiError)?.message || "Refresh and try again."}
+        />
+        <Button
+          className="mx-auto block"
+          onClick={() => {
+            void ensureCartSynced(queryClient);
+            void quote.refetch();
+          }}
+        >
+          Try again
+        </Button>
+      </div>
+    );
   }
 
   const quoteData = (quote.data?.data || {}) as {
@@ -907,10 +1018,10 @@ export function CheckoutPage() {
                         className="flex-1"
                         size="lg"
                         loading={paying}
-                        disabled={!cardReady || undeliverable}
+                        disabled={!cardReady || undeliverable || !cartReady || quote.isFetching}
                         onClick={() => void payWithSquare()}
                       >
-                        Pay now →
+                        {!cartReady || quote.isFetching ? "Updating totals…" : "Pay now →"}
                       </Button>
                     </div>
                   ) : null}
@@ -941,6 +1052,9 @@ export function CheckoutPage() {
           })}
         </div>
         <h3 className="mt-4 text-sm font-semibold text-yd-muted">Price Details</h3>
+        {!cartReady || quote.isFetching ? (
+          <p className="mt-2 text-xs text-yd-muted">Updating totals…</p>
+        ) : null}
         {quote.isError ? (
           <p className="mt-2 rounded-xl border border-yd-error/30 bg-yd-error/5 px-3 py-2 text-xs text-yd-error">
             {(quote.error as ApiError)?.message || "Unable to calculate tax and fees. Refresh and try again."}
@@ -1001,13 +1115,8 @@ export function CheckoutPage() {
             appliedCoupon={appliedCoupon}
             onApply={applyCouponCode}
             onRemove={removeCouponCode}
-          />
-        </div>
-        <div className="mt-3">
-          <Input
-            label="Scratch reward ID (optional)"
-            value={scratchRewardId}
-            onChange={(e) => setScratchRewardId(e.target.value.trim())}
+            cartFingerprint={fingerprint}
+            enabled={cartReady}
           />
         </div>
         {step === 1 ? (

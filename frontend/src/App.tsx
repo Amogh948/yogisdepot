@@ -26,6 +26,7 @@ import {
   AdminAnalyticsPage,
   AdminCategoriesPage,
   AdminCategoryDetailPage,
+  AdminCouponFormPage,
   AdminCouponsPage,
   AdminCustomerFormPage,
   AdminCustomersPage,
@@ -130,6 +131,8 @@ export default function App() {
           <Route path="customers" element={<AdminCustomersPage />} />
           <Route path="customers/:id" element={<AdminCustomerFormPage />} />
           <Route path="coupons" element={<AdminCouponsPage />} />
+          <Route path="coupons/new" element={<AdminCouponFormPage />} />
+          <Route path="coupons/:id" element={<AdminCouponFormPage />} />
           <Route path="reviews" element={<AdminReviewsPage />} />
           <Route path="analytics" element={<AdminAnalyticsPage />} />
           <Route path="delivery-locations" element={<AdminDeliveryLocationsPage />} />

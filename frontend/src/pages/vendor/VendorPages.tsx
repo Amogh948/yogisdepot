@@ -86,7 +86,7 @@ export function VendorProductFormPage() {
 
   return (
     <form
-      className="max-w-2xl space-y-3"
+      className="w-full space-y-3"
       onSubmit={async (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
@@ -238,7 +238,7 @@ export function VendorProfilePage() {
   if (!vendor) return <Skeleton className="h-40" />;
   return (
     <form
-      className="max-w-lg space-y-3"
+      className="w-full space-y-3"
       onSubmit={async (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);

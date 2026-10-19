@@ -202,6 +202,9 @@ export const adminApi = {
     return result.data;
   },
   createCoupon: (payload: Record<string, unknown>) => unwrap<Coupon>(api.post("/admin/coupons", payload)),
+  updateCoupon: (id: string, payload: Record<string, unknown>) =>
+    unwrap<Coupon>(api.put(`/admin/coupons/${id}`, payload)),
+  deleteCoupon: (id: string) => unwrap<Coupon>(api.delete(`/admin/coupons/${id}`)),
   reviews: async () => {
     const result = await unwrap<unknown[]>(api.get("/admin/reviews"));
     return result.data;

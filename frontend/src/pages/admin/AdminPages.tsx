@@ -7,7 +7,7 @@ import { Input, Select, Textarea } from "../../components/ui/Input";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { CsvDropzone } from "../../components/ui/CsvDropzone";
 import { Badge, EmptyState, Skeleton } from "../../components/ui/Feedback";
-import { entityId, mediaUrl, type Category, type OrderStatus, type Product } from "../../types";
+import { entityId, mediaUrl, type Category, type Coupon, type OrderStatus, type Product } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ConfirmDialog, Modal } from "../../components/ui/Overlay";
 import { useEffect, useState } from "react";
@@ -499,7 +499,7 @@ export function AdminProductWizardPage() {
   };
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 pb-24">
+    <div className="w-full space-y-4 pb-24">
       <PageHeader title="Create product" action={<AdminBackLink fallback="/admin/products" />} />
       <p className="text-sm text-yd-muted">Step {step} of 7 · amounts in CAD cents (e.g. 399 = $3.99)</p>
       {step === 1 ? (
@@ -653,7 +653,7 @@ export function AdminProductWizardPage() {
         </div>
       ) : null}
       <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
-        <div className="mx-auto flex max-w-xl gap-2">
+        <div className="flex w-full gap-2">
           <Button variant="outline" disabled={step === 1 || saving} onClick={() => setStep((s) => Math.max(1, s - 1))}>
             Back
           </Button>
@@ -920,7 +920,7 @@ export function AdminProductEditPage() {
     categoryOptionId((t) => t.taxability === "ZERO_RATED" || t.taxability === "EXEMPT");
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 pb-28">
+    <div className="w-full space-y-4 pb-28">
       <PageHeader
         title="Edit product"
         action={<AdminBackLink fallback="/admin/products" />}
@@ -1248,7 +1248,7 @@ export function AdminProductEditPage() {
       </section>
 
       <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
-        <div className="mx-auto flex max-w-2xl gap-2">
+        <div className="flex w-full gap-2">
           <Button variant="outline" disabled={saving} onClick={goBack}>
             Cancel
           </Button>
@@ -1584,7 +1584,7 @@ export function AdminCategoryDetailPage() {
   const productTotal = productsQuery.data?.pagination?.total ?? categoryProducts.length;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 pb-24">
+    <div className="w-full space-y-4 pb-24">
       <PageHeader
         title={isNew ? "Add category" : form.name || "Edit category"}
         action={<AdminBackLink fallback="/admin/categories" />}
@@ -1685,7 +1685,7 @@ export function AdminCategoryDetailPage() {
       ) : null}
 
       <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
-        <div className="mx-auto flex max-w-2xl gap-2">
+        <div className="flex w-full gap-2">
           {!isNew ? (
             <Button variant="danger" disabled={saving} onClick={() => setConfirmDelete(true)}>
               Delete
@@ -1782,7 +1782,7 @@ export function AdminOrderDetailPage() {
   }
   const address = order.shippingAddress;
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="w-full space-y-4">
       <PageHeader
         title={order.orderNumber}
         action={<AdminBackLink fallback="/admin/orders" />}
@@ -2084,7 +2084,7 @@ export function AdminCustomerFormPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="w-full space-y-4">
       <PageHeader
         title="Edit customer"
         action={
@@ -2160,47 +2160,356 @@ export function AdminCustomerFormPage() {
   );
 }
 
+function toDatetimeLocalValue(value?: string | Date) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** Fixed discounts may be stored as cents or legacy dollars (< 100 with a min order). */
+function fixedDiscountCents(coupon: Coupon) {
+  const value = Number(coupon.discountValue) || 0;
+  if (value > 0 && value < 100 && (coupon.minimumOrderValue || coupon.minimumOrderValueCents)) {
+    return Math.round(value * 100);
+  }
+  return Math.round(value);
+}
+
+function formatCouponDiscount(coupon: Coupon) {
+  if (coupon.discountType === "percentage") return `${coupon.discountValue}% off`;
+  return `${formatCadFromCents(fixedDiscountCents(coupon))} off`;
+}
+
 export function AdminCouponsPage() {
   const query = useQuery({ queryKey: ["admin-coupons"], queryFn: () => adminApi.coupons() });
   const toast = useToastStore((s) => s.push);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const items = query.data || [];
+
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <div>
-        <PageHeader title="Coupons" />
-        {(query.data || []).map((coupon) => (
-          <p key={coupon.couponCode} className="mb-2 rounded-2xl bg-white p-3 shadow-soft">
-            {coupon.couponCode} · {coupon.discountType} {coupon.discountValue}
-          </p>
-        ))}
+    <div>
+      <PageHeader
+        title="Coupons"
+        action={
+          <Link to="/admin/coupons/new" className="text-sm font-semibold text-yd-green">
+            Add coupon
+          </Link>
+        }
+      />
+      <p className="mb-4 text-sm text-yd-muted">
+        Create and manage discount codes. Deactivating a coupon stops new redemptions without deleting history.
+      </p>
+      {query.isLoading ? <Skeleton className="h-40" /> : null}
+      {!query.isLoading && !items.length ? (
+        <EmptyState title="No coupons" body="Create a coupon code for checkout discounts." />
+      ) : null}
+      <div className="space-y-3">
+        {items.map((coupon) => {
+          const id = entityId(coupon);
+          return (
+            <article
+              key={id || coupon.couponCode}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-yd-border/60 bg-white p-4 shadow-soft"
+            >
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold tracking-wide text-charcoal-900">{coupon.couponCode}</p>
+                  <Badge tone={coupon.isActive ? "sage" : "muted"}>{coupon.isActive ? "Active" : "Inactive"}</Badge>
+                </div>
+                <p className="text-sm text-yd-muted">
+                  {formatCouponDiscount(coupon)}
+                  {(coupon.minimumOrderValueCents ?? Math.round((coupon.minimumOrderValue || 0) * 100)) > 0
+                    ? ` · min ${formatCadFromCents(coupon.minimumOrderValueCents ?? Math.round((coupon.minimumOrderValue || 0) * 100))}`
+                    : ""}
+                  {coupon.usageLimit ? ` · used ${coupon.usedCount}/${coupon.usageLimit}` : ` · used ${coupon.usedCount}`}
+                </p>
+                <p className="text-xs text-yd-muted">
+                  {new Date(coupon.startDate).toLocaleString()} → {new Date(coupon.endDate).toLocaleString()}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Link
+                  to={`/admin/coupons/${id}`}
+                  className="inline-flex min-h-10 items-center justify-center rounded-full border border-yd-border bg-white px-4 text-sm font-semibold text-yd-forest hover:bg-yd-cream"
+                >
+                  Edit
+                </Link>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!coupon.isActive}
+                  onClick={() => setDeleteId(id)}
+                >
+                  Deactivate
+                </Button>
+              </div>
+            </article>
+          );
+        })}
       </div>
-      <form
-        className="space-y-3 rounded-2xl bg-white p-4"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          await adminApi.createCoupon({
-            couponCode: String(form.get("couponCode")),
-            discountType: String(form.get("discountType")),
-            discountValue: Number(form.get("discountValue")),
-            minimumOrderValue: Number(form.get("minimumOrderValue") || 0),
-            startDate: String(form.get("startDate")),
-            endDate: String(form.get("endDate")),
-          });
-          toast("Coupon created");
-          query.refetch();
+      <ConfirmDialog
+        open={Boolean(deleteId)}
+        title="Deactivate coupon"
+        body="This coupon will stop working at checkout. You can reactivate it later from the edit screen."
+        confirmLabel="Deactivate"
+        onClose={() => setDeleteId(null)}
+        onConfirm={async () => {
+          if (!deleteId) return;
+          try {
+            await adminApi.deleteCoupon(deleteId);
+            toast("Coupon deactivated");
+            setDeleteId(null);
+            await query.refetch();
+          } catch (error) {
+            toast(error instanceof ApiError ? error.message : "Could not deactivate coupon", "error");
+          }
         }}
-      >
-        <Input label="Code" name="couponCode" required />
-        <Select label="Type" name="discountType">
+      />
+    </div>
+  );
+}
+
+type CouponFormState = {
+  couponCode: string;
+  discountType: "percentage" | "fixed";
+  discountValue: string;
+  minimumOrderValue: string;
+  maximumDiscount: string;
+  startDate: string;
+  endDate: string;
+  usageLimit: string;
+  perUserLimit: string;
+  isActive: boolean;
+};
+
+const emptyCouponForm = (): CouponFormState => ({
+  couponCode: "",
+  discountType: "percentage",
+  discountValue: "",
+  minimumOrderValue: "",
+  maximumDiscount: "",
+  startDate: "",
+  endDate: "",
+  usageLimit: "",
+  perUserLimit: "1",
+  isActive: true,
+});
+
+export function AdminCouponFormPage() {
+  const { id } = useParams();
+  const isNew = !id || id === "new";
+  const navigate = useNavigate();
+  const goBack = useAdminBack("/admin/coupons");
+  const toast = useToastStore((s) => s.push);
+  const coupons = useQuery({ queryKey: ["admin-coupons"], queryFn: () => adminApi.coupons() });
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [form, setForm] = useState<CouponFormState>(emptyCouponForm);
+
+  useEffect(() => {
+    if (isNew) return;
+    const coupon = (coupons.data || []).find((item) => entityId(item) === id);
+    if (!coupon) return;
+    const minCents =
+      typeof coupon.minimumOrderValueCents === "number"
+        ? coupon.minimumOrderValueCents
+        : Math.round((coupon.minimumOrderValue || 0) * 100);
+    const maxCents =
+      typeof coupon.maximumDiscountCents === "number"
+        ? coupon.maximumDiscountCents
+        : coupon.maximumDiscount != null
+          ? Math.round(coupon.maximumDiscount * 100)
+          : undefined;
+    const fixedCad =
+      coupon.discountType === "fixed" ? (fixedDiscountCents(coupon) / 100).toFixed(2).replace(/\.00$/, "") : "";
+    setForm({
+      couponCode: coupon.couponCode || "",
+      discountType: coupon.discountType || "percentage",
+      discountValue: coupon.discountType === "percentage" ? String(coupon.discountValue ?? "") : fixedCad,
+      minimumOrderValue: minCents ? String((minCents / 100).toFixed(2)).replace(/\.00$/, "") : "",
+      maximumDiscount: maxCents != null ? String((maxCents / 100).toFixed(2)).replace(/\.00$/, "") : "",
+      startDate: toDatetimeLocalValue(coupon.startDate),
+      endDate: toDatetimeLocalValue(coupon.endDate),
+      usageLimit: coupon.usageLimit != null ? String(coupon.usageLimit) : "",
+      perUserLimit: String(coupon.perUserLimit ?? 1),
+      isActive: coupon.isActive !== false,
+    });
+  }, [coupons.data, id, isNew]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const discountValueNum = Number(form.discountValue);
+      const minOrderDollars = Number(form.minimumOrderValue || 0);
+      const maxDiscountDollars = form.maximumDiscount.trim() ? Number(form.maximumDiscount) : undefined;
+      const payload: Record<string, unknown> = {
+        couponCode: form.couponCode.trim().toUpperCase(),
+        discountType: form.discountType,
+        discountValue:
+          form.discountType === "percentage" ? discountValueNum : Math.round(discountValueNum * 100),
+        minimumOrderValue: minOrderDollars,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        perUserLimit: Math.max(1, Number(form.perUserLimit) || 1),
+        isActive: form.isActive,
+      };
+      if (maxDiscountDollars != null && Number.isFinite(maxDiscountDollars)) {
+        payload.maximumDiscount = maxDiscountDollars;
+      }
+      if (form.usageLimit.trim()) {
+        payload.usageLimit = Math.max(1, Number(form.usageLimit) || 1);
+      }
+      if (isNew) {
+        await adminApi.createCoupon(payload);
+        toast("Coupon created");
+      } else {
+        await adminApi.updateCoupon(id!, payload);
+        toast("Coupon saved");
+      }
+      await coupons.refetch();
+      navigate("/admin/coupons");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not save coupon", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isNew && coupons.isLoading) return <Skeleton className="h-40" />;
+  if (!isNew && !coupons.isLoading && !(coupons.data || []).some((item) => entityId(item) === id)) {
+    return <EmptyState title="Coupon not found" body="It may have been removed." />;
+  }
+
+  return (
+    <div className="w-full space-y-4 pb-24">
+      <PageHeader
+        title={isNew ? "Add coupon" : form.couponCode || "Edit coupon"}
+        action={<AdminBackLink fallback="/admin/coupons" />}
+      />
+      <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
+        <Input
+          label="Code"
+          value={form.couponCode}
+          onChange={(e) => setForm((p) => ({ ...p, couponCode: e.target.value.toUpperCase() }))}
+          required
+        />
+        <Select
+          label="Type"
+          value={form.discountType}
+          onChange={(e) =>
+            setForm((p) => ({ ...p, discountType: e.target.value as "percentage" | "fixed" }))
+          }
+        >
           <option value="percentage">Percentage</option>
-          <option value="fixed">Fixed</option>
+          <option value="fixed">Fixed amount (CAD)</option>
         </Select>
-        <Input label="Value" name="discountValue" type="number" required />
-        <Input label="Min order" name="minimumOrderValue" type="number" />
-        <Input label="Start" name="startDate" type="datetime-local" required />
-        <Input label="End" name="endDate" type="datetime-local" required />
-        <Button>Create coupon</Button>
-      </form>
+        <Input
+          label={form.discountType === "percentage" ? "Percent off" : "Amount off (CAD)"}
+          type="number"
+          step="0.01"
+          min="0"
+          value={form.discountValue}
+          onChange={(e) => setForm((p) => ({ ...p, discountValue: e.target.value }))}
+          required
+        />
+        <Input
+          label="Minimum order (CAD)"
+          type="number"
+          step="0.01"
+          min="0"
+          value={form.minimumOrderValue}
+          onChange={(e) => setForm((p) => ({ ...p, minimumOrderValue: e.target.value }))}
+        />
+        <Input
+          label="Max discount (CAD, optional)"
+          type="number"
+          step="0.01"
+          min="0"
+          value={form.maximumDiscount}
+          onChange={(e) => setForm((p) => ({ ...p, maximumDiscount: e.target.value }))}
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="Starts"
+            type="datetime-local"
+            value={form.startDate}
+            onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
+            required
+          />
+          <Input
+            label="Ends"
+            type="datetime-local"
+            value={form.endDate}
+            onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
+            required
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="Usage limit (optional)"
+            type="number"
+            min="1"
+            value={form.usageLimit}
+            onChange={(e) => setForm((p) => ({ ...p, usageLimit: e.target.value }))}
+          />
+          <Input
+            label="Per-user limit"
+            type="number"
+            min="1"
+            value={form.perUserLimit}
+            onChange={(e) => setForm((p) => ({ ...p, perUserLimit: e.target.value }))}
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))}
+          />{" "}
+          Active
+        </label>
+      </div>
+      <div className="flex gap-2">
+        {!isNew ? (
+          <Button variant="danger" disabled={saving || !form.isActive} onClick={() => setConfirmDelete(true)}>
+            Deactivate
+          </Button>
+        ) : null}
+        <Button variant="outline" disabled={saving} onClick={goBack}>
+          Cancel
+        </Button>
+        <Button
+          className="flex-1"
+          disabled={
+            saving ||
+            !form.couponCode.trim() ||
+            !form.discountValue ||
+            !form.startDate ||
+            !form.endDate
+          }
+          onClick={() => void save()}
+        >
+          {saving ? "Saving…" : isNew ? "Create coupon" : "Save changes"}
+        </Button>
+      </div>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Deactivate coupon"
+        body="This coupon will stop working at checkout. You can reactivate it later by turning Active back on."
+        confirmLabel="Deactivate"
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          try {
+            await adminApi.deleteCoupon(id!);
+            toast("Coupon deactivated");
+            navigate("/admin/coupons");
+          } catch (error) {
+            toast(error instanceof ApiError ? error.message : "Could not deactivate coupon", "error");
+          }
+        }}
+      />
     </div>
   );
 }
@@ -2250,7 +2559,7 @@ export function AdminSettingsPage() {
   if (query.isLoading) return <Skeleton className="h-40" />;
   return (
     <form
-      className="max-w-lg space-y-3"
+      className="w-full space-y-3"
       onSubmit={async (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);

@@ -259,7 +259,7 @@ export function AdminVendorFormPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 pb-24">
+    <div className="w-full space-y-4 pb-24">
       <PageHeader
         title={isNew ? "Add vendor" : "Edit vendor"}
         action={<AdminBackLink fallback="/admin/vendors" />}
@@ -343,7 +343,7 @@ export function AdminVendorFormPage() {
       ) : null}
 
       <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
-        <div className="mx-auto flex max-w-2xl gap-2">
+        <div className="flex w-full gap-2">
           {!isNew ? (
             <Button variant="danger" disabled={saving} onClick={() => setConfirmDelete(true)}>
               Delete

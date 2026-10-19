@@ -247,9 +247,12 @@ export interface Coupon {
   _id?: string;
   couponCode: string;
   discountType: "percentage" | "fixed";
+  /** fixed = cents; percentage = percent points */
   discountValue: number;
   minimumOrderValue: number;
+  minimumOrderValueCents?: number;
   maximumDiscount?: number;
+  maximumDiscountCents?: number;
   startDate: string;
   endDate: string;
   usageLimit?: number;

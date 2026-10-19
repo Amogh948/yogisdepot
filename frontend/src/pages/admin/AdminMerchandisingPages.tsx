@@ -295,7 +295,7 @@ export function AdminMerchandisingFormPage({
   if (!isNew && existing.isLoading) return <Skeleton className="h-64" />;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 pb-28">
+    <div className="w-full space-y-4 pb-28">
       <PageHeader
         title={isNew ? (isFestival ? "New festival" : "New merchandising") : isFestival ? "Edit festival" : "Edit merchandising"}
         action={<AdminBackLink fallback={listPath} />}
@@ -461,7 +461,7 @@ export function AdminMerchandisingFormPage({
       </section>
 
       <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
-        <div className="mx-auto flex max-w-2xl gap-2">
+        <div className="flex w-full gap-2">
           <Button variant="outline" disabled={saving} onClick={goBack}>
             Cancel
           </Button>

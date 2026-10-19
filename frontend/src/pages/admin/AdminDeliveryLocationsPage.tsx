@@ -201,7 +201,7 @@ export function AdminDeliveryLocationFormPage() {
   if (!isNew && existing.isLoading) return <Skeleton className="h-48" />;
 
   return (
-    <div className="mx-auto max-w-lg space-y-4">
+    <div className="w-full space-y-4">
       <PageHeader
         title={isNew ? "Add delivery area" : "Edit delivery area"}
         action={<AdminBackLink fallback="/admin/delivery-locations" />}

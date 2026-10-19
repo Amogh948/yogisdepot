@@ -73,26 +73,17 @@ export function HomePage() {
   const onWish = (p: Product) => toggleWishlist.mutate({ product: p, wished: wished.has(entityId(p)) });
 
   const heroColumnRef = useRef<HTMLDivElement>(null);
-  const categoryProbeRef = useRef<HTMLLIElement>(null);
-  const categoryHeaderRef = useRef<HTMLParagraphElement>(null);
-  const categoryViewAllRef = useRef<HTMLDivElement>(null);
-  const [visibleCategoryCount, setVisibleCategoryCount] = useState(6);
+  const [heroHeight, setHeroHeight] = useState<number>();
 
+  // Match the categories rail to the hero column (banner + carousel + trust tiles),
+  // not the other way around — stretch made the sidebar inflate the measured height.
   useLayoutEffect(() => {
     const column = heroColumnRef.current;
     if (!column || typeof ResizeObserver === "undefined") return;
 
     const update = () => {
-      const columnHeight = column.getBoundingClientRect().height;
-      const headerHeight = categoryHeaderRef.current?.getBoundingClientRect().height ?? 24;
-      const viewAllHeight = categoryViewAllRef.current?.getBoundingClientRect().height ?? 40;
-      const itemHeight = categoryProbeRef.current?.getBoundingClientRect().height ?? 44;
-      // nav padding (p-3 = 12*2) + header mb-2 (8) + list/footer gap (4) + row gaps (space-y-0.5 ≈ 2px)
-      const reserved = 24 + headerHeight + 8 + 4 + viewAllHeight;
-      const available = Math.max(0, columnHeight - reserved);
-      const perItem = Math.max(itemHeight + 2, 1);
-      const count = Math.max(0, Math.min(parents.length, Math.floor(available / perItem)));
-      setVisibleCategoryCount((prev) => (prev === count ? prev : count));
+      const next = Math.round(column.getBoundingClientRect().height);
+      setHeroHeight((prev) => (prev === next ? prev : next));
     };
 
     update();
@@ -106,10 +97,7 @@ export function HomePage() {
       observer.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, [parents.length, heroSlides.length]);
-
-  const desktopCategories = parents.slice(0, visibleCategoryCount);
-  const hasMoreCategories = parents.length > visibleCategoryCount;
+  }, [heroSlides.length]);
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-6 lg:space-y-10">
@@ -118,26 +106,17 @@ export function HomePage() {
         <meta name="description" content="Everyday favourites from trusted brands of South Asia" />
       </Helmet>
 
-      <div className="flex w-full min-w-0 flex-col gap-6 lg:flex-row lg:items-stretch">
-        <aside className="hidden w-[220px] shrink-0 lg:flex">
-          <nav className="flex h-full min-h-0 w-full flex-col rounded-[14px] border border-yd-border bg-white p-3 shadow-soft">
-            <p
-              ref={categoryHeaderRef}
-              className="mb-2 shrink-0 px-2 text-xs font-semibold uppercase tracking-wide text-yd-muted"
-            >
+      <div className="flex w-full min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
+        <aside
+          className="hidden w-[220px] shrink-0 self-start lg:flex"
+          style={heroHeight ? { height: heroHeight } : undefined}
+        >
+          <nav className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[14px] border border-yd-border bg-white p-3 shadow-soft">
+            <p className="mb-2 shrink-0 px-2 text-xs font-semibold uppercase tracking-wide text-yd-muted">
               Categories
             </p>
-            <ul className="min-h-0 flex-1 space-y-0.5 overflow-hidden">
-              {/* Hidden probe row so we can measure a real category link height */}
-              {parents[0] ? (
-                <li ref={categoryProbeRef} className="pointer-events-none absolute -left-[9999px] opacity-0" aria-hidden>
-                  <span className="flex items-center gap-2 rounded-xl px-2 py-2.5 text-sm font-medium">
-                    <CategoryDot category={parents[0]} />
-                    {parents[0].name}
-                  </span>
-                </li>
-              ) : null}
-              {desktopCategories.map((cat) => (
+            <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain">
+              {parents.map((cat) => (
                 <li key={cat.slug}>
                   <Link
                     to={`/categories/${cat.slug}`}
@@ -149,12 +128,12 @@ export function HomePage() {
                 </li>
               ))}
             </ul>
-            <div ref={categoryViewAllRef} className="mt-1 shrink-0">
+            <div className="mt-1 shrink-0 border-t border-yd-border/70 pt-1">
               <Link
                 to="/categories"
                 className="flex items-center gap-2 rounded-xl px-2 py-2.5 text-sm font-semibold text-yd-green"
               >
-                {hasMoreCategories ? "View all →" : "All categories →"}
+                All categories →
               </Link>
             </div>
           </nav>

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { ApiSuccess, Cart, Product } from "../types";
 import { entityId } from "../types";
@@ -11,6 +12,7 @@ import { productImageUrl } from "../utils/productImage";
 import { applyOptimisticAdd, applyOptimisticCart, emptyCart } from "../utils/cartOptimistic";
 
 type CartQueryData = ApiSuccess<Cart>;
+type CartSyncListener = () => void;
 
 const QTY_DEBOUNCE_MS = 320;
 
@@ -24,6 +26,17 @@ type QtyPending = {
 
 /** Per-product debounced quantity sync queue (module-level so rapid +/- coalesce). */
 const qtyQueue = new Map<string, QtyPending>();
+const cartSyncListeners = new Set<CartSyncListener>();
+let inflightFlushes = 0;
+let inflightAdds = 0;
+
+function emitCartSyncChange() {
+  cartSyncListeners.forEach((listener) => listener());
+}
+
+export function isCartSyncPending(): boolean {
+  return qtyQueue.size > 0 || inflightFlushes > 0 || inflightAdds > 0;
+}
 
 function celebrateIfIncreased(previousQty: number, nextQty: number) {
   if (nextQty > previousQty) {
@@ -47,6 +60,8 @@ async function flushQuantity(
   const pending = qtyQueue.get(productId);
   if (!pending) return;
   qtyQueue.delete(productId);
+  inflightFlushes += 1;
+  emitCartSyncChange();
 
   const { product, quantity, rollback } = pending;
   const id = entityId(product);
@@ -71,7 +86,83 @@ async function flushQuantity(
       queryClient.setQueryData(["cart"], rollback);
     }
     onError(error);
+  } finally {
+    inflightFlushes = Math.max(0, inflightFlushes - 1);
+    emitCartSyncChange();
+    if (!isCartSyncPending()) {
+      void queryClient.invalidateQueries({ queryKey: ["checkout-quote"] });
+      void queryClient.invalidateQueries({ queryKey: ["coupons-eligible"] });
+    }
   }
+}
+
+/** Flush queued qty timers immediately so checkout doesn't wait on debounce. */
+function flushQueuedTimersNow(queryClient: QueryClient) {
+  const ids = [...qtyQueue.keys()];
+  for (const id of ids) {
+    const pending = qtyQueue.get(id);
+    if (!pending) continue;
+    clearTimeout(pending.timer);
+    void flushQuantity(id, queryClient, () => {
+      // Errors surface via reportCartError when scheduled from mutations;
+      // barrier callers only need the network to settle.
+    });
+  }
+}
+
+/** Resolves when debounced qty flushes and add-to-cart requests have settled. */
+export function waitForCartSync(queryClient?: QueryClient): Promise<void> {
+  if (queryClient) flushQueuedTimersNow(queryClient);
+  if (!isCartSyncPending()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const listener = () => {
+      if (!isCartSyncPending()) {
+        cartSyncListeners.delete(listener);
+        resolve();
+      }
+    };
+    cartSyncListeners.add(listener);
+  });
+}
+
+/**
+ * Await pending cart sync, then pull the authoritative server cart into cache.
+ * Uses cartApi.get() + setQueryData (not invalidate/refetch) to avoid queryFn recursion.
+ */
+export async function ensureCartSynced(queryClient: QueryClient): Promise<void> {
+  await waitForCartSync(queryClient);
+  try {
+    const fresh = await cartApi.get();
+    queryClient.setQueryData(["cart"], fresh);
+  } catch {
+    // Keep optimistic cache if refetch fails; quote/pay will still surface errors.
+  }
+  await queryClient.invalidateQueries({ queryKey: ["checkout-quote"] });
+  await queryClient.invalidateQueries({ queryKey: ["coupons-eligible"] });
+}
+
+/** Stable fingerprint so checkout quote refreshes when quantities change. */
+export function cartFingerprint(cart?: Cart | null): string {
+  if (!cart?.items?.length) return "";
+  const lines = cart.items
+    .map((item) => `${item.productId}:${item.quantity}`)
+    .sort()
+    .join("|");
+  return `${lines}|sub:${cart.subtotal}|n:${cart.itemCount}`;
+}
+
+/** Subscribe UI to cart sync pending state (debounce + in-flight network). */
+export function useCartSyncPending(): boolean {
+  const [pending, setPending] = useState(isCartSyncPending);
+  useEffect(() => {
+    const sync = () => setPending(isCartSyncPending());
+    cartSyncListeners.add(sync);
+    sync();
+    return () => {
+      cartSyncListeners.delete(sync);
+    };
+  }, []);
+  return pending;
 }
 
 function scheduleQuantitySync(
@@ -91,6 +182,7 @@ function scheduleQuantitySync(
     existing.timer = setTimeout(() => {
       void flushQuantity(id, queryClient, onError);
     }, QTY_DEBOUNCE_MS);
+    emitCartSyncChange();
     return;
   }
 
@@ -98,6 +190,7 @@ function scheduleQuantitySync(
     void flushQuantity(id, queryClient, onError);
   }, QTY_DEBOUNCE_MS);
   qtyQueue.set(id, { product, quantity, timer, rollback });
+  emitCartSyncChange();
 }
 
 export function useCommerceActions() {
@@ -134,6 +227,8 @@ export function useCommerceActions() {
       );
       celebrateIfIncreased(previousQty, previousQty + quantity);
 
+      inflightAdds += 1;
+      emitCartSyncChange();
       try {
         const result = await cartApi.add(id, quantity, skuId ? { skuId } : undefined);
         // Don't overwrite if a debounced qty edit is in flight for this product.
@@ -144,6 +239,13 @@ export function useCommerceActions() {
       } catch (error) {
         queryClient.setQueryData(["cart"], previous);
         throw error;
+      } finally {
+        inflightAdds = Math.max(0, inflightAdds - 1);
+        emitCartSyncChange();
+        if (!isCartSyncPending()) {
+          void queryClient.invalidateQueries({ queryKey: ["checkout-quote"] });
+          void queryClient.invalidateQueries({ queryKey: ["coupons-eligible"] });
+        }
       }
     },
     onError: reportCartError,
