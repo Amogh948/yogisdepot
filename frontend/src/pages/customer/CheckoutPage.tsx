@@ -1055,11 +1055,6 @@ export function CheckoutPage() {
         {!cartReady || quote.isFetching ? (
           <p className="mt-2 text-xs text-yd-muted">Updating totals…</p>
         ) : null}
-        {quote.isError ? (
-          <p className="mt-2 rounded-xl border border-yd-error/30 bg-yd-error/5 px-3 py-2 text-xs text-yd-error">
-            {(quote.error as ApiError)?.message || "Unable to calculate tax and fees. Refresh and try again."}
-          </p>
-        ) : null}
         <dl className="mt-2 space-y-1.5 text-sm">
           <div className="flex justify-between">
             <dt className="text-yd-muted">Total MRP</dt>
