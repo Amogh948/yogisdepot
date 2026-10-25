@@ -107,6 +107,8 @@ export function HomePage() {
         <meta name="description" content="Everyday favourites from trusted brands of South Asia" />
       </Helmet>
 
+      <ExhibitionSignupForm />
+
       <div className="flex w-full min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
         <aside
           className="hidden w-[220px] shrink-0 self-start lg:flex"
@@ -162,8 +164,6 @@ export function HomePage() {
           </div>
         </div>
       </div>
-
-      <ExhibitionSignupForm />
 
       <section>
         <SectionHeader title="Shop by category" action={<Link to="/categories" className="text-sm font-semibold text-yd-green">View all</Link>} />
