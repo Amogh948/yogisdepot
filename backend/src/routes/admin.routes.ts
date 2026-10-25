@@ -43,6 +43,7 @@ import { orderStatusSchema } from "../schemas/orders/order.schema";
 import { couponSchema, couponUpdateSchema } from "../schemas/coupons/coupon.schema";
 import { reviewModerationSchema } from "../schemas/reviews/review.schema";
 import { uploadCsv, uploadImage } from "../middleware/upload.middleware";
+import { exhibitionLeadController } from "../controllers/exhibition/exhibitionLead.controller";
 import { z } from "zod";
 
 const router = Router();
@@ -50,6 +51,8 @@ const router = Router();
 router.use(authenticate, requireRoles("admin"));
 
 router.get("/analytics", adminAnalyticsController.overview);
+router.get("/exhibition-leads", exhibitionLeadController.list);
+router.delete("/exhibition-leads/:id", exhibitionLeadController.remove);
 router.get("/settings", adminSettingsController.get);
 router.patch("/settings", validate(settingsUpdateSchema), adminSettingsController.update);
 

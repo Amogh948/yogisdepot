@@ -27,6 +27,7 @@ import { merchandisingRoutes } from "./routes/merchandising.routes";
 import { homeSectionRoutes } from "./routes/homeSection.routes";
 import { deliveryRoutes } from "./routes/delivery.routes";
 import { brandRoutes, settingsRoutes } from "./routes/publicCatalog.routes";
+import { exhibitionLeadRoutes } from "./routes/exhibitionLead.routes";
 
 function hostnameOf(value: string): string | null {
   try {
@@ -114,6 +115,7 @@ export function createApp() {
   api.use("/delivery-locations", deliveryRoutes);
   api.use("/brands", brandRoutes);
   api.use("/settings", settingsRoutes);
+  api.use("/exhibition-leads", exhibitionLeadRoutes);
   api.use("/notifications", notificationRoutes);
   api.use("/admin", adminRoutes);
   api.use("/vendors", vendorRoutes);

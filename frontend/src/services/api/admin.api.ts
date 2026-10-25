@@ -37,6 +37,16 @@ export type AdminBrand = {
   isActive: boolean;
 };
 
+export type ExhibitionLead = {
+  id?: string;
+  _id?: string;
+  name: string;
+  phone: string;
+  email: string;
+  quadrant: "NW" | "NE" | "SW" | "SE" | "Other";
+  createdAt?: string;
+};
+
 export type AdminDeliveryLocation = {
   id?: string;
   _id?: string;
@@ -234,6 +244,8 @@ export const adminApi = {
   updateDeliveryLocation: (id: string, payload: Record<string, unknown>) =>
     unwrap<AdminDeliveryLocation>(api.put(`/admin/delivery-locations/${id}`, payload)),
   deleteDeliveryLocation: (id: string) => unwrap<null>(api.delete(`/admin/delivery-locations/${id}`)),
+  exhibitionLeads: () => unwrap<ExhibitionLead[]>(api.get("/admin/exhibition-leads")),
+  deleteExhibitionLead: (id: string) => unwrap<null>(api.delete(`/admin/exhibition-leads/${id}`)),
 };
 
 export const vendorApi = {

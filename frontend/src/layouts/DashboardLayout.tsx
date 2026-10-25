@@ -107,6 +107,7 @@ export function AdminLayout() {
       homeHref="/admin/dashboard"
       links={[
         { to: "/admin/dashboard", label: "Dashboard" },
+        { to: "/admin/exhibition-leads", label: "Exhibition leads" },
         { to: "/admin/vendors", label: "Vendors" },
         { to: "/admin/products", label: "Products" },
         { to: "/admin/merchandising", label: "Merchandising" },

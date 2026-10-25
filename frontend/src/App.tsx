@@ -41,6 +41,7 @@ import {
 } from "./pages/admin/AdminPages";
 import { AdminMerchandisingFormPage, AdminMerchandisingPage, AdminFestivalFormPage, AdminFestivalsPage } from "./pages/admin/AdminMerchandisingPages";
 import { AdminBrandFormPage, AdminBrandsPage } from "./pages/admin/AdminBrandPages";
+import { AdminExhibitionLeadsPage } from "./pages/admin/AdminExhibitionLeadsPage";
 import {
   AdminDeliveryLocationFormPage,
   AdminDeliveryLocationsPage,
@@ -140,6 +141,7 @@ export default function App() {
           <Route path="delivery-locations/:id" element={<AdminDeliveryLocationFormPage />} />
           <Route path="tax-rates" element={<AdminTaxRatesPage />} />
           <Route path="settings" element={<AdminSettingsPage />} />
+          <Route path="exhibition-leads" element={<AdminExhibitionLeadsPage />} />
         </Route>
       </Route>
 

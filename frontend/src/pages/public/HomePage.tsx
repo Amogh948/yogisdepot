@@ -14,6 +14,7 @@ import { Skeleton, SectionHeader } from "../../components/ui/Feedback";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { HomeFestivalStoreSection } from "../../components/discovery/HomeFestivalStoreSection";
 import { SameDayDeliveryBanner } from "../../components/commerce/SameDayDeliveryBanner";
+import { ExhibitionSignupForm } from "../../components/home/ExhibitionSignupForm";
 
 const TRUST_DESKTOP = [
   { icon: Leaf, label: "Authentic & Fresh" },
@@ -161,6 +162,8 @@ export function HomePage() {
           </div>
         </div>
       </div>
+
+      <ExhibitionSignupForm />
 
       <section>
         <SectionHeader title="Shop by category" action={<Link to="/categories" className="text-sm font-semibold text-yd-green">View all</Link>} />
