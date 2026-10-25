@@ -135,8 +135,7 @@ export const orderService = {
       customerId: userId,
     });
 
-    const paymentStatus =
-      input.paymentMethod === "cod" ? "pending" : payment.status === "paid" ? "paid" : "pending";
+    const paymentStatus = payment.status === "paid" ? "paid" : "pending";
     // Fulfillment starts as "pending" (Order Placed). Admin advances to confirmed / later stages.
     const orderStatus: OrderStatus = "pending";
 
@@ -246,11 +245,8 @@ export const orderService = {
         }
       }
 
-      if (paymentStatus === "paid" || input.paymentMethod === "cod" || input.paymentMethod === "mock_online") {
-        // For COD, keep reserved until delivered; for paid online mark sold immediately
-        if (paymentStatus === "paid") {
-          await inventoryReservationService.markSold(String(order._id), useSession ? session : undefined);
-        }
+      if (paymentStatus === "paid") {
+        await inventoryReservationService.markSold(String(order._id), useSession ? session : undefined);
       }
 
       if (quote.couponSnapshot) {
