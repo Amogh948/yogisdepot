@@ -55,11 +55,11 @@ export function AdminExhibitionLeadsPage() {
         }
       />
       <p className="mb-4 text-sm text-yd-muted">
-        Details submitted from the home page exhibition form.
+        Details submitted from the survey page.
       </p>
       {query.isLoading ? <Skeleton className="h-40" /> : null}
       {!query.isLoading && !leads.length ? (
-        <EmptyState title="No submissions yet" body="Leads from the home page form will show up here." />
+        <EmptyState title="No submissions yet" body="Leads from the survey page will show up here." />
       ) : null}
       <div className="space-y-3">
         {leads.map((lead) => {

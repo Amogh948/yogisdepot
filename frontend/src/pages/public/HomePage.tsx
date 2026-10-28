@@ -14,8 +14,6 @@ import { Skeleton, SectionHeader } from "../../components/ui/Feedback";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { HomeFestivalStoreSection } from "../../components/discovery/HomeFestivalStoreSection";
 import { SameDayDeliveryBanner } from "../../components/commerce/SameDayDeliveryBanner";
-import { ExhibitionSignupForm } from "../../components/home/ExhibitionSignupForm";
-
 const TRUST_DESKTOP = [
   { icon: Leaf, label: "Authentic & Fresh" },
   { icon: ShieldCheck, label: "Trusted Local Makers" },
@@ -106,8 +104,6 @@ export function HomePage() {
         <title>Yogi&apos;s Depot — Taste Authentic India Everyday</title>
         <meta name="description" content="Everyday favourites from trusted brands of South Asia" />
       </Helmet>
-
-      <ExhibitionSignupForm />
 
       <div className="flex w-full min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
         <aside

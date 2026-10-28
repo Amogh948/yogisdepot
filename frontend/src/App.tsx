@@ -3,6 +3,7 @@ import { PublicLayout } from "./layouts/PublicLayout";
 import { AdminLayout, VendorLayout } from "./layouts/DashboardLayout";
 import { GuestRoute, ProtectedRoute } from "./routes/guards";
 import { HomePage } from "./pages/public/HomePage";
+import { SurveyPage } from "./pages/public/SurveyPage";
 import { ProductListingPage } from "./pages/public/ProductListingPage";
 import { ProductDetailPage } from "./pages/public/ProductDetailPage";
 import { CategoriesPage } from "./pages/public/CategoriesPage";
@@ -65,6 +66,7 @@ export default function App() {
     <Routes>
       <Route element={<PublicLayout />}>
         <Route index element={<HomePage />} />
+        <Route path="survey" element={<SurveyPage />} />
         <Route path="products" element={<ProductListingPage mode="all" />} />
         <Route path="products/:slug" element={<ProductDetailPage />} />
         <Route path="categories" element={<CategoriesPage />} />

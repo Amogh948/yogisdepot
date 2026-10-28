@@ -135,6 +135,9 @@ router.get("/home-sections/:keyOrId", adminHomeSectionController.get);
 router.put("/home-sections/:keyOrId", validate(homeSectionUpdateSchema), adminHomeSectionController.update);
 
 router.get("/delivery-locations", adminDeliveryLocationController.list);
+router.get("/delivery-locations/csv-template", adminDeliveryLocationController.downloadCsvTemplate);
+router.post("/delivery-locations/csv-preview", uploadCsv.single("file"), adminDeliveryLocationController.previewCsv);
+router.post("/delivery-locations/csv-import", uploadCsv.single("file"), adminDeliveryLocationController.importCsv);
 router.post("/delivery-locations", validate(deliveryLocationSchema), adminDeliveryLocationController.create);
 router.get("/delivery-locations/:id", adminDeliveryLocationController.get);
 router.put("/delivery-locations/:id", validate(deliveryLocationUpdateSchema), adminDeliveryLocationController.update);

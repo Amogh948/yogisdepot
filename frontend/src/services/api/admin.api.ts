@@ -238,6 +238,32 @@ export const adminApi = {
   setProductMerchandising: (productId: string, collectionIds: string[]) =>
     unwrap<unknown>(api.put(`/admin/products/${productId}/merchandising`, { collectionIds })),
   deliveryLocations: () => unwrap<AdminDeliveryLocation[]>(api.get("/admin/delivery-locations")),
+  downloadDeliveryCsvTemplate: async () => {
+    const response = await api.get("/admin/delivery-locations/csv-template", { responseType: "blob" });
+    return response.data as Blob;
+  },
+  previewDeliveryCsv: (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return unwrap<{
+      total: number;
+      created: number;
+      updated: number;
+      failed: number;
+      rows: Array<{ rowNumber: number; postalCodePrefix?: string; ok: boolean; errors: string[] }>;
+    }>(api.post("/admin/delivery-locations/csv-preview", body, { headers: { "Content-Type": "multipart/form-data" } }));
+  },
+  importDeliveryCsv: (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return unwrap<{
+      total: number;
+      created: number;
+      updated: number;
+      failed: number;
+      rows: Array<{ rowNumber: number; postalCodePrefix?: string; ok: boolean; errors: string[] }>;
+    }>(api.post("/admin/delivery-locations/csv-import", body, { headers: { "Content-Type": "multipart/form-data" } }));
+  },
   deliveryLocation: (id: string) => unwrap<AdminDeliveryLocation>(api.get(`/admin/delivery-locations/${id}`)),
   createDeliveryLocation: (payload: Record<string, unknown>) =>
     unwrap<AdminDeliveryLocation>(api.post("/admin/delivery-locations", payload)),

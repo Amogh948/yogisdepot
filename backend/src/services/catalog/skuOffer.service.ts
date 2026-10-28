@@ -80,10 +80,12 @@ export const skuOfferService = {
     const pricing = await activePricing(sku._id);
     let mrpCents = pricing?.mrpCents;
     let sellingPriceCents = pricing?.sellingPriceCents;
-    if (mrpCents == null || sellingPriceCents == null) {
-      // Legacy product dual-read
-      sellingPriceCents = dollarsToCents(product.price ?? 0);
-      mrpCents = dollarsToCents(product.compareAtPrice ?? product.price ?? 0);
+    const legacySelling = dollarsToCents(product.price ?? 0);
+    const skuPricingBlank =
+      !pricing || ((pricing.sellingPriceCents ?? 0) === 0 && (pricing.mrpCents ?? 0) === 0 && (pricing.costPriceCents ?? 0) === 0);
+    if (mrpCents == null || sellingPriceCents == null || (skuPricingBlank && legacySelling > 0)) {
+      sellingPriceCents = legacySelling;
+      mrpCents = Math.max(dollarsToCents(product.compareAtPrice ?? product.price ?? 0), sellingPriceCents);
     }
     const discountCents = Math.max(0, mrpCents - sellingPriceCents);
     const discountPercentage =

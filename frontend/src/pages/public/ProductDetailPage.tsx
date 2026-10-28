@@ -70,7 +70,6 @@ export function ProductDetailPage() {
   if (productQuery.isError || !product) return <ErrorState message="Product not found" />;
 
   const images = product.images.length ? product.images : [product.thumbnail || ""];
-  const vendor = typeof product.vendorId === "object" ? product.vendorId : undefined;
   const weight = (product as typeof product & { weight?: number }).weight;
   const stockDisplay = resolveStockDisplay({
     unlimitedQuantity: product.unlimitedQuantity,
@@ -142,11 +141,6 @@ export function ProductDetailPage() {
             </p>
           ) : null}
           <p className={`text-sm font-semibold ${stockToneClass}`}>{stockDisplay.label}</p>
-          {vendor ? (
-            <p className="text-sm text-yd-muted">
-              Sold by <span className="font-semibold text-yd-ink">{vendor.businessName}</span>
-            </p>
-          ) : null}
 
           <SameDayDeliveryBanner compact />
           <div className="flex items-start gap-2 rounded-card border border-yd-border bg-white p-3 text-sm">

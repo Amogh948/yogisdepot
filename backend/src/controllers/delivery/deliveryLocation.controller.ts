@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { z } from "zod";
+import { BadRequestError } from "../../errors/AppError";
 import { CA_PROVINCES } from "../../models/CanadianTaxRate";
+import { deliveryLocationCsvService } from "../../services/delivery/deliveryLocationCsv.service";
 import { deliveryLocationService } from "../../services/delivery/deliveryLocation.service";
 import { sendSuccess } from "../../utils/apiResponse";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -64,6 +66,24 @@ export const adminDeliveryLocationController = {
   remove: asyncHandler(async (req: Request, res: Response) => {
     await deliveryLocationService.remove(req.params.id);
     sendSuccess(res, null, "Delivery location deleted");
+  }),
+
+  downloadCsvTemplate: asyncHandler(async (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="yogisdepot-delivery-areas-template.csv"');
+    res.status(200).send(deliveryLocationCsvService.templateCsv());
+  }),
+
+  previewCsv: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file?.buffer?.length) throw new BadRequestError("CSV file is required");
+    const result = await deliveryLocationCsvService.processCsv(req.file.buffer, { commit: false });
+    sendSuccess(res, result, "CSV preview ready");
+  }),
+
+  importCsv: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file?.buffer?.length) throw new BadRequestError("CSV file is required");
+    const result = await deliveryLocationCsvService.processCsv(req.file.buffer, { commit: true });
+    sendSuccess(res, result, "Delivery areas imported");
   }),
 };
 

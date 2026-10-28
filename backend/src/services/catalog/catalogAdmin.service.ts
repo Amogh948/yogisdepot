@@ -15,6 +15,7 @@ import { uniqueSlug } from "../../utils/slug";
 import { inventoryReservationService } from "../inventory/inventoryReservation.service";
 import { skuOfferService } from "./skuOffer.service";
 import { DEFAULT_WAREHOUSE_CODE } from "../../config/constants";
+import { dollarsToCents } from "../../utils/money";
 
 export interface WizardVariantInput {
   name: string;
@@ -368,6 +369,24 @@ export const catalogAdminService = {
       const sku = skuByVariant.get(variant.variantId) || (variant.skuId ? skus.find((s) => String(s._id) === String(variant.skuId)) : undefined);
       const pricing = sku ? pricingBySku.get(String(sku._id)) : undefined;
       const inventory = sku ? inventoryBySku.get(String(sku._id)) : undefined;
+      const legacySelling = dollarsToCents(product.price ?? 0);
+      const pricingBlank =
+        !pricing ||
+        ((pricing.sellingPriceCents ?? 0) === 0 && (pricing.mrpCents ?? 0) === 0 && (pricing.costPriceCents ?? 0) === 0);
+      const resolvedPricing =
+        pricingBlank && legacySelling > 0
+          ? {
+              mrpCents: Math.max(dollarsToCents(product.compareAtPrice ?? product.price ?? 0), legacySelling),
+              costPriceCents: dollarsToCents(product.costPrice ?? 0),
+              sellingPriceCents: legacySelling,
+            }
+          : pricing
+            ? {
+                mrpCents: pricing.mrpCents,
+                costPriceCents: pricing.costPriceCents,
+                sellingPriceCents: pricing.sellingPriceCents,
+              }
+            : null;
       return {
         variantId: variant.variantId,
         variantCode: variant.variantCode,
@@ -381,15 +400,15 @@ export const catalogAdminService = {
         skuCode: sku?.skuCode,
         taxCategoryId: sku?.taxCategoryId ? String(sku.taxCategoryId) : undefined,
         skuStatus: sku?.status,
-        pricing: pricing
+        pricing: resolvedPricing
           ? {
-              id: String(pricing._id),
-              mrpCents: pricing.mrpCents,
-              costPriceCents: pricing.costPriceCents,
-              sellingPriceCents: pricing.sellingPriceCents,
-              discountAmountCents: pricing.discountAmountCents,
-              discountPercentage: pricing.discountPercentage,
-              effectiveFrom: pricing.effectiveFrom,
+              id: pricing ? String(pricing._id) : undefined,
+              mrpCents: resolvedPricing.mrpCents,
+              costPriceCents: resolvedPricing.costPriceCents,
+              sellingPriceCents: resolvedPricing.sellingPriceCents,
+              discountAmountCents: pricing && !pricingBlank ? pricing.discountAmountCents : Math.max(0, resolvedPricing.mrpCents - resolvedPricing.sellingPriceCents),
+              discountPercentage: pricing && !pricingBlank ? pricing.discountPercentage : 0,
+              effectiveFrom: pricing?.effectiveFrom,
             }
           : null,
         inventory: inventory

@@ -11,7 +11,8 @@ import { entityId } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
 import { formatCadFromCents } from "../../utils/money";
-import { Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Trash2 } from "lucide-react";
+import { CsvDropzone } from "../../components/ui/CsvDropzone";
 import { AdminBackLink } from "../../components/admin/AdminBackLink";
 import { useAdminBack } from "../../hooks/useAdminBack";
 
@@ -20,7 +21,56 @@ export function AdminDeliveryLocationsPage() {
   const query = useQuery({ queryKey: ["admin-delivery-locations"], queryFn: () => adminApi.deliveryLocations() });
   const toast = useToastStore((s) => s.push);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [csvBusy, setCsvBusy] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvPreview, setCsvPreview] = useState<{
+    total: number;
+    created: number;
+    updated: number;
+    failed: number;
+    rows: Array<{ rowNumber: number; postalCodePrefix?: string; ok: boolean; errors: string[] }>;
+  } | null>(null);
   const items = query.data?.data || [];
+
+  async function downloadTemplate() {
+    const blob = await adminApi.downloadDeliveryCsvTemplate();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "yogisdepot-delivery-areas-template.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function previewCsv() {
+    if (!csvFile) return;
+    setCsvBusy(true);
+    try {
+      const result = await adminApi.previewDeliveryCsv(csvFile);
+      setCsvPreview(result.data);
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not read that CSV", "error");
+    } finally {
+      setCsvBusy(false);
+    }
+  }
+
+  async function importCsv() {
+    if (!csvFile) return;
+    setCsvBusy(true);
+    try {
+      const result = await adminApi.importDeliveryCsv(csvFile);
+      setCsvPreview(result.data);
+      if (result.data.failed) toast("Some rows could not be imported", "error");
+      else toast("Delivery areas imported");
+      setCsvFile(null);
+      await queryClient.invalidateQueries({ queryKey: ["admin-delivery-locations"] });
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "CSV import failed", "error");
+    } finally {
+      setCsvBusy(false);
+    }
+  }
 
   return (
     <div>
@@ -36,6 +86,69 @@ export function AdminDeliveryLocationsPage() {
         Configure postal codes, covered area names, and standard + Superfast delivery fees. Checkout matches the
         customer postal code and applies that area&apos;s fees.
       </p>
+      <section className="mb-5 rounded-2xl border border-yd-border/60 bg-white p-4 shadow-soft sm:p-5">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold text-yd-ink">Import from CSV</p>
+            <p className="mt-0.5 text-sm text-yd-muted">
+              Fees are in cents. Separate area names with a pipe, for example Woodbine|Woodlands. A matching postal
+              prefix is updated.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={csvBusy}
+            onClick={() => void downloadTemplate()}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-yd-green hover:underline disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            Download template
+          </button>
+        </div>
+        <CsvDropzone
+          file={csvFile}
+          disabled={csvBusy}
+          onFile={(next) => {
+            setCsvFile(next);
+            setCsvPreview(null);
+          }}
+        />
+        {csvFile ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={csvBusy} onClick={() => void previewCsv()}>
+              {csvBusy ? "Working…" : "Preview"}
+            </Button>
+            <Button type="button" disabled={csvBusy} onClick={() => void importCsv()}>
+              Import
+            </Button>
+          </div>
+        ) : null}
+        {csvPreview ? (
+          <div className="mt-4 space-y-2 border-t border-yd-border/70 pt-4 text-sm">
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="muted">{csvPreview.total} rows</Badge>
+              <Badge tone="sage">{csvPreview.created} create</Badge>
+              <Badge tone="sage">{csvPreview.updated} update</Badge>
+              <Badge tone={csvPreview.failed ? "red" : "sage"}>{csvPreview.failed} failed</Badge>
+            </div>
+            {csvPreview.rows.some((row) => !row.ok) ? (
+              <ul className="max-h-36 space-y-1 overflow-y-auto text-yd-error">
+                {csvPreview.rows
+                  .filter((row) => !row.ok)
+                  .slice(0, 12)
+                  .map((row) => (
+                    <li key={row.rowNumber}>
+                      Row {row.rowNumber}
+                      {row.postalCodePrefix ? ` · ${row.postalCodePrefix}` : ""}: {row.errors.join("; ")}
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <p className="text-yd-muted">All rows look valid.</p>
+            )}
+          </div>
+        ) : null}
+      </section>
       {query.isLoading ? <Skeleton className="h-40" /> : null}
       {!query.isLoading && !items.length ? (
         <EmptyState title="No delivery areas" body="Add a postal code area to start restricting delivery and fees." />
