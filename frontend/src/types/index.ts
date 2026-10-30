@@ -194,6 +194,8 @@ export interface Order {
   paymentMethod: "cod" | "square" | "mock_online" | "razorpay";
   paymentStatus: string;
   orderStatus: OrderStatus;
+  trackingNumber?: string;
+  trackingUrl?: string;
   notes?: string;
   cancelledAt?: string;
   cancellationReason?:

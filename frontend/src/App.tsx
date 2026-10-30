@@ -24,14 +24,12 @@ import { OrderSuccessPage } from "./pages/customer/OrderSuccessPage";
 import { OrderDetailPage, OrdersPage } from "./pages/customer/OrdersPage";
 import { AddressesPage, ProfilePage, VendorApplyPage, WishlistPage } from "./pages/customer/AccountPages";
 import {
-  AdminAnalyticsPage,
   AdminCategoriesPage,
   AdminCategoryDetailPage,
   AdminCouponFormPage,
   AdminCouponsPage,
   AdminCustomerFormPage,
   AdminCustomersPage,
-  AdminDashboardPage,
   AdminOrderDetailPage,
   AdminOrdersPage,
   AdminProductEditPage,
@@ -41,6 +39,7 @@ import {
   AdminSettingsPage,
 } from "./pages/admin/AdminPages";
 import { AdminMerchandisingFormPage, AdminMerchandisingPage, AdminFestivalFormPage, AdminFestivalsPage } from "./pages/admin/AdminMerchandisingPages";
+import { AdminAnalyticsPage, AdminDashboardPage } from "./pages/admin/AdminDashboardPage";
 import { AdminBrandFormPage, AdminBrandsPage } from "./pages/admin/AdminBrandPages";
 import { AdminExhibitionLeadsPage } from "./pages/admin/AdminExhibitionLeadsPage";
 import {

@@ -23,6 +23,8 @@ export const squareVerifySchema = z.object({
 
 export const orderStatusSchema = z.object({
   status: z.enum(ORDER_STATUSES),
+  trackingNumber: z.string().trim().max(80).optional(),
+  trackingUrl: z.union([z.string().trim().url().max(500), z.literal("")]).optional(),
 });
 
 export const orderQuerySchema = z.object({

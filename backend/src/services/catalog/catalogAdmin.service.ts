@@ -638,7 +638,21 @@ export const catalogAdminService = {
   },
 
   async listBrands() {
-    return Brand.find().sort({ name: 1 });
+    const brands = await Brand.find().sort({ name: 1 });
+    const ids = brands.map((brand) => brand._id);
+    const counts =
+      ids.length === 0
+        ? []
+        : await Product.aggregate<{ _id: Types.ObjectId; count: number }>([
+            { $match: { brandId: { $in: ids } } },
+            { $group: { _id: "$brandId", count: { $sum: 1 } } },
+          ]);
+    const byId = new Map(counts.map((row) => [String(row._id), row.count]));
+    return brands.map((brand) => {
+      const json = brand.toJSON() as Record<string, unknown>;
+      json.productCount = byId.get(String(brand._id)) || 0;
+      return json;
+    });
   },
 
   async createBrand(input: { name: string; description?: string; logoUrl?: string; isActive?: boolean }) {
@@ -677,6 +691,77 @@ export const catalogAdminService = {
     }
     await brand.deleteOne();
     return brand;
+  },
+
+  /**
+   * delete_products: remove catalog products for the brands and keep the brand records.
+   * delete_brands: remove the brands and clear the brand from products.
+   * delete_brands_and_products: remove the products, then the brands.
+   */
+  async bulkBrands(input: {
+    brandIds: string[];
+    mode: "delete_products" | "delete_brands" | "delete_brands_and_products";
+  }) {
+    const uniqueIds = [...new Set(input.brandIds)];
+    if (uniqueIds.some((id) => !Types.ObjectId.isValid(id))) {
+      throw new BadRequestError("Invalid brand id");
+    }
+    const brands = await Brand.find({ _id: { $in: uniqueIds } });
+    if (brands.length !== uniqueIds.length) {
+      throw new BadRequestError("One or more brands were not found");
+    }
+
+    const brandIds = brands.map((brand) => brand._id);
+    const names = brands.map((brand) => brand.name);
+    const products = await Product.find({
+      $or: [
+        { brandId: { $in: brandIds } },
+        {
+          brand: { $in: names },
+          $or: [{ brandId: null }, { brandId: { $exists: false } }],
+        },
+      ],
+    }).select("_id");
+
+    let deletedProducts = 0;
+    let unlinkedProducts = 0;
+    const removeCatalog = input.mode === "delete_products" || input.mode === "delete_brands_and_products";
+
+    if (removeCatalog && products.length) {
+      const { productService } = await import("../products/product.service");
+      for (const product of products) {
+        try {
+          await productService.remove(String(product._id));
+          deletedProducts += 1;
+        } catch (error) {
+          if (!(error instanceof NotFoundError)) throw error;
+        }
+      }
+    }
+
+    if (input.mode === "delete_brands" || input.mode === "delete_brands_and_products") {
+      if (input.mode === "delete_brands") {
+        const linked = await Product.updateMany(
+          { brandId: { $in: brandIds } },
+          { $unset: { brandId: "", brand: "" } },
+        );
+        const legacy = await Product.updateMany(
+          {
+            brand: { $in: names },
+            $or: [{ brandId: null }, { brandId: { $exists: false } }],
+          },
+          { $unset: { brand: "" } },
+        );
+        unlinkedProducts = (linked.modifiedCount || 0) + (legacy.modifiedCount || 0);
+      }
+      await Brand.deleteMany({ _id: { $in: brandIds } });
+    }
+
+    return {
+      deletedBrands: input.mode === "delete_products" ? 0 : brands.length,
+      deletedProducts,
+      unlinkedProducts,
+    };
   },
 
   async listPublicBrands() {

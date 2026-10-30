@@ -105,6 +105,11 @@ export const productStackUpdateSchema = z.object({
   variants: z.array(stackVariantUpdateSchema).optional(),
 });
 
+export const bulkBrandSchema = z.object({
+  brandIds: z.array(z.string().min(1)).min(1).max(200),
+  mode: z.enum(["delete_products", "delete_brands", "delete_brands_and_products"]),
+});
+
 export const adminFmcgController = {
   createProductWizard: asyncHandler(async (req: Request, res: Response) => {
     const body = productWizardSchema.parse(req.body);
@@ -172,6 +177,11 @@ export const adminFmcgController = {
   removeBrand: asyncHandler(async (req: Request, res: Response) => {
     await catalogAdminService.removeBrand(req.params.id);
     sendSuccess(res, null, "Brand deleted");
+  }),
+
+  bulkBrands: asyncHandler(async (req: Request, res: Response) => {
+    const result = await catalogAdminService.bulkBrands(req.body);
+    sendSuccess(res, result, "Brand bulk action finished");
   }),
 
   taxCategories: asyncHandler(async (_req: Request, res: Response) => {

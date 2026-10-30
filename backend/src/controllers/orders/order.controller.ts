@@ -81,7 +81,7 @@ export const adminOrderController = {
   }),
 
   updateStatus: asyncHandler(async (req: Request, res: Response) => {
-    const order = await orderService.updateStatus(req.params.id, req.body.status);
+    const order = await orderService.updateStatus(req.params.id, req.body);
     sendSuccess(res, order, "Order status updated");
   }),
 };

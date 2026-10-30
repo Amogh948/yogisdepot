@@ -16,6 +16,7 @@ import { adminCouponController } from "../controllers/coupons/coupon.controller"
 import {
   adminFmcgController,
   productStackUpdateSchema,
+  bulkBrandSchema,
   productWizardSchema,
 } from "../controllers/fmcg/fmcg.controller";
 import {
@@ -93,6 +94,7 @@ router.patch("/products/:id/status", validate(productStatusSchema), adminProduct
 router.delete("/products/:id", adminProductController.remove);
 
 router.get("/brands", adminFmcgController.brands);
+router.post("/brands/bulk", validate(bulkBrandSchema), adminFmcgController.bulkBrands);
 router.post("/brands", adminFmcgController.createBrand);
 router.put("/brands/:id", adminFmcgController.updateBrand);
 router.delete("/brands/:id", adminFmcgController.removeBrand);

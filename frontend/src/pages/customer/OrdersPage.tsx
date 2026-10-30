@@ -33,6 +33,17 @@ type CancelDialog =
   | { kind: "feedback"; showRefundNote: boolean }
   | null;
 
+function safeTrackingUrl(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return undefined;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function dollarsFromCents(cents: number | undefined, fallbackDollars: number | undefined): number {
   if (typeof cents === "number") return cents / 100;
   return Number(fallbackDollars ?? 0);
@@ -353,6 +364,25 @@ export function OrderDetailPage() {
           );
         })}
       </ol>
+
+      {order.trackingNumber || safeTrackingUrl(order.trackingUrl) ? (
+        <section className="rounded-card border border-yd-border bg-white p-4">
+          <h2 className="font-semibold text-yd-ink">Tracking</h2>
+          {order.trackingNumber ? (
+            <p className="mt-1 text-sm text-yd-muted">Tracking number: {order.trackingNumber}</p>
+          ) : null}
+          {safeTrackingUrl(order.trackingUrl) ? (
+            <a
+              href={safeTrackingUrl(order.trackingUrl)}
+              className="mt-2 inline-block text-sm font-semibold text-yd-green"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Track shipment
+            </a>
+          ) : null}
+        </section>
+      ) : null}
 
       <OrderBillBreakdown order={order} />
 

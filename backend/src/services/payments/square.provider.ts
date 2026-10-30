@@ -31,6 +31,7 @@ type PaymentsApi = {
       referenceId?: string;
       amountMoney?: SquareMoney;
       refundedMoney?: SquareMoney;
+      cardDetails?: { card?: { last4?: string; cardBrand?: string } };
     };
   }>;
 };
@@ -164,18 +165,23 @@ export class SquareProvider implements PaymentProvider {
     referenceId?: string;
     totalCents?: number;
     refundedCents?: number;
+    last4?: string;
+    cardBrand?: string;
   } | null> {
     if (!paymentId) return null;
     try {
       const response = await this.api().payments.get({ paymentId });
       const payment = response.payment;
       if (!payment?.id) return null;
+      const last4 = payment.cardDetails?.card?.last4;
       return {
         id: payment.id,
         status: String(payment.status || ""),
         referenceId: payment.referenceId || undefined,
         totalCents: moneyToCents(payment.amountMoney),
         refundedCents: moneyToCents(payment.refundedMoney),
+        last4: last4 && /^\d{4}$/.test(last4) ? last4 : undefined,
+        cardBrand: payment.cardDetails?.card?.cardBrand || undefined,
       };
     } catch {
       return null;

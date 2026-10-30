@@ -106,6 +106,11 @@ export interface OrderDocument extends Document {
   paymentStatus: PaymentStatus;
   paymentReference?: string;
   transactionId?: string;
+  /** Set when a confirmation email has been claimed, so webhook replays do not send twice. */
+  confirmationEmailQueuedAt?: Date;
+  /** Optional carrier tracking, included on the next status email when present. */
+  trackingNumber?: string;
+  trackingUrl?: string;
   orderStatus: OrderStatus;
   notes?: string;
   cancelledAt?: Date;
@@ -204,6 +209,9 @@ const orderSchema = new Schema<OrderDocument>(
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, default: "pending" },
     paymentReference: { type: String },
     transactionId: { type: String },
+    confirmationEmailQueuedAt: { type: Date },
+    trackingNumber: { type: String, trim: true, maxlength: 80 },
+    trackingUrl: { type: String, trim: true, maxlength: 500 },
     orderStatus: { type: String, enum: ORDER_STATUSES, default: "pending" },
     notes: { type: String },
     cancelledAt: { type: Date },
@@ -237,6 +245,7 @@ orderSchema.set("toJSON", {
     }
     delete json._id;
     delete json.__v;
+    delete json.confirmationEmailQueuedAt;
     return json;
   },
 });

@@ -21,6 +21,7 @@ import { PaymentService } from "../payments/payment.service";
 import { SquareProvider } from "../payments/square.provider";
 import { couponService } from "../coupons/coupon.service";
 import { notificationService } from "../notifications/notification.service";
+import { queueOrderConfirmationEmail, queueOrderStatusEmail } from "../email/orderEmail.service";
 import { cartService } from "../cart/cart.service";
 import { checkoutPricingService } from "../checkout/checkoutPricing.service";
 import { deliveryLocationService } from "../delivery/deliveryLocation.service";
@@ -311,6 +312,10 @@ export const orderService = {
       }
     }
 
+    if (createdOrder.paymentStatus === "paid") {
+      queueOrderConfirmationEmail(String(createdOrder._id));
+    }
+
     await notificationService.notify({
       userId,
       type: "order_confirmed",
@@ -420,6 +425,7 @@ export const orderService = {
     await inventoryReservationService.markSold(String(order._id));
     const customerId = userId || String(order.customerId);
     await Cart.findOneAndUpdate({ userId: customerId }, { items: [] });
+    queueOrderConfirmationEmail(String(order._id));
     return order;
   },
 
@@ -534,6 +540,7 @@ export const orderService = {
       title: "Order cancelled",
       body: `Order ${order.orderNumber} was cancelled.`,
     });
+    queueOrderStatusEmail(String(order._id), "cancelled");
     return order;
   },
 
@@ -593,7 +600,11 @@ export const orderService = {
     return order;
   },
 
-  async updateStatus(id: string, status: OrderStatus) {
+  async updateStatus(
+    id: string,
+    input: { status: OrderStatus; trackingNumber?: string; trackingUrl?: string },
+  ) {
+    const status = input.status;
     if (!ORDER_STATUSES.includes(status)) {
       throw new BadRequestError("Invalid order status");
     }
@@ -601,6 +612,24 @@ export const orderService = {
     if (!order) {
       throw new NotFoundError("Order not found");
     }
+    const previousStatus = order.orderStatus;
+    const previousTracking = `${order.trackingNumber || ""}|${order.trackingUrl || ""}`;
+    if (input.trackingUrl) {
+      let parsed: URL;
+      try {
+        parsed = new URL(input.trackingUrl);
+      } catch {
+        throw new BadRequestError("Tracking link must be a valid URL");
+      }
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        throw new BadRequestError("Tracking link must start with http or https");
+      }
+      order.trackingUrl = parsed.toString();
+    }
+    if (input.trackingNumber) {
+      order.trackingNumber = input.trackingNumber.trim();
+    }
+    const trackingChanged = `${order.trackingNumber || ""}|${order.trackingUrl || ""}` !== previousTracking;
     order.orderStatus = status;
     order.items = order.items.map((item) => {
       item.fulfillmentStatus = status;
@@ -611,21 +640,27 @@ export const orderService = {
       await inventoryReservationService.markSold(String(order._id));
     }
     await order.save();
-    const notifyType =
-      status === "shipped" || status === "out_for_delivery"
-        ? "order_shipped"
-        : status === "delivered"
-          ? "order_delivered"
-          : status === "cancelled"
-            ? "order_cancelled"
-            : "order_confirmed";
-    await notificationService.notify({
-      userId: order.customerId,
-      type: notifyType,
-      title: `Order ${status.replace(/_/g, " ")}`,
-      body: `Order ${order.orderNumber} is now ${status.replace(/_/g, " ")}.`,
-      metadata: { orderId: order.id },
-    });
+    const statusChanged = previousStatus !== status;
+    if (statusChanged) {
+      const notifyType =
+        status === "shipped" || status === "out_for_delivery"
+          ? "order_shipped"
+          : status === "delivered"
+            ? "order_delivered"
+            : status === "cancelled"
+              ? "order_cancelled"
+              : "order_confirmed";
+      await notificationService.notify({
+        userId: order.customerId,
+        type: notifyType,
+        title: `Order ${status.replace(/_/g, " ")}`,
+        body: `Order ${order.orderNumber} is now ${status.replace(/_/g, " ")}.`,
+        metadata: { orderId: order.id },
+      });
+    }
+    if (statusChanged || trackingChanged) {
+      queueOrderStatusEmail(String(order._id), status, { trackingUpdate: trackingChanged });
+    }
     return order;
   },
 
@@ -634,6 +669,7 @@ export const orderService = {
     if (!order) {
       throw new NotFoundError("Order not found");
     }
+    const previousStatus = order.orderStatus;
     const ownsItems = order.items.some((item) => String(item.vendorId) === vendorId);
     if (!ownsItems) {
       throw new ForbiddenError("This order does not contain your products");
@@ -652,6 +688,9 @@ export const orderService = {
       order.orderStatus = "processing";
     }
     await order.save();
+    if (order.orderStatus !== previousStatus) {
+      queueOrderStatusEmail(String(order._id), order.orderStatus);
+    }
     return order;
   },
 };

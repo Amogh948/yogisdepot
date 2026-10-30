@@ -35,7 +35,10 @@ export type AdminBrand = {
   description?: string;
   logoUrl?: string;
   isActive: boolean;
+  productCount?: number;
 };
+
+export type BrandBulkMode = "delete_products" | "delete_brands" | "delete_brands_and_products";
 
 export type ExhibitionLead = {
   id?: string;
@@ -168,6 +171,10 @@ export const adminApi = {
   createBrand: (payload: Record<string, unknown>) => unwrap<AdminBrand>(api.post("/admin/brands", payload)),
   updateBrand: (id: string, payload: Record<string, unknown>) => unwrap<AdminBrand>(api.put(`/admin/brands/${id}`, payload)),
   deleteBrand: (id: string) => unwrap<null>(api.delete(`/admin/brands/${id}`)),
+  bulkBrands: (payload: { brandIds: string[]; mode: BrandBulkMode }) =>
+    unwrap<{ deletedBrands: number; deletedProducts: number; unlinkedProducts: number }>(
+      api.post("/admin/brands/bulk", payload),
+    ),
   taxCategories: () =>
     unwrap<
       Array<{
@@ -206,7 +213,13 @@ export const adminApi = {
     return { items: result.data, pagination: result.pagination as Pagination };
   },
   order: (id: string) => unwrap<Order>(api.get(`/admin/orders/${id}`)),
-  orderStatus: (id: string, status: string) => unwrap<Order>(api.patch(`/admin/orders/${id}/status`, { status })),
+  orderStatus: (
+    id: string,
+    statusOrPayload: string | { status: string; trackingNumber?: string; trackingUrl?: string },
+  ) => {
+    const payload = typeof statusOrPayload === "string" ? { status: statusOrPayload } : statusOrPayload;
+    return unwrap<Order>(api.patch(`/admin/orders/${id}/status`, payload));
+  },
   coupons: async () => {
     const result = await unwrap<Coupon[]>(api.get("/admin/coupons"));
     return result.data;

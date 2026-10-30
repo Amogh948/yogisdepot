@@ -77,26 +77,6 @@ type AdminProductStack = {
   variants?: AdminStackVariant[];
 };
 
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-2xl bg-white p-4 shadow-soft">
-      <p className="text-sm text-charcoal-700/70">{label}</p>
-      <p className="font-display text-2xl">{value}</p>
-    </div>
-  );
-}
-
-function Bars({ data }: { data: Array<{ _id: string; revenue?: number; orders?: number }> }) {
-  const max = Math.max(...data.map((d) => d.revenue || 0), 1);
-  return (
-    <div className="flex h-40 items-end gap-1 rounded-2xl bg-white p-4 shadow-soft">
-      {data.map((point) => (
-        <div key={point._id} className="flex-1 rounded-t bg-saffron-500" style={{ height: `${((point.revenue || 0) / max) * 100}%` }} title={`${point._id}: ${formatCad(point.revenue)}`} />
-      ))}
-    </div>
-  );
-}
-
 function adminCardImage(src?: string, alt?: string) {
   if (!src) {
     return <div className="flex aspect-[4/3] items-center justify-center bg-yd-cream text-xs text-yd-muted">No image</div>;
@@ -121,28 +101,6 @@ function categoryName(value: Product["categoryId"]): string {
 function vendorName(value: Product["vendorId"]): string {
   if (!value || typeof value === "string") return "";
   return value.businessName || "";
-}
-
-export function AdminDashboardPage() {
-  const query = useQuery({ queryKey: ["admin-analytics"], queryFn: () => adminApi.analytics() });
-  if (query.isLoading) return <Skeleton className="h-64" />;
-  const data = (query.data?.data || {}) as Record<string, unknown>;
-  return (
-    <div className="space-y-5">
-      <PageHeader title="Dashboard" />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Revenue" value={formatCad(Number(data.revenue || 0))} />
-        <Stat label="Orders" value={Number(data.totalOrders || 0)} />
-        <Stat label="Customers" value={Number(data.totalCustomers || 0)} />
-        <Stat label="Vendors" value={Number(data.totalVendors || 0)} />
-        <Stat label="Active products" value={Number(data.activeProducts || 0)} />
-        <Stat label="Low stock" value={Number(data.lowStockProducts || 0)} />
-        <Stat label="Pending vendors" value={Number(data.pendingVendorApprovals || 0)} />
-        <Stat label="Pending orders" value={Number(data.pendingOrders || 0)} />
-      </div>
-      <Bars data={(data.salesChart as Array<{ _id: string; revenue?: number }>) || []} />
-    </div>
-  );
 }
 
 export function AdminProductsPage() {
@@ -1770,9 +1728,106 @@ export function AdminOrdersPage() {
   );
 }
 
+function AdminOrderFulfillment({
+  orderId,
+  orderStatus,
+  trackingNumber,
+  trackingUrl,
+  onUpdated,
+}: {
+  orderId: string;
+  orderStatus: OrderStatus;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  onUpdated: () => Promise<void>;
+}) {
+  const toast = useToastStore((s) => s.push);
+  const [number, setNumber] = useState(trackingNumber || "");
+  const [url, setUrl] = useState(trackingUrl || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setNumber(trackingNumber || "");
+    setUrl(trackingUrl || "");
+  }, [trackingNumber, trackingUrl]);
+
+  const save = async (status: OrderStatus, announce: string) => {
+    setSaving(true);
+    try {
+      await adminApi.orderStatus(orderId, {
+        status,
+        trackingNumber: number.trim() || undefined,
+        trackingUrl: url.trim() || undefined,
+      });
+      toast(announce);
+      await onUpdated();
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not update order", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
+      <Select
+        label="Order status"
+        value={orderStatus}
+        disabled={saving}
+        onChange={(event) => {
+          void save(event.target.value as OrderStatus, "Order updated");
+        }}
+      >
+        {(
+          [
+            ["pending", "Order Placed"],
+            ["confirmed", "Confirmed"],
+            ["processing", "Processing"],
+            ["packed", "Packed"],
+            ["shipped", "Shipped"],
+            ["out_for_delivery", "Out for delivery"],
+            ["delivered", "Delivered"],
+            ["cancelled", "Cancelled"],
+          ] as const
+        ).map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </Select>
+      <Input
+        label="Tracking number"
+        value={number}
+        onChange={(event) => setNumber(event.target.value)}
+        placeholder="Optional"
+        maxLength={80}
+      />
+      <Input
+        label="Tracking link"
+        value={url}
+        onChange={(event) => setUrl(event.target.value)}
+        placeholder="https://"
+        maxLength={500}
+      />
+      <Button
+        type="button"
+        variant="secondary"
+        loading={saving}
+        onClick={() => {
+          void save(orderStatus, "Tracking saved");
+        }}
+      >
+        Save tracking
+      </Button>
+      <p className="text-xs text-yd-muted">
+        Changing the status emails the customer. Saving a new tracking number or link emails them too.
+      </p>
+    </div>
+  );
+}
+
 export function AdminOrderDetailPage() {
   const { id = "" } = useParams();
-  const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["admin-order", id], queryFn: () => adminApi.order(id), enabled: Boolean(id) });
   const order = query.data?.data;
@@ -1824,37 +1879,16 @@ export function AdminOrderDetailPage() {
           No cancellation feedback was provided.
         </section>
       ) : null}
-      <Select
-        label="Order status"
-        value={order.orderStatus}
-        onChange={async (event) => {
-          try {
-            await adminApi.orderStatus(entityId(order), event.target.value as OrderStatus);
-            toast("Order updated");
-            await queryClient.invalidateQueries({ queryKey: ["admin-order", id] });
-            await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
-          } catch (error) {
-            toast(error instanceof ApiError ? error.message : "Could not update order", "error");
-          }
+      <AdminOrderFulfillment
+        orderId={entityId(order)}
+        orderStatus={order.orderStatus}
+        trackingNumber={order.trackingNumber}
+        trackingUrl={order.trackingUrl}
+        onUpdated={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["admin-order", id] });
+          await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
         }}
-      >
-        {(
-          [
-            ["pending", "Order Placed"],
-            ["confirmed", "Confirmed"],
-            ["processing", "Processing"],
-            ["packed", "Packed"],
-            ["shipped", "Shipped"],
-            ["out_for_delivery", "Out for delivery"],
-            ["delivered", "Delivered"],
-            ["cancelled", "Cancelled"],
-          ] as const
-        ).map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </Select>
+      />
       <section className="space-y-2">
         <h2 className="font-display text-lg">Items</h2>
         {order.items.map((item, index) => (
@@ -2532,10 +2566,6 @@ export function AdminReviewsPage() {
       })}
     </div>
   );
-}
-
-export function AdminAnalyticsPage() {
-  return <AdminDashboardPage />;
 }
 
 const SAME_DAY_WEEKDAY_OPTIONS = [

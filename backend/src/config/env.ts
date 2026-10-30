@@ -28,6 +28,22 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional().default(""),
   CLOUDINARY_API_KEY: z.string().optional().default(""),
   CLOUDINARY_API_SECRET: z.string().optional().default(""),
+  /** Optional transactional email. Empty SMTP_HOST skips sending and never blocks orders. */
+  SMTP_HOST: z.string().optional().default(""),
+  SMTP_PORT: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z.coerce.number().int().min(1).max(65535).default(587),
+  ),
+  SMTP_SECURE: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+  ),
+  SMTP_USER: z.string().optional().default(""),
+  SMTP_PASS: z.string().optional().default(""),
+  SMTP_FROM: z.string().optional().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);
