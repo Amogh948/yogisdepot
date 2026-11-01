@@ -10,7 +10,6 @@ import { signToken, verifyToken } from "../../utils/jwt";
 import { comparePassword, hashPassword } from "../../utils/password";
 import { cookieOptions } from "../../middleware/auth.middleware";
 import { Response } from "express";
-import { Cart } from "../../models/Cart";
 
 export function toPublicUser(user: UserDocument, vendorId?: string): PublicUser {
   return {
@@ -128,18 +127,14 @@ export const authService = {
     if (items.length === 0) {
       return;
     }
-    let cart = await Cart.findOne({ userId });
-    if (!cart) {
-      cart = await Cart.create({ userId, items: [] });
-    }
+    const { cartService } = await import("../cart/cart.service");
     for (const incoming of items) {
-      const existing = cart.items.find((item) => String(item.productId) === incoming.productId);
-      if (existing) {
-        existing.quantity += incoming.quantity;
-      } else {
-        cart.items.push({ productId: incoming.productId as unknown as never, quantity: incoming.quantity });
+      if (!incoming.productId || incoming.quantity < 1) continue;
+      try {
+        await cartService.addItem(userId, { productId: incoming.productId, quantity: incoming.quantity });
+      } catch {
+        // Skip lines that are no longer sold on their own.
       }
     }
-    await cart.save();
   },
 };

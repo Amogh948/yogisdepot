@@ -159,6 +159,10 @@ export const productService = {
       Review.deleteMany({ productId: product._id }),
       InventoryTransaction.deleteMany({ productId: product._id }),
       Cart.updateMany({}, { $pull: { items: { productId: product._id } } }),
+      Product.updateMany(
+        { "childProducts.productId": product._id },
+        { $pull: { childProducts: { productId: product._id } } },
+      ),
     ]);
 
     await Product.deleteOne({ _id: product._id });
@@ -192,6 +196,7 @@ export const productService = {
     const filter: FilterQuery<ProductDocument> = {};
     if (!options?.includeInactive) {
       filter.isActive = true;
+      filter.sellIndependently = { $ne: false };
     }
     if (options?.vendorScope) {
       filter.vendorId = options.vendorScope;
@@ -329,7 +334,7 @@ export const productService = {
       categoryId: product.categoryId,
     })
       .limit(8)
-      .select("name slug thumbnail images price compareAtPrice discount rating reviewCount isVegetarian stock variants");
+      .select("name slug thumbnail images price compareAtPrice discount rating reviewCount isVegetarian stock variants childProducts sellIndependently unlimitedQuantity");
   },
 
   async adjustInventory(

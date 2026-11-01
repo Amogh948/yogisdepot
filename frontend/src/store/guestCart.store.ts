@@ -7,11 +7,20 @@ export interface GuestCartItemMeta {
   name?: string;
   /** Unit price in dollars — used for guest free-delivery threshold checks. */
   price?: number;
+  parentProductId?: string;
 }
 
 export interface GuestCartItem extends GuestCartItemMeta {
   productId: string;
   quantity: number;
+}
+
+export interface GuestChildLine {
+  productId: string;
+  quantity: number;
+  name?: string;
+  price?: number;
+  image?: string;
 }
 
 function readGuestCart(): GuestCartItem[] {
@@ -32,6 +41,7 @@ function applyMeta(item: GuestCartItem, meta?: GuestCartItemMeta) {
   if (meta.image) item.image = meta.image;
   if (meta.name) item.name = meta.name;
   if (typeof meta.price === "number" && Number.isFinite(meta.price)) item.price = meta.price;
+  if (meta.parentProductId) item.parentProductId = meta.parentProductId;
 }
 
 interface GuestCartState {
@@ -45,7 +55,10 @@ export const useGuestCartStore = create<GuestCartState>((set, get) => ({
   items: readGuestCart(),
   addItem: (productId, quantity, meta) => {
     const items = get().items.map((item) => ({ ...item }));
-    const existing = items.find((item) => item.productId === productId);
+    const parentProductId = meta?.parentProductId;
+    const existing = items.find(
+      (item) => item.productId === productId && (item.parentProductId || "") === (parentProductId || ""),
+    );
     if (existing) {
       existing.quantity += quantity;
       applyMeta(existing, meta);
@@ -58,16 +71,16 @@ export const useGuestCartStore = create<GuestCartState>((set, get) => ({
   },
   setItem: (productId, quantity, meta) => {
     let items = get().items.map((item) => ({ ...item }));
+    const standalone = items.find((item) => item.productId === productId && !item.parentProductId);
+    const lockedOnly = items.some((item) => item.productId === productId && item.parentProductId);
+    if (!standalone && lockedOnly) return items;
     if (quantity <= 0) {
-      items = items.filter((item) => item.productId !== productId);
+      items = items.filter((item) => item.parentProductId !== productId && !(item.productId === productId && !item.parentProductId));
+    } else if (standalone) {
+      standalone.quantity = quantity;
+      applyMeta(standalone, meta);
     } else {
-      const existing = items.find((item) => item.productId === productId);
-      if (existing) {
-        existing.quantity = quantity;
-        applyMeta(existing, meta);
-      } else {
-        items.push({ productId, quantity, ...meta });
-      }
+      items.push({ productId, quantity, ...meta });
     }
     persist(items);
     set({ items });
@@ -78,6 +91,28 @@ export const useGuestCartStore = create<GuestCartState>((set, get) => ({
     set({ items: [] });
   },
 }));
+
+/** Replace included lines so they match the parent quantity. */
+export function syncGuestChildren(parentId: string, parentQty: number, children: GuestChildLine[]): void {
+  const items = useGuestCartStore
+    .getState()
+    .items.filter((item) => item.parentProductId !== parentId)
+    .map((item) => ({ ...item }));
+  if (parentQty > 0) {
+    for (const child of children) {
+      const per = Math.max(1, Math.floor(child.quantity) || 1);
+      items.push({
+        productId: child.productId,
+        quantity: parentQty * per,
+        parentProductId: parentId,
+        name: child.name,
+        price: child.price,
+        image: child.image,
+      });
+    }
+  }
+  setGuestCart(items);
+}
 
 export function getGuestCart(): GuestCartItem[] {
   return useGuestCartStore.getState().items;

@@ -5,6 +5,8 @@ export interface CartItem {
   skuId?: Types.ObjectId;
   /** Legacy dual-read during migration. */
   productId?: Types.ObjectId;
+  /** Set when this line was added because another product includes it. */
+  parentProductId?: Types.ObjectId;
   quantity: number;
 }
 
@@ -22,6 +24,7 @@ const cartSchema = new Schema<CartDocument>(
       {
         skuId: { type: Schema.Types.ObjectId, ref: "Sku" },
         productId: { type: Schema.Types.ObjectId, ref: "Product" },
+        parentProductId: { type: Schema.Types.ObjectId, ref: "Product" },
         quantity: { type: Number, required: true, min: 1 },
       },
     ],

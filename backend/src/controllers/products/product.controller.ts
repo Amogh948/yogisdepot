@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { ProductDocument } from "../../models/Product";
+import { Product, ProductDocument } from "../../models/Product";
 import { productService } from "../../services/products/product.service";
 import { skuOfferService } from "../../services/catalog/skuOffer.service";
 import { sendSuccess } from "../../utils/apiResponse";
@@ -56,26 +56,64 @@ export async function toPublicProduct(product: ProductDocument) {
   return json;
 }
 
+async function attachChildProductSummaries(products: ProductDocument[], jsons: Record<string, unknown>[]) {
+  const ids = new Set<string>();
+  for (const product of products) {
+    for (const link of product.childProducts || []) {
+      if (link?.productId) ids.add(String(link.productId));
+    }
+  }
+  const children = ids.size
+    ? await Product.find({ _id: { $in: [...ids] } }).select("name price thumbnail images")
+    : [];
+  const byId = new Map(children.map((child) => [String(child._id), child]));
+  return jsons.map((json, index) => {
+    const product = products[index];
+    const links = product?.childProducts || [];
+    json.sellIndependently = product?.sellIndependently !== false;
+    json.childProducts = links.map((link) => {
+      const child = byId.get(String(link.productId));
+      const firstImage = child?.images?.[0];
+      const image =
+        child?.thumbnail ||
+        (firstImage && typeof firstImage === "object" && "url" in firstImage ? String(firstImage.url || "") : undefined);
+      return {
+        productId: String(link.productId),
+        quantity: Math.max(1, Number(link.quantity) || 1),
+        name: child?.name || "Included item",
+        price: child?.price ?? 0,
+        image: image || undefined,
+      };
+    });
+    return json;
+  });
+}
+
 export const productController = {
   list: asyncHandler(async (req: Request, res: Response) => {
     const result = await productService.list(req.query);
-    const data = await Promise.all(result.data.map((p) => toPublicProduct(p)));
+    const jsons = await Promise.all(result.data.map((p) => toPublicProduct(p)));
+    const data = await attachChildProductSummaries(result.data, jsons);
     sendSuccess(res, data, "Products fetched successfully", 200, result.pagination);
   }),
 
   getBySlug: asyncHandler(async (req: Request, res: Response) => {
     const product = await productService.getBySlug(req.params.slug);
-    sendSuccess(res, await toPublicProduct(product), "Product fetched successfully");
+    const [data] = await attachChildProductSummaries([product], [await toPublicProduct(product)]);
+    sendSuccess(res, data, "Product fetched successfully");
   }),
 
   getById: asyncHandler(async (req: Request, res: Response) => {
     const product = await productService.getById(req.params.id);
-    sendSuccess(res, await toPublicProduct(product), "Product fetched successfully");
+    const [data] = await attachChildProductSummaries([product], [await toPublicProduct(product)]);
+    sendSuccess(res, data, "Product fetched successfully");
   }),
 
   related: asyncHandler(async (req: Request, res: Response) => {
     const products = await productService.related(req.params.id);
-    const data = await Promise.all(products.map((p) => toPublicProduct(p as ProductDocument)));
+    const docs = products as ProductDocument[];
+    const jsons = await Promise.all(docs.map((p) => toPublicProduct(p)));
+    const data = await attachChildProductSummaries(docs, jsons);
     sendSuccess(res, data, "Related products fetched successfully");
   }),
 };

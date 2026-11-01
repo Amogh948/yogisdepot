@@ -9,6 +9,8 @@ export type DeliveryPreference = {
   label: string;
   city: string;
   postalCode?: string;
+  /** address = saved address, manual/ip = chosen place, fallback = explicit Toronto. */
+  source?: "address" | "manual" | "ip" | "fallback";
 };
 
 function readPreference(): DeliveryPreference | null {
@@ -37,6 +39,7 @@ export function formatDeliveryLabel(address: Pick<Address, "city" | "postalCode"
 interface DeliveryPreferenceState {
   preference: DeliveryPreference | null;
   setFromAddress: (address: Address) => void;
+  setPlace: (place: { label: string; city: string; postalCode?: string; source: "manual" | "ip" | "fallback" }) => void;
   clear: () => void;
 }
 
@@ -48,6 +51,19 @@ export const useDeliveryPreferenceStore = create<DeliveryPreferenceState>((set) 
       label: formatDeliveryLabel(address),
       city: address.city,
       postalCode: address.postalCode,
+      source: "address",
+    };
+    persist(next);
+    set({ preference: next });
+  },
+  setPlace: (place) => {
+    const city = place.city.trim();
+    const next: DeliveryPreference = {
+      addressId: place.source,
+      label: place.label.trim() || city,
+      city,
+      postalCode: place.postalCode?.trim() || undefined,
+      source: place.source,
     };
     persist(next);
     set({ preference: next });

@@ -105,6 +105,8 @@ export interface ProductStackUpdateInput {
   returnWindowDays?: number;
   deliveryEstimateDays?: number;
   variants?: ProductStackVariantUpdate[];
+  sellIndependently?: boolean;
+  childProducts?: Array<{ productId: string; quantity: number }>;
 }
 
 function normalizeImages(images?: Array<string | ProductImage>): ProductImage[] {
@@ -447,6 +449,12 @@ export const catalogAdminService = {
       return primary ? [primary] : [];
     })();
 
+    const childLinks = product.childProducts || [];
+    const childDocs = childLinks.length
+      ? await Product.find({ _id: { $in: childLinks.map((link) => link.productId) } }).select("name price")
+      : [];
+    const childById = new Map(childDocs.map((child) => [String(child._id), child]));
+
     return {
       ...productJson,
       brandName,
@@ -457,6 +465,16 @@ export const catalogAdminService = {
       vendorId: asObjectIdString(product.vendorId) || null,
       imageUrls,
       variants,
+      sellIndependently: product.sellIndependently !== false,
+      childProducts: childLinks.map((link) => {
+        const child = childById.get(String(link.productId));
+        return {
+          productId: String(link.productId),
+          quantity: Math.max(1, Number(link.quantity) || 1),
+          name: child?.name || "Product",
+          price: child?.price ?? 0,
+        };
+      }),
     };
   },
 
@@ -497,6 +515,37 @@ export const catalogAdminService = {
     }
     if (input.deliveryEstimateDays !== undefined) {
       product.deliveryEstimateDays = Math.max(1, Math.floor(input.deliveryEstimateDays));
+    }
+    if (input.sellIndependently !== undefined) {
+      product.sellIndependently = input.sellIndependently;
+    }
+    if (input.childProducts !== undefined) {
+      const seen = new Set<string>();
+      const links: Array<{ productId: Types.ObjectId; quantity: number }> = [];
+      for (const link of input.childProducts) {
+        const childId = String(link.productId || "");
+        if (!/^[a-f0-9]{24}$/i.test(childId)) {
+          throw new BadRequestError("Choose a valid child product");
+        }
+        if (childId === String(product._id)) {
+          throw new BadRequestError("A product cannot include itself");
+        }
+        if (seen.has(childId)) {
+          throw new BadRequestError("Each included product can only be added once");
+        }
+        seen.add(childId);
+        const child = await Product.findById(childId).select("name childProducts");
+        if (!child) throw new BadRequestError("Included product was not found");
+        const pointsBack = (child.childProducts || []).some((row) => String(row.productId) === String(product._id));
+        if (pointsBack) {
+          throw new BadRequestError(`${child.name} already includes this product`);
+        }
+        links.push({
+          productId: child._id,
+          quantity: Math.max(1, Math.floor(Number(link.quantity) || 1)),
+        });
+      }
+      product.childProducts = links;
     }
 
     if (input.festivalId !== undefined) {

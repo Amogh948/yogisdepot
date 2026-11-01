@@ -21,6 +21,8 @@ import {
   useCommerceActions,
 } from "../../hooks/useCommerceActions";
 import { usePublicSettings } from "../../hooks/useSettings";
+import { useDeliveryCoverage } from "../../hooks/useDeliveryCoverage";
+import { DeliveryCoverageNotice } from "../../components/commerce/DeliveryCoverageNotice";
 import { formatCad } from "../../utils/money";
 import { returnPolicyLabel } from "../../utils/dates";
 import { resolveEstimatedDeliveryLabel } from "../../utils/sameDayDelivery";
@@ -39,11 +41,16 @@ export function CartPage() {
   const cartSyncPending = useCartSyncPending();
   const [checkoutStarting, setCheckoutStarting] = useState(false);
   const publicSettings = usePublicSettings();
+  const coverage = useDeliveryCoverage();
   const sameDayStatus = useSameDayDeliveryStatus();
   const deliveryTimeZone = publicSettings.data?.sameDayTimezone || "America/Edmonton";
 
   const goToCheckout = async () => {
     if (checkoutStarting) return;
+    if (coverage.orderingBlocked) {
+      toast(coverage.message || "We can't deliver to this location yet.", "error");
+      return;
+    }
     setCheckoutStarting(true);
     try {
       await ensureCartSynced(queryClient);
@@ -112,8 +119,9 @@ export function CartPage() {
           </div>
           <DeliveryProgress subtotal={data.subtotal} />
           <SameDayDeliveryBanner compact />
-          {data.items.map((item) => (
-            <article key={item.productId} className="flex gap-3 rounded-[14px] border border-yd-border bg-white p-3 shadow-soft">
+          {data.items.filter((item) => !item.parentProductId).map((item) => (
+            <div key={item.productId} className="space-y-2">
+            <article className="flex gap-3 rounded-[14px] border border-yd-border bg-white p-3 shadow-soft">
               <img src={mediaUrl(item.product.thumbnail || item.product.images[0])} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover bg-yd-cream" />
               <div className="min-w-0 flex-1">
                 <Link to={`/products/${item.product.slug}`} className="font-semibold text-yd-ink">
@@ -150,6 +158,23 @@ export function CartPage() {
               </div>
               <p className="shrink-0 text-sm font-semibold">{formatCad(item.lineTotal)}</p>
             </article>
+            {data.items
+              .filter((child) => child.parentProductId === item.productId)
+              .map((child) => (
+                <article
+                  key={`${item.productId}-${child.productId}`}
+                  className="ml-6 flex gap-3 rounded-[14px] border border-dashed border-yd-border bg-yd-cream/40 p-3"
+                >
+                  <img src={mediaUrl(child.product.thumbnail || child.product.images[0])} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover bg-white" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-yd-ink">{child.product.name}</p>
+                    <p className="text-xs text-yd-muted">Included with {item.product.name}. Change the main item to update this.</p>
+                    <p className="mt-1 text-sm text-yd-ink">Qty {child.quantity}</p>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold">{formatCad(child.lineTotal)}</p>
+                </article>
+              ))}
+            </div>
           ))}
         </div>
 
@@ -157,7 +182,7 @@ export function CartPage() {
           <h2 className="font-display text-xl text-yd-forest">Order summary</h2>
           <ul className="mt-3 space-y-3 text-sm">
             {data.items.map((item) => (
-              <li key={item.productId} className="flex items-start justify-between gap-3">
+              <li key={`${item.parentProductId || "own"}-${item.productId}`} className={`flex items-start justify-between gap-3 ${item.parentProductId ? "pl-3" : ""}`}>
                 <span className="min-w-0 text-yd-ink">
                   <span className="line-clamp-2 font-medium">{item.product.name}</span>
                   <span className="text-yd-muted"> × {item.quantity}</span>
@@ -174,7 +199,8 @@ export function CartPage() {
             Total bill with taxes will be calculated on the checkout page.
           </p>
           <div className="mt-4 hidden lg:mt-auto lg:block">
-            <Button className="w-full" size="lg" loading={checkoutBusy} disabled={checkoutBusy} onClick={() => void goToCheckout()}>
+            <DeliveryCoverageNotice className="mb-3 rounded-xl" />
+            <Button className="w-full" size="lg" loading={checkoutBusy} disabled={checkoutBusy || coverage.orderingBlocked} onClick={() => void goToCheckout()}>
               {cartSyncPending ? "Updating cart…" : "Proceed to checkout"}
             </Button>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px] font-medium text-yd-muted">
@@ -196,7 +222,7 @@ export function CartPage() {
             <p className="text-xs text-yd-muted">Total</p>
             <p className="text-lg font-bold text-yd-ink">{formatCad(data.subtotal)}</p>
           </div>
-          <Button variant="accent" className="flex-1" loading={checkoutBusy} disabled={checkoutBusy} onClick={() => void goToCheckout()}>
+          <Button variant="accent" className="flex-1" loading={checkoutBusy} disabled={checkoutBusy || coverage.orderingBlocked} onClick={() => void goToCheckout()}>
             {cartSyncPending ? "Updating…" : "Checkout →"}
           </Button>
         </div>

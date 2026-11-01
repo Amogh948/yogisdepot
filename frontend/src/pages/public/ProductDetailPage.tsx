@@ -10,6 +10,7 @@ import { Badge, ErrorState, Price, QuantitySelector, Skeleton, SectionHeader } f
 import { ProductCarousel } from "../../components/product/ProductCarousel";
 import { ProductImageGallery } from "../../components/product/ProductImageGallery";
 import { ensureCartSynced, useCommerceActions } from "../../hooks/useCommerceActions";
+import { useDeliveryCoverage } from "../../hooks/useDeliveryCoverage";
 import { entityId } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ApiError } from "../../services/api/client";
@@ -35,6 +36,7 @@ export function ProductDetailPage() {
   const [qty, setQty] = useState(1);
   const [buyingNow, setBuyingNow] = useState(false);
   const { addToCart, toggleWishlist } = useCommerceActions();
+  const coverage = useDeliveryCoverage();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToastStore((s) => s.push);
@@ -159,6 +161,26 @@ export function ProductDetailPage() {
             </div>
           </div>
 
+          {product.childProducts?.length ? (
+            <div className="rounded-card border border-yd-border bg-white p-3 text-sm">
+              <p className="font-semibold text-yd-ink">Included with this item</p>
+              <ul className="mt-1 space-y-1 text-yd-muted">
+                {product.childProducts.map((child) => (
+                  <li key={child.productId}>
+                    {child.name || "Included item"} × {child.quantity}
+                    {child.price ? ` · ${child.price.toLocaleString("en-CA", { style: "currency", currency: "CAD" })}` : ""}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-xs text-yd-muted">These are added with this product and can’t be changed on their own.</p>
+            </div>
+          ) : null}
+          {product.sellIndependently === false ? (
+            <p className="rounded-card border border-yd-border bg-yd-cream/60 p-3 text-sm text-yd-ink">
+              This item is added automatically with another product. It can’t be purchased on its own.
+            </p>
+          ) : null}
+
           <div className="flex items-center gap-3 pt-2">
             <QuantitySelector value={qty} onChange={setQty} max={maxOrderQuantity(product)} />
             <button type="button" aria-label="Wishlist" className="grid h-11 w-11 place-items-center rounded-full border border-yd-border" onClick={() => toggleWishlist.mutate({ product, wished })}>
@@ -170,9 +192,9 @@ export function ProductDetailPage() {
               size="lg"
               className="w-full"
               onClick={() => addToCart.mutate({ product, quantity: qty })}
-              disabled={product.unlimitedQuantity === false && product.stock <= 0}
+              disabled={coverage.orderingBlocked || product.sellIndependently === false || (product.unlimitedQuantity === false && product.stock <= 0)}
             >
-              Add to cart
+              {product.sellIndependently === false ? "Included with another item" : "Add to cart"}
             </Button>
             <Button
               variant="accent"
@@ -180,7 +202,7 @@ export function ProductDetailPage() {
               className="w-full"
               loading={buyingNow}
               onClick={() => void buyNow()}
-              disabled={(product.unlimitedQuantity === false && product.stock <= 0) || buyingNow}
+              disabled={coverage.orderingBlocked || product.sellIndependently === false || (product.unlimitedQuantity === false && product.stock <= 0) || buyingNow}
             >
               Buy now
             </Button>
@@ -235,9 +257,9 @@ export function ProductDetailPage() {
             size="lg"
             className="w-full"
             onClick={() => addToCart.mutate({ product, quantity: qty })}
-            disabled={product.unlimitedQuantity === false && product.stock <= 0}
+            disabled={coverage.orderingBlocked || product.sellIndependently === false || (product.unlimitedQuantity === false && product.stock <= 0)}
           >
-            Add to cart
+            {product.sellIndependently === false ? "Included with another item" : "Add to cart"}
           </Button>
           <Button
             variant="accent"
@@ -245,7 +267,7 @@ export function ProductDetailPage() {
             className="w-full"
             loading={buyingNow}
             onClick={() => void buyNow()}
-            disabled={(product.unlimitedQuantity === false && product.stock <= 0) || buyingNow}
+            disabled={coverage.orderingBlocked || product.sellIndependently === false || (product.unlimitedQuantity === false && product.stock <= 0) || buyingNow}
           >
             Buy now
           </Button>

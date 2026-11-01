@@ -157,6 +157,7 @@ export const orderService = {
       totalAmountCents: line.lineTotalCents,
       totalPrice: line.lineTotalCents / 100,
       fulfillmentStatus: orderStatus,
+      parentProductId: line.parentProductId || undefined,
     }));
 
     const session = await mongoose.startSession();
@@ -530,6 +531,7 @@ export const orderService = {
         order.items.map((item) => ({
           skuId: item.skuId,
           productId: item.productId,
+          parentProductId: item.parentProductId,
           quantity: item.quantity,
         })),
       );

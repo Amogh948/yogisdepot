@@ -212,6 +212,10 @@ export const adminApi = {
     const result = await unwrap<Order[]>(api.get("/admin/orders", { params }));
     return { items: result.data, pagination: result.pagination as Pagination };
   },
+  downloadOrderReport: async (date: string) => {
+    const response = await api.get("/admin/orders/export", { params: { date }, responseType: "blob" });
+    return response.data as Blob;
+  },
   order: (id: string) => unwrap<Order>(api.get(`/admin/orders/${id}`)),
   orderStatus: (
     id: string,

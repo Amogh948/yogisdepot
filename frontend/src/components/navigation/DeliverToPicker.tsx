@@ -5,13 +5,106 @@ import { useQuery } from "@tanstack/react-query";
 import { BottomSheet } from "../ui/Overlay";
 import { Button } from "../ui/Button";
 import { Skeleton } from "../ui/Feedback";
-import { addressApi } from "../../services/api/commerce.api";
+import { addressApi, deliveryApi } from "../../services/api/commerce.api";
 import { useAuthStore } from "../../store/auth.store";
 import { formatDeliveryLabel, useDeliveryPreferenceStore } from "../../store/deliveryPreference.store";
+import { useLocationHint } from "../../hooks/useSettings";
 import { entityId, type Address } from "../../types";
+import { DeliveryCoverageNotice } from "../commerce/DeliveryCoverageNotice";
+import { assessDeliveryCoverage } from "../../utils/deliveryCoverage";
 
 function addressSummary(address: Address) {
   return `${address.addressLine1}${address.addressLine2 ? `, ${address.addressLine2}` : ""}, ${address.city}, ${address.state} ${address.postalCode}`;
+}
+
+function PlaceChooser({
+  open,
+  usingFallback,
+  onUse,
+  onFallback,
+}: {
+  open: boolean;
+  usingFallback: boolean;
+  onUse: (place: { label: string; city: string; postalCode?: string; source: "manual" | "ip" }, keepOpen?: boolean) => void;
+  onFallback: () => void;
+}) {
+  const hint = useLocationHint(open);
+  const areas = useQuery({
+    queryKey: ["delivery-locations"],
+    queryFn: () => deliveryApi.locations(),
+    staleTime: 60_000,
+  });
+  const [city, setCity] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [checked, setChecked] = useState(false);
+  const suggestion = hint.data?.city
+    ? [hint.data.city, hint.data.region].filter(Boolean).join(", ")
+    : "";
+  const draft = {
+    label: city.trim(),
+    city: city.trim(),
+    postalCode: postalCode.trim() || undefined,
+  };
+  const showDraft = checked && Boolean(draft.city || draft.postalCode);
+
+  const submit = (place: { label: string; city: string; postalCode?: string; source: "manual" | "ip" }) => {
+    setChecked(true);
+    if (areas.isError) {
+      onUse(place, false);
+      return;
+    }
+    const result = assessDeliveryCoverage(place, areas.data?.data || []);
+    const blocked = areas.isLoading || result.status === "unavailable" || result.status === "needs-postal";
+    onUse(place, blocked);
+  };
+
+  return (
+    <div className="space-y-3 border-b border-yd-border pb-3">
+      <p className="text-sm text-yd-muted">
+        {usingFallback
+          ? "Using Toronto until you pick a place. You can change this anytime."
+          : "Choose where to deliver. You can change this anytime."}
+      </p>
+      {suggestion ? (
+        <Button
+          className="w-full"
+          variant="outline"
+          onClick={() => submit({ label: hint.data?.city || suggestion, city: hint.data?.city || suggestion, source: "ip" })}
+        >
+          Use {suggestion}
+        </Button>
+      ) : null}
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-yd-ink">City</span>
+        <input
+          value={city}
+          onChange={(event) => setCity(event.target.value)}
+          className="h-11 w-full rounded-xl border border-yd-border px-3 text-sm outline-none ring-yd-green/40 focus:ring-2"
+          placeholder="Calgary"
+        />
+      </label>
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-yd-ink">Postal code</span>
+        <input
+          value={postalCode}
+          onChange={(event) => setPostalCode(event.target.value)}
+          className="h-11 w-full rounded-xl border border-yd-border px-3 text-sm outline-none ring-yd-green/40 focus:ring-2"
+          placeholder="T2P 1J9"
+        />
+      </label>
+      <Button
+        className="w-full"
+        disabled={!city.trim()}
+        onClick={() => submit({ ...draft, source: "manual" })}
+      >
+        Use this place
+      </Button>
+      <DeliveryCoverageNotice place={showDraft ? draft : undefined} className="rounded-xl" />
+      <button type="button" className="w-full text-sm font-semibold text-yd-muted" onClick={onFallback}>
+        Not now — use Toronto for now
+      </button>
+    </div>
+  );
 }
 
 function PickerBody({
@@ -19,6 +112,10 @@ function PickerBody({
   loading,
   items,
   preferenceId,
+  open,
+  usingFallback,
+  onUsePlace,
+  onFallback,
   onSelect,
   onClose,
   onSignIn,
@@ -28,16 +125,23 @@ function PickerBody({
   loading: boolean;
   items: Address[];
   preferenceId?: string;
+  open: boolean;
+  usingFallback: boolean;
+  onUsePlace: (place: { label: string; city: string; postalCode?: string; source: "manual" | "ip" }, keepOpen?: boolean) => void;
+  onFallback: () => void;
   onSelect: (address: Address) => void;
   onClose: () => void;
   onSignIn: () => void;
   onAddAddress: () => void;
 }) {
+  const chooser = <PlaceChooser open={open} usingFallback={usingFallback} onUse={onUsePlace} onFallback={onFallback} />;
+
   if (!user) {
     return (
       <div className="space-y-4 py-2">
-        <p className="text-sm text-yd-muted">Sign in to choose a saved delivery address.</p>
-        <Button className="w-full" onClick={onSignIn}>
+        {chooser}
+        <p className="text-sm text-yd-muted">Sign in to choose a saved delivery address. Checkout still uses the address you enter there.</p>
+        <Button className="w-full" variant="outline" onClick={onSignIn}>
           Sign in
         </Button>
       </div>
@@ -49,6 +153,7 @@ function PickerBody({
   if (!items.length) {
     return (
       <div className="space-y-4 py-2">
+        {chooser}
         <p className="text-sm text-yd-muted">You don’t have any saved addresses yet.</p>
         <Button className="w-full" onClick={onAddAddress}>
           Add an address
@@ -59,7 +164,8 @@ function PickerBody({
 
   return (
     <>
-      <ul className="space-y-2">
+      {chooser}
+      <ul className="mt-3 space-y-2">
         {items.map((address) => {
           const id = entityId(address);
           const selected = preferenceId === id;
@@ -166,6 +272,7 @@ export function DeliverToTrigger({
   const user = useAuthStore((s) => s.user);
   const preference = useDeliveryPreferenceStore((s) => s.preference);
   const setFromAddress = useDeliveryPreferenceStore((s) => s.setFromAddress);
+  const setPlace = useDeliveryPreferenceStore((s) => s.setPlace);
   const clear = useDeliveryPreferenceStore((s) => s.clear);
   const [open, setOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() =>
@@ -187,7 +294,16 @@ export function DeliverToTrigger({
   });
 
   const items = addresses.data?.data || [];
-  const label = preference?.label || "Toronto";
+  const label = preference?.label || "Select location";
+
+  useEffect(() => {
+    if (preference) return;
+    if (user && (addresses.isLoading || !addresses.data)) return;
+    if (user && items.length > 0) return;
+    if (sessionStorage.getItem("yd_location_prompt_seen")) return;
+    sessionStorage.setItem("yd_location_prompt_seen", "1");
+    setOpen(true);
+  }, [preference, user, addresses.isLoading, addresses.data, items.length]);
 
   useEffect(() => {
     if (!user || addresses.isLoading || !addresses.data) return;
@@ -197,6 +313,9 @@ export function DeliverToTrigger({
       if (fallback) setFromAddress(fallback);
       return;
     }
+    // A typed place is not one of the saved addresses, so don't swap it back.
+    if (preference.source && preference.source !== "address") return;
+    if (preference.addressId === "manual" || preference.addressId === "ip" || preference.addressId === "fallback") return;
     const stillExists = list.some((item) => entityId(item) === preference.addressId);
     if (list.length && !stillExists) {
       const fallback = list.find((item) => item.isDefault) || list[0];
@@ -213,6 +332,16 @@ export function DeliverToTrigger({
       loading={addresses.isLoading}
       items={items}
       preferenceId={preference?.addressId}
+      open={open}
+      usingFallback={preference?.source === "fallback"}
+      onUsePlace={(place, keepOpen) => {
+        setPlace(place);
+        if (!keepOpen) close();
+      }}
+      onFallback={() => {
+        setPlace({ label: "Toronto", city: "Toronto", source: "fallback" });
+        close();
+      }}
       onSelect={(address) => {
         setFromAddress(address);
         close();

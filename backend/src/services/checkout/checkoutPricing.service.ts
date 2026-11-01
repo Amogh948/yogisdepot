@@ -36,6 +36,8 @@ export interface CheckoutLine {
   isGrocery?: boolean;
   /** When true, inventory quantity is not enforced at quote/checkout. */
   unlimitedQuantity?: boolean;
+  /** Set when this line was included by a parent product. */
+  parentProductId?: string;
 }
 
 export interface CheckoutBreakdown {
@@ -171,6 +173,7 @@ export const checkoutPricingService = {
           lineTotalCents,
           taxCategoryId: offer.taxCategoryId,
           unlimitedQuantity: unlimited,
+          parentProductId: item.parentProductId ? String(item.parentProductId) : undefined,
         });
       } else if (item.productId) {
         // Legacy product path
@@ -197,6 +200,7 @@ export const checkoutPricingService = {
           lineProductDiscountCents: Math.max(0, mrpCents - unitPriceCents) * item.quantity,
           lineTotalCents: unitPriceCents * item.quantity,
           unlimitedQuantity: unlimited,
+          parentProductId: item.parentProductId ? String(item.parentProductId) : undefined,
         });
       } else {
         throw new BadRequestError("Cart item is missing skuId");

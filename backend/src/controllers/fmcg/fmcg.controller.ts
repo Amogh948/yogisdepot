@@ -103,6 +103,16 @@ export const productStackUpdateSchema = z.object({
   returnWindowDays: z.number().int().min(0).optional(),
   deliveryEstimateDays: z.number().int().min(1).optional(),
   variants: z.array(stackVariantUpdateSchema).optional(),
+  sellIndependently: z.boolean().optional(),
+  childProducts: z
+    .array(
+      z.object({
+        productId: z.string().min(1),
+        quantity: z.number().int().min(1).max(99),
+      }),
+    )
+    .max(30)
+    .optional(),
 });
 
 export const bulkBrandSchema = z.object({

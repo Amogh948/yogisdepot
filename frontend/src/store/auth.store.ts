@@ -27,7 +27,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
   login: async (email, password) => {
-    const guestCart = getGuestCart();
+    const guestCart = getGuestCart()
+      .filter((item) => !item.parentProductId)
+      .map((item) => ({ productId: item.productId, quantity: item.quantity }));
     const result = await authApi.login({ email, password, guestCart: guestCart.length ? guestCart : undefined });
     clearGuestCart();
     set({ user: result.data });

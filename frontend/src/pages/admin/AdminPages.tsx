@@ -16,6 +16,7 @@ import { formatCad, formatCadFromCents } from "../../utils/money";
 import { Download } from "lucide-react";
 import { AdminBackLink } from "../../components/admin/AdminBackLink";
 import { useAdminBack } from "../../hooks/useAdminBack";
+import { AdminProductChildren } from "./AdminProductChildren";
 
 function isGroceryCategory(category: { name?: string; slug?: string }) {
   const hay = `${category.slug || ""} ${category.name || ""}`.toLowerCase();
@@ -1205,6 +1206,8 @@ export function AdminProductEditPage() {
         ))}
       </section>
 
+      {id ? <AdminProductChildren productId={id} /> : null}
+
       <div className="fixed bottom-0 left-0 right-0 border-t border-yd-border bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
         <div className="flex w-full gap-2">
           <Button variant="outline" disabled={saving} onClick={goBack}>
@@ -1696,12 +1699,61 @@ const ADMIN_CANCEL_REASON_LABEL: Record<string, string> = {
   other: "Other",
 };
 
+function edmontonToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Edmonton",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export function AdminOrdersPage() {
+  const toast = useToastStore((s) => s.push);
   const query = useQuery({ queryKey: ["admin-orders"], queryFn: () => adminApi.orders({ limit: 40 }) });
   const items = query.data?.items || [];
+  const [reportDate, setReportDate] = useState(edmontonToday);
+  const [exporting, setExporting] = useState(false);
+
+  const downloadReport = async () => {
+    setExporting(true);
+    try {
+      const blob = await adminApi.downloadOrderReport(reportDate);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `orders-${reportDate}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not download the report", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div>
-      <PageHeader title="Orders" />
+      <PageHeader
+        title="Orders"
+        action={
+          <div className="flex items-end gap-2">
+            <label className="block text-xs font-medium text-yd-muted">
+              Report date
+              <input
+                type="date"
+                value={reportDate}
+                onChange={(event) => setReportDate(event.target.value)}
+                className="mt-1 block h-10 rounded-xl border border-yd-border bg-white px-2 text-sm text-yd-ink"
+              />
+            </label>
+            <Button type="button" variant="outline" disabled={exporting || !reportDate} onClick={() => void downloadReport()}>
+              <Download className="mr-1 h-4 w-4" />
+              {exporting ? "Preparing…" : "Excel"}
+            </Button>
+          </div>
+        }
+      />
       {query.isLoading ? <Skeleton className="h-40" /> : null}
       {!query.isLoading && !items.length ? <EmptyState title="No orders" body="Customer orders will appear here." /> : null}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

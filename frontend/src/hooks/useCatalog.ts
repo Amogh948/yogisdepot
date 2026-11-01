@@ -43,9 +43,9 @@ export function useCartQuantity(productId: string): number {
   const guestItems = useGuestCartStore((s) => s.items);
   if (!productId) return 0;
   if (user) {
-    return cart.data?.data.items.find((item) => item.productId === productId)?.quantity ?? 0;
+    return cart.data?.data.items.find((item) => item.productId === productId && !item.parentProductId)?.quantity ?? 0;
   }
-  return guestItems.find((item) => item.productId === productId)?.quantity ?? 0;
+  return guestItems.find((item) => item.productId === productId && !item.parentProductId)?.quantity ?? 0;
 }
 
 export function useCartItemCount(): number {

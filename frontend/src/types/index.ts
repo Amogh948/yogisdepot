@@ -103,6 +103,15 @@ export interface Product {
   discountPercentage?: number;
   returnWindowDays?: number;
   deliveryEstimateDays?: number;
+  /** False when this product can only be added as part of another product. */
+  sellIndependently?: boolean;
+  childProducts?: Array<{
+    productId: string;
+    quantity: number;
+    name?: string;
+    price?: number;
+    image?: string;
+  }>;
 }
 
 export interface CartItem {
@@ -111,6 +120,9 @@ export interface CartItem {
   product: Product;
   lineTotal: number;
   inStock: boolean;
+  /** Present when this line was added automatically with a parent product. */
+  parentProductId?: string;
+  locked?: boolean;
 }
 
 export interface Cart {

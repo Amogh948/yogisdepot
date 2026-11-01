@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { orderExportService } from "../../services/orders/orderExport.service";
 import { orderService } from "../../services/orders/order.service";
 import { sendSuccess } from "../../utils/apiResponse";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -70,6 +71,14 @@ export const vendorOrderController = {
 };
 
 export const adminOrderController = {
+  exportDaily: asyncHandler(async (req: Request, res: Response) => {
+    const date = typeof req.query.date === "string" ? req.query.date : undefined;
+    const { date: reportDate, buffer } = await orderExportService.buildDailyWorkbook(date);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="orders-${reportDate}.xlsx"`);
+    res.send(buffer);
+  }),
+
   list: asyncHandler(async (req: Request, res: Response) => {
     const result = await orderService.listAll(req.query);
     sendSuccess(res, result.data, "Orders fetched successfully", 200, result.pagination);

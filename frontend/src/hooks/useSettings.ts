@@ -24,6 +24,17 @@ export function usePublicSettings() {
   });
 }
 
+export function useLocationHint(enabled: boolean) {
+  return useQuery({
+    queryKey: ["location-hint"],
+    queryFn: async () =>
+      (await unwrap<{ city: string | null; region: string | null }>(api.get("/settings/location-hint"))).data,
+    enabled,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
 export function useCurrencyCode() {
   const settings = usePublicSettings();
   return (settings.data?.currency || "CAD").toUpperCase();

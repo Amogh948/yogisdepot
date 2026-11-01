@@ -7,6 +7,7 @@ import { useCartQuantity } from "../../hooks/useCatalog";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { productImageUrl } from "../../utils/productImage";
 import { maxOrderQuantity } from "../../utils/quantity";
+import { useDeliveryCoverage } from "../../hooks/useDeliveryCoverage";
 
 interface ProductCardProps {
   product: Product;
@@ -27,8 +28,10 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
   const productId = entityId(product);
   const quantity = useCartQuantity(productId);
   const { setCartQuantity } = useCommerceActions();
+  const coverage = useDeliveryCoverage();
   const weight = productWeight(product);
   const outOfStock = product.unlimitedQuantity === false && product.stock <= 0;
+  const orderingBlocked = coverage.orderingBlocked;
 
   return (
     <article className="flex flex-col overflow-visible rounded-[14px] border border-yd-border/60 bg-white shadow-soft">
@@ -70,13 +73,15 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
         {weight ? <p className="text-[11px] text-yd-muted">{weight}</p> : null}
         <div className="mt-auto flex min-h-8 items-center justify-between gap-1.5 pt-2">
           <Price price={product.price} compareAt={product.compareAtPrice} showBadge size="sm" />
-          {onAdd ? (
+          {product.sellIndependently === false ? (
+            <span className="text-[11px] font-medium text-yd-muted">Included item</span>
+          ) : onAdd ? (
             quantity > 0 ? (
               <QuantitySelector
                 size="sm"
                 value={quantity}
                 min={0}
-                max={maxOrderQuantity(product)}
+                max={orderingBlocked ? quantity : maxOrderQuantity(product)}
                 onChange={(next) => setCartQuantity.mutate({ product, quantity: next })}
               />
             ) : (
@@ -84,7 +89,7 @@ export function ProductCard({ product, onAdd, onWishlist, wished }: ProductCardP
                 type="button"
                 aria-label={`Add ${product.name} to cart`}
                 className="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-lg bg-yd-green px-2.5 text-xs font-bold text-white transition active:scale-95 disabled:opacity-40"
-                disabled={outOfStock}
+                disabled={outOfStock || orderingBlocked}
                 onClick={() => setCartQuantity.mutate({ product, quantity: 1 })}
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />

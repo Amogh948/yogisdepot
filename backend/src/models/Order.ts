@@ -53,6 +53,8 @@ export interface OrderItemSnapshot {
   totalAmountCents: number;
   totalPrice?: number;
   fulfillmentStatus: OrderStatus;
+  /** Set when the line was included by a parent product. */
+  parentProductId?: Types.ObjectId;
 }
 
 export interface ShippingAddressSnapshot {
@@ -156,6 +158,7 @@ const orderSchema = new Schema<OrderDocument>(
         totalAmountCents: { type: Number, min: 0 },
         totalPrice: { type: Number, min: 0 },
         fulfillmentStatus: { type: String, enum: ORDER_STATUSES, default: "pending" },
+        parentProductId: { type: Schema.Types.ObjectId, ref: "Product" },
       },
     ],
     subtotalCents: { type: Number, min: 0, default: 0 },

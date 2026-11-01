@@ -79,6 +79,13 @@ export interface ProductDocument extends Document {
   isVegan: boolean;
   /** When true, skip the per-order quantity cap (stock still applies). */
   unlimitedQuantity?: boolean;
+  /**
+   * Products included automatically when this product is added to the cart.
+   * One level only — children are not expanded again.
+   */
+  childProducts?: Array<{ productId: Types.ObjectId; quantity: number }>;
+  /** When false, the product cannot be added on its own (fees, kit contents). */
+  sellIndependently?: boolean;
   foodType?: string;
   dietaryTags: string[];
   servingSize?: string;
@@ -192,6 +199,16 @@ const productSchema = new Schema<ProductDocument>(
     isVegetarian: { type: Boolean, default: true },
     isVegan: { type: Boolean, default: false },
     unlimitedQuantity: { type: Boolean, default: true },
+    childProducts: {
+      type: [
+        {
+          productId: { type: Schema.Types.ObjectId, ref: "Product", required: true },
+          quantity: { type: Number, default: 1, min: 1 },
+        },
+      ],
+      default: [],
+    },
+    sellIndependently: { type: Boolean, default: true },
     foodType: { type: String },
     dietaryTags: { type: [String], default: [] },
     servingSize: { type: String },

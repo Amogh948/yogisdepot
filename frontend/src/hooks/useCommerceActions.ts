@@ -4,12 +4,13 @@ import type { ApiSuccess, Cart, Product } from "../types";
 import { entityId } from "../types";
 import { cartApi, wishlistApi } from "../services/api/commerce.api";
 import { useAuthStore } from "../store/auth.store";
-import { addGuestItem, updateGuestItem, useGuestCartStore } from "../store/guestCart.store";
+import { addGuestItem, syncGuestChildren, updateGuestItem, useGuestCartStore } from "../store/guestCart.store";
 import { useCartUiStore } from "../store/cartUi.store";
 import { useToastStore } from "../store/toast.store";
 import { ApiError } from "../services/api/client";
 import { productImageUrl } from "../utils/productImage";
 import { applyOptimisticAdd, applyOptimisticCart, emptyCart } from "../utils/cartOptimistic";
+import { useDeliveryCoverage } from "./useDeliveryCoverage";
 
 type CartQueryData = ApiSuccess<Cart>;
 type CartSyncListener = () => void;
@@ -65,7 +66,7 @@ async function flushQuantity(
 
   const { product, quantity, rollback } = pending;
   const id = entityId(product);
-  const previousQty = rollback?.data.items.find((item) => item.productId === id)?.quantity ?? 0;
+  const previousQty = rollback?.data.items.find((item) => item.productId === id && !item.parentProductId)?.quantity ?? 0;
 
   try {
     let result: CartQueryData;
@@ -145,7 +146,7 @@ export async function ensureCartSynced(queryClient: QueryClient): Promise<void> 
 export function cartFingerprint(cart?: Cart | null): string {
   if (!cart?.items?.length) return "";
   const lines = cart.items
-    .map((item) => `${item.productId}:${item.quantity}`)
+    .map((item) => `${item.parentProductId || ""}:${item.productId}:${item.quantity}`)
     .sort()
     .join("|");
   return `${lines}|sub:${cart.subtotal}|n:${cart.itemCount}`;
@@ -197,6 +198,7 @@ export function useCommerceActions() {
   const user = useAuthStore((s) => s.user);
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
+  const coverage = useDeliveryCoverage();
 
   const reportCartError = (error: unknown) => {
     toast(error instanceof ApiError ? error.message : "Could not update cart", "error");
@@ -204,23 +206,32 @@ export function useCommerceActions() {
 
   const addToCart = useMutation({
     mutationFn: async ({ product, quantity = 1 }: { product: Product; quantity?: number }) => {
+      if (coverage.orderingBlocked && coverage.message) {
+        throw new ApiError(coverage.message, 400);
+      }
       const id = entityId(product);
       const skuId = (product as Product & { skuId?: string }).skuId;
 
+      if (product.sellIndependently === false) {
+        throw new ApiError("This item is included with another product and can't be added on its own");
+      }
+
       if (!user) {
-        const previousQty = useGuestCartStore.getState().items.find((item) => item.productId === id)?.quantity ?? 0;
+        const previousQty =
+          useGuestCartStore.getState().items.find((item) => item.productId === id && !item.parentProductId)?.quantity ?? 0;
         celebrateIfIncreased(previousQty, previousQty + quantity);
         addGuestItem(id, quantity, {
           image: productImageUrl(product),
           name: product.name,
           price: product.price,
         });
+        syncGuestChildren(id, previousQty + quantity, product.childProducts || []);
         return { guest: true as const };
       }
 
       await queryClient.cancelQueries({ queryKey: ["cart"] });
       const previous = queryClient.getQueryData<CartQueryData>(["cart"]);
-      const previousQty = previous?.data.items.find((item) => item.productId === id)?.quantity ?? 0;
+      const previousQty = previous?.data.items.find((item) => item.productId === id && !item.parentProductId)?.quantity ?? 0;
       writeOptimistic(
         queryClient,
         applyOptimisticAdd(previous?.data ?? emptyCart(), product, quantity),
@@ -268,21 +279,32 @@ export function useCommerceActions() {
   const setCartQuantity = useMutation({
     mutationFn: async ({ product, quantity }: { product: Product; quantity: number }) => {
       const id = entityId(product);
+      const previousQty = !user
+        ? useGuestCartStore.getState().items.find((item) => item.productId === id && !item.parentProductId)?.quantity ?? 0
+        : queryClient.getQueryData<CartQueryData>(["cart"])?.data.items.find((item) => item.productId === id && !item.parentProductId)
+            ?.quantity ?? 0;
+
+      if (coverage.orderingBlocked && coverage.message && quantity > previousQty) {
+        throw new ApiError(coverage.message, 400);
+      }
+
+      if (product.sellIndependently === false) {
+        throw new ApiError("This item is included with another product and can't be changed on its own");
+      }
 
       if (!user) {
-        const previousQty = useGuestCartStore.getState().items.find((item) => item.productId === id)?.quantity ?? 0;
         celebrateIfIncreased(previousQty, quantity);
         updateGuestItem(id, quantity, {
           image: productImageUrl(product),
           name: product.name,
           price: product.price,
         });
+        syncGuestChildren(id, quantity, product.childProducts || []);
         return { guest: true as const };
       }
 
       await queryClient.cancelQueries({ queryKey: ["cart"] });
       const previous = queryClient.getQueryData<CartQueryData>(["cart"]);
-      const previousQty = previous?.data.items.find((item) => item.productId === id)?.quantity ?? 0;
 
       // Instant UI — then coalesce rapid +/- into one backend call.
       writeOptimistic(queryClient, applyOptimisticCart(previous?.data ?? emptyCart(), product, quantity));

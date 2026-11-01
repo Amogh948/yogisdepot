@@ -112,6 +112,7 @@ router.get("/pricing", adminFmcgController.pricing);
 router.get("/scratch-campaigns", adminFmcgController.scratchCampaigns);
 router.post("/scratch-campaigns", adminFmcgController.createScratchCampaign);
 
+router.get("/orders/export", adminOrderController.exportDaily);
 router.get("/orders", adminOrderController.list);
 router.get("/orders/:id", adminOrderController.get);
 router.patch("/orders/:id/status", validate(orderStatusSchema), adminOrderController.updateStatus);

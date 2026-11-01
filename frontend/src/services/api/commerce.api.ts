@@ -46,6 +46,7 @@ export const deliveryApi = {
         province: string;
         city?: string;
         postalCodePrefix?: string;
+        areaNames?: string[];
       }>
     >(api.get("/delivery-locations")),
   check: (payload: { country: string; state: string; city?: string; postalCode?: string }) =>
