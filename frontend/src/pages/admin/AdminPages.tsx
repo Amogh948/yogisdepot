@@ -218,8 +218,9 @@ export function AdminProductsPage() {
           <div>
             <p className="font-semibold text-yd-ink">Bulk import</p>
             <p className="mt-0.5 text-sm text-yd-muted">
-              Update existing products or add new ones from a CSV. Use pipe-separated{" "}
-              <span className="font-medium text-yd-ink">imageUrls</span> for product images.
+              Update existing products or add new ones from a CSV. Download the template to get every product
+              field. Separate images, categories, tags, allergens, and included products with a pipe (|). Included
+              products use <span className="font-medium text-yd-ink">productCode:quantity</span>.
             </p>
           </div>
           <button

@@ -6,7 +6,7 @@ import { Inventory } from "../../models/Inventory";
 import { InventoryBatch } from "../../models/InventoryBatch";
 import { MerchandisingCollection } from "../../models/MerchandisingCollection";
 import { Pricing } from "../../models/Pricing";
-import { Product, ProductDocument, ProductImage, ProductVariant } from "../../models/Product";
+import { Product, ProductDocument, ProductImage, ProductStatus, ProductVariant } from "../../models/Product";
 import { Sku } from "../../models/Sku";
 import { TaxCategory } from "../../models/TaxCategory";
 import { Warehouse } from "../../models/Warehouse";
@@ -70,6 +70,10 @@ export interface ProductStackVariantUpdate {
   name?: string;
   status?: "active" | "inactive";
   barcode?: string;
+  sizeValue?: number;
+  sizeUnit?: string;
+  packQuantity?: number;
+  packagingType?: string;
   mrpCents?: number;
   costPriceCents?: number;
   sellingPriceCents?: number;
@@ -107,6 +111,15 @@ export interface ProductStackUpdateInput {
   variants?: ProductStackVariantUpdate[];
   sellIndependently?: boolean;
   childProducts?: Array<{ productId: string; quantity: number }>;
+  status?: ProductStatus;
+  foodType?: string;
+  dietaryTags?: string[];
+  servingSize?: string;
+  shelfLife?: string;
+  unit?: string;
+  weight?: number;
+  nutritionalInformation?: ProductDocument["nutritionalInformation"];
+  allergenInformation?: string[];
 }
 
 function normalizeImages(images?: Array<string | ProductImage>): ProductImage[] {
@@ -519,6 +532,25 @@ export const catalogAdminService = {
     if (input.sellIndependently !== undefined) {
       product.sellIndependently = input.sellIndependently;
     }
+    if (input.status !== undefined) {
+      product.status = input.status;
+      product.isActive = input.status === "active";
+    }
+    if (input.foodType !== undefined) product.foodType = input.foodType;
+    if (input.dietaryTags !== undefined) product.dietaryTags = input.dietaryTags;
+    if (input.servingSize !== undefined) product.servingSize = input.servingSize;
+    if (input.shelfLife !== undefined) product.shelfLife = input.shelfLife;
+    if (input.unit !== undefined) product.unit = input.unit;
+    if (input.weight !== undefined) product.weight = input.weight;
+    if (input.nutritionalInformation !== undefined) {
+      product.nutritionalInformation = { ...(product.nutritionalInformation || {}), ...input.nutritionalInformation };
+      product.nutritionInformation = product.nutritionalInformation;
+      if (input.nutritionalInformation.calories != null) product.calories = input.nutritionalInformation.calories;
+    }
+    if (input.allergenInformation !== undefined) {
+      product.allergenInformation = input.allergenInformation;
+      product.allergens = input.allergenInformation;
+    }
     if (input.childProducts !== undefined) {
       const seen = new Set<string>();
       const links: Array<{ productId: Types.ObjectId; quantity: number }> = [];
@@ -588,6 +620,13 @@ export const catalogAdminService = {
         if (patch.name !== undefined) variant.name = patch.name;
         if (patch.status !== undefined) variant.status = patch.status;
         if (patch.barcode !== undefined) variant.barcode = patch.barcode;
+        if (patch.sizeValue !== undefined || patch.sizeUnit !== undefined) {
+          const value = patch.sizeValue ?? variant.size?.value;
+          const unit = patch.sizeUnit ?? variant.size?.unit;
+          if (value != null && unit) variant.size = { value, unit };
+        }
+        if (patch.packQuantity !== undefined) variant.packQuantity = patch.packQuantity;
+        if (patch.packagingType !== undefined) variant.packagingType = patch.packagingType;
 
         const sku = variant.skuId
           ? await Sku.findById(variant.skuId)
