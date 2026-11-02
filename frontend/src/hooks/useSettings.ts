@@ -28,7 +28,7 @@ export function useLocationHint(enabled: boolean) {
   return useQuery({
     queryKey: ["location-hint"],
     queryFn: async () =>
-      (await unwrap<{ city: string | null; region: string | null }>(api.get("/settings/location-hint"))).data,
+      (await unwrap<{ city: string | null; region: string | null; postalCode: string | null }>(api.get("/settings/location-hint"))).data,
     enabled,
     staleTime: Infinity,
     retry: false,

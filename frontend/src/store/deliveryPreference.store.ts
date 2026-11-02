@@ -9,15 +9,20 @@ export type DeliveryPreference = {
   label: string;
   city: string;
   postalCode?: string;
-  /** address = saved address, manual/ip = chosen place, fallback = explicit Toronto. */
-  source?: "address" | "manual" | "ip" | "fallback";
+  /** address = saved address, manual = typed, ip = network hint, geo = device location. */
+  source?: "address" | "manual" | "ip" | "geo" | "fallback";
 };
 
 function readPreference(): DeliveryPreference | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as DeliveryPreference;
+    const preference = JSON.parse(raw) as DeliveryPreference;
+    if (preference.source === "fallback") {
+      localStorage.removeItem(KEY);
+      return null;
+    }
+    return preference;
   } catch {
     return null;
   }
@@ -39,7 +44,7 @@ export function formatDeliveryLabel(address: Pick<Address, "city" | "postalCode"
 interface DeliveryPreferenceState {
   preference: DeliveryPreference | null;
   setFromAddress: (address: Address) => void;
-  setPlace: (place: { label: string; city: string; postalCode?: string; source: "manual" | "ip" | "fallback" }) => void;
+  setPlace: (place: { label: string; city: string; postalCode?: string; source: "manual" | "ip" | "geo" }) => void;
   clear: () => void;
 }
 

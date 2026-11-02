@@ -57,21 +57,30 @@ export const locationHintController = {
   get: asyncHandler(async (req: Request, res: Response) => {
     const ip = clientIp(req);
     if (!ip) {
-      sendSuccess(res, { city: null, region: null }, "Location unavailable");
+      sendSuccess(res, { city: null, region: null, postalCode: null }, "Location unavailable");
       return;
     }
     try {
       const response = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, {
         signal: AbortSignal.timeout(2500),
       });
-      const body = (await response.json()) as { success?: boolean; city?: string; region?: string };
+      const body = (await response.json()) as {
+        success?: boolean;
+        city?: string;
+        region?: string;
+        postal?: string;
+      };
       if (!response.ok || body.success === false || !body.city) {
-        sendSuccess(res, { city: null, region: null }, "Location unavailable");
+        sendSuccess(res, { city: null, region: null, postalCode: null }, "Location unavailable");
         return;
       }
-      sendSuccess(res, { city: body.city, region: body.region || null }, "Location suggested");
+      sendSuccess(
+        res,
+        { city: body.city, region: body.region || null, postalCode: body.postal || null },
+        "Location suggested",
+      );
     } catch {
-      sendSuccess(res, { city: null, region: null }, "Location unavailable");
+      sendSuccess(res, { city: null, region: null, postalCode: null }, "Location unavailable");
     }
   }),
 };

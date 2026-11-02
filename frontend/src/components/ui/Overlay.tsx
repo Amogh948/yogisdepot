@@ -1,4 +1,10 @@
 import { ReactNode, useEffect } from "react";
+import { createPortal } from "react-dom";
+
+function portal(node: ReactNode) {
+  if (typeof document === "undefined") return null;
+  return createPortal(node, document.body);
+}
 
 export function Modal({
   open,
@@ -25,7 +31,7 @@ export function Modal({
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
+  return portal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-yd-ink/40 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
       <button className="absolute inset-0" aria-label="Close" onClick={onClose} type="button" />
       <div className="relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-t-sheet bg-white p-5 shadow-card sm:max-w-lg sm:rounded-card">
@@ -37,7 +43,7 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
   );
 }
 
@@ -87,7 +93,7 @@ export function BottomSheet({
 
   if (!open) return null;
 
-  return (
+  return portal(
     <div className="fixed inset-0 z-50 bg-yd-ink/40" role="dialog" aria-modal="true" aria-label={title}>
       <button className="absolute inset-0" aria-label="Close" onClick={onClose} type="button" />
       <div className="absolute inset-x-0 bottom-0 flex max-h-[88vh] animate-[sheetUp_220ms_ease-out] flex-col rounded-t-sheet bg-white pb-[env(safe-area-inset-bottom)] shadow-card lg:inset-y-0 lg:right-0 lg:left-auto lg:w-[380px] lg:max-h-none lg:rounded-none lg:animate-none">
@@ -104,7 +110,7 @@ export function BottomSheet({
         {footer ? <div className="border-t border-yd-border px-5 py-4">{footer}</div> : null}
       </div>
       <style>{`@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
-    </div>
+    </div>,
   );
 }
 
