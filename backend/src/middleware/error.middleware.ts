@@ -42,9 +42,34 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return;
   }
 
-  const mongoErr = err as { code?: number };
+  const mongoErr = err as {
+    code?: number;
+    keyPattern?: Record<string, unknown>;
+    keyValue?: Record<string, unknown>;
+  };
   if (mongoErr.code === 11000) {
-    sendError(res, "A record with this value already exists", 409);
+    const fields = Object.keys(mongoErr.keyPattern || mongoErr.keyValue || {});
+    const field = fields[0];
+    const value = field && mongoErr.keyValue ? mongoErr.keyValue[field] : undefined;
+    const label =
+      field === "sku"
+        ? "SKU"
+        : field === "skuCode"
+          ? "SKU code"
+          : field === "productCode"
+            ? "product code"
+            : field === "slug"
+              ? "slug"
+              : field === "barcode"
+                ? "barcode"
+                : field === "batchNumber"
+                  ? "batch number"
+                  : field || "value";
+    const detail =
+      value != null && String(value).trim() !== ""
+        ? `A record with this ${label} already exists (${String(value)}).`
+        : `A record with this ${label} already exists.`;
+    sendError(res, detail, 409);
     return;
   }
 

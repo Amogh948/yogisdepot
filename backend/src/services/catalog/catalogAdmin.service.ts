@@ -272,8 +272,7 @@ export const catalogAdminService = {
       isActive: true,
       returnWindowDays: Math.max(0, Math.floor(input.returnWindowDays ?? 0)),
       deliveryEstimateDays: Math.max(1, Math.floor(input.deliveryEstimateDays ?? 5)),
-      // Legacy mirrors from first variant for listing dual-read
-      sku: input.variants[0].skuCode?.toUpperCase(),
+      // Leave legacy sku unset until the Sku row exists — the unique sku index is sparse.
       price: input.variants[0].sellingPriceCents / 100,
       compareAtPrice: input.variants[0].mrpCents / 100,
       costPrice: input.variants[0].costPriceCents / 100,
@@ -281,12 +280,13 @@ export const catalogAdminService = {
     });
 
     const warehouse = await inventoryReservationService.getWarehouseOrThrow(DEFAULT_WAREHOUSE_CODE);
+    let primarySkuCode = "";
 
     for (let i = 0; i < input.variants.length; i++) {
       const v = input.variants[i];
       const variant = product.variants[i];
       const skuCode =
-        v.skuCode?.toUpperCase() ||
+        v.skuCode?.trim().toUpperCase() ||
         buildSkuCode([input.brandName || "GEN", input.name.slice(0, 8), variant.variantCode.slice(-4)]);
 
       // Verify variant belongs to product (server-owned ids)
@@ -294,15 +294,22 @@ export const catalogAdminService = {
         throw new BadRequestError("Variant does not belong to product");
       }
 
+      const existingSku = await Sku.findOne({ skuCode }).select("_id");
+      if (existingSku) {
+        throw new BadRequestError(`SKU code ${skuCode} is already in use. Choose a different SKU code.`);
+      }
+
+      const barcode = v.barcode?.trim() || undefined;
       const sku = await Sku.create({
         skuCode,
         productId: product._id,
         variantId: variant.variantId,
         vendorId: product.vendorId,
-        barcode: v.barcode,
+        barcode,
         taxCategoryId: v.taxCategoryId || taxCategoryId,
         status: "active",
       });
+      if (!primarySkuCode) primarySkuCode = skuCode;
 
       variant.skuId = sku._id;
       await Pricing.create({
@@ -339,7 +346,8 @@ export const catalogAdminService = {
       }
     }
 
-    product.sku = undefined;
+    // Keep one legacy sku value for dual-read listings; never leave multiple products with blank sku.
+    if (primarySkuCode) product.sku = primarySkuCode;
     await product.save();
     return product;
   },
