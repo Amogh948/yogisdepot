@@ -105,6 +105,8 @@ export interface Product {
   deliveryEstimateDays?: number;
   /** False when this product can only be added as part of another product. */
   sellIndependently?: boolean;
+  /** When false, included children are display-only if the parent has a price. */
+  addChildPricesToParent?: boolean;
   childProducts?: Array<{
     productId: string;
     quantity: number;
@@ -169,6 +171,8 @@ export interface OrderItem {
   unitPrice: number;
   totalPrice: number;
   fulfillmentStatus: OrderStatus;
+  /** Present when this line was included by a parent/kit product. */
+  parentProductId?: string;
 }
 
 export interface Order {

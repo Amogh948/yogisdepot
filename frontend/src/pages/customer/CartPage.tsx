@@ -12,7 +12,7 @@ import {
   useSameDayDeliveryStatus,
 } from "../../components/commerce/SameDayDeliveryBanner";
 import { ProductCarousel } from "../../components/product/ProductCarousel";
-import { mediaUrl } from "../../types";
+import { mediaUrl, type Product } from "../../types";
 import { useAuthStore } from "../../store/auth.store";
 import { useToastStore } from "../../store/toast.store";
 import {
@@ -29,10 +29,47 @@ import { resolveEstimatedDeliveryLabel } from "../../utils/sameDayDelivery";
 import { emptyCart } from "../../utils/cartOptimistic";
 import { maxOrderQuantity } from "../../utils/quantity";
 import type { ApiSuccess, Cart } from "../../types";
+import {
+  clearGuestCart,
+  syncGuestChildren,
+  updateGuestItem,
+  useGuestCartStore,
+  type GuestCartItem,
+} from "../../store/guestCart.store";
+
+function guestAsProduct(item: GuestCartItem, all: GuestCartItem[]): Product {
+  const parentQty = Math.max(1, item.quantity);
+  const children = all
+    .filter((row) => row.parentProductId === item.productId)
+    .map((row) => ({
+      productId: row.productId,
+      quantity: Math.max(1, Math.round(row.quantity / parentQty) || 1),
+      name: row.name,
+      price: row.price,
+      image: row.image,
+    }));
+  return {
+    id: item.productId,
+    _id: item.productId,
+    name: item.name || "Product",
+    slug: item.productId,
+    description: "",
+    price: item.price ?? 0,
+    images: item.image ? [item.image] : [],
+    thumbnail: item.image,
+    stock: 999,
+    rating: 0,
+    reviewCount: 0,
+    isVegetarian: true,
+    unit: "",
+    childProducts: children,
+  } as Product;
+}
 
 export function CartPage() {
   const user = useAuthStore((s) => s.user);
   const cart = useCart();
+  const guestItems = useGuestCartStore((s) => s.items);
   const navigate = useNavigate();
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
@@ -51,6 +88,10 @@ export function CartPage() {
       toast(coverage.message || "We can't deliver to this location yet.", "error");
       return;
     }
+    if (!user) {
+      navigate("/login", { state: { from: "/checkout" } });
+      return;
+    }
     setCheckoutStarting(true);
     try {
       await ensureCartSynced(queryClient);
@@ -65,6 +106,10 @@ export function CartPage() {
 
   const clear = useMutation({
     mutationFn: async () => {
+      if (!user) {
+        clearGuestCart();
+        return null;
+      }
       await queryClient.cancelQueries({ queryKey: ["cart"] });
       const previous = queryClient.getQueryData<ApiSuccess<Cart>>(["cart"]);
       queryClient.setQueryData<ApiSuccess<Cart>>(["cart"], {
@@ -80,23 +125,40 @@ export function CartPage() {
       }
     },
     onSuccess: (result) => {
-      queryClient.setQueryData(["cart"], result);
+      if (result) queryClient.setQueryData(["cart"], result);
       toast("Cart cleared");
     },
     onError: () => toast("Could not clear cart", "error"),
   });
 
-  if (!user) {
-    return (
-      <EmptyState
-        title="Sign in to sync your cart"
-        body="Guest items are saved on this device. Sign in to checkout securely."
-        action={<Button onClick={() => navigate("/login")}>Sign in</Button>}
-      />
-    );
-  }
-  if (cart.isLoading && !cart.data) return <Skeleton className="h-48" />;
-  const data = cart.data?.data;
+  const setGuestQuantity = (item: GuestCartItem, quantity: number) => {
+    const product = guestAsProduct(item, guestItems);
+    updateGuestItem(item.productId, quantity, {
+      image: item.image,
+      name: item.name,
+      price: item.price,
+    });
+    syncGuestChildren(item.productId, quantity, product.childProducts || []);
+  };
+
+  if (user && cart.isLoading && !cart.data) return <Skeleton className="h-48" />;
+
+  const data = user
+    ? cart.data?.data
+    : {
+        items: guestItems.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          lineTotal: (item.price ?? 0) * item.quantity,
+          inStock: true,
+          parentProductId: item.parentProductId,
+          locked: Boolean(item.parentProductId),
+          product: guestAsProduct(item, guestItems),
+        })),
+        subtotal: guestItems.reduce((sum, item) => sum + (item.price ?? 0) * item.quantity, 0),
+        itemCount: guestItems.reduce((sum, item) => sum + item.quantity, 0),
+      };
+
   if (!data?.items.length) {
     return (
       <EmptyState
@@ -117,6 +179,11 @@ export function CartPage() {
               Clear cart
             </button>
           </div>
+          {!user ? (
+            <p className="rounded-xl border border-yd-border bg-yd-cream/50 px-3 py-2 text-sm text-yd-muted">
+              You&apos;re shopping as a guest. Sign in when you&apos;re ready to checkout — your cart stays on this device until then.
+            </p>
+          ) : null}
           <DeliveryProgress subtotal={data.subtotal} />
           <SameDayDeliveryBanner compact />
           {data.items.filter((item) => !item.parentProductId).map((item) => (
@@ -144,13 +211,27 @@ export function CartPage() {
                   value={item.quantity}
                   min={0}
                   max={maxOrderQuantity(item.product)}
-                  onChange={(quantity) => setCartQuantity.mutate({ product: item.product, quantity })}
+                  onChange={(quantity) => {
+                    if (user) {
+                      setCartQuantity.mutate({ product: item.product, quantity });
+                    } else {
+                      const guest = guestItems.find((row) => row.productId === item.productId && !row.parentProductId);
+                      if (guest) setGuestQuantity(guest, quantity);
+                    }
+                  }}
                 />
                 <button
                   type="button"
                   aria-label="Remove item"
                   className="grid h-10 w-10 place-items-center text-yd-muted hover:text-yd-error"
-                  onClick={() => setCartQuantity.mutate({ product: item.product, quantity: 0 })}
+                  onClick={() => {
+                    if (user) {
+                      setCartQuantity.mutate({ product: item.product, quantity: 0 });
+                    } else {
+                      const guest = guestItems.find((row) => row.productId === item.productId && !row.parentProductId);
+                      if (guest) setGuestQuantity(guest, 0);
+                    }
+                  }}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -201,7 +282,7 @@ export function CartPage() {
           <div className="mt-4 hidden lg:mt-auto lg:block">
             <DeliveryCoverageNotice className="mb-3 rounded-xl" />
             <Button className="w-full" size="lg" loading={checkoutBusy} disabled={checkoutBusy || coverage.orderingBlocked} onClick={() => void goToCheckout()}>
-              {cartSyncPending ? "Updating cart…" : "Proceed to checkout"}
+              {cartSyncPending ? "Updating cart…" : user ? "Proceed to checkout" : "Sign in to checkout"}
             </Button>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px] font-medium text-yd-muted">
               <span>Secure Payments</span>
@@ -223,7 +304,7 @@ export function CartPage() {
             <p className="text-lg font-bold text-yd-ink">{formatCad(data.subtotal)}</p>
           </div>
           <Button variant="accent" className="flex-1" loading={checkoutBusy} disabled={checkoutBusy || coverage.orderingBlocked} onClick={() => void goToCheckout()}>
-            {cartSyncPending ? "Updating…" : "Checkout →"}
+            {cartSyncPending ? "Updating…" : user ? "Checkout →" : "Sign in →"}
           </Button>
         </div>
       </div>

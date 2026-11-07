@@ -16,6 +16,7 @@ import { adminCouponController } from "../controllers/coupons/coupon.controller"
 import {
   adminFmcgController,
   productStackUpdateSchema,
+  productBulkDeleteSchema,
   bulkBrandSchema,
   productWizardSchema,
 } from "../controllers/fmcg/fmcg.controller";
@@ -82,10 +83,12 @@ router.delete("/categories/:id", adminCategoryController.remove);
 router.get("/products", adminProductController.list);
 router.post("/products", validate(createProductSchema), adminProductController.create);
 router.post("/products/wizard", validate(productWizardSchema), adminFmcgController.createProductWizard);
+router.post("/products/bulk-delete", validate(productBulkDeleteSchema), adminFmcgController.bulkDeleteProducts);
 router.get("/products/csv-template", adminFmcgController.downloadProductCsvTemplate);
 router.post("/products/csv-preview", uploadCsv.single("file"), adminFmcgController.previewProductCsv);
 router.post("/products/csv-import", uploadCsv.single("file"), adminFmcgController.importProductCsv);
 router.get("/products/:id", adminFmcgController.getProductStack);
+router.post("/products/:id/clone", adminFmcgController.cloneProduct);
 router.get("/products/:id/merchandising", adminMerchandisingController.forProduct);
 router.put("/products/:id/merchandising", validate(productMerchandisingSchema), adminMerchandisingController.setProduct);
 router.put("/products/:id/stack", validate(productStackUpdateSchema), adminFmcgController.updateProductStack);

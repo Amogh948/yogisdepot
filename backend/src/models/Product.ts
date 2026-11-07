@@ -84,8 +84,13 @@ export interface ProductDocument extends Document {
    * One level only — children are not expanded again.
    */
   childProducts?: Array<{ productId: Types.ObjectId; quantity: number }>;
-  /** When false, the product cannot be added on its own (fees, kit contents). */
+  /** When false, the product cannot be added on its own (fees, kit contents) and is hidden from the public catalogue. */
   sellIndependently?: boolean;
+  /**
+   * When true, included child product prices are charged on top of this product's price.
+   * When false, children are shown but not charged if this product has a selling price greater than zero.
+   */
+  addChildPricesToParent?: boolean;
   foodType?: string;
   dietaryTags: string[];
   servingSize?: string;
@@ -209,6 +214,7 @@ const productSchema = new Schema<ProductDocument>(
       default: [],
     },
     sellIndependently: { type: Boolean, default: true },
+    addChildPricesToParent: { type: Boolean, default: true },
     foodType: { type: String },
     dietaryTags: { type: [String], default: [] },
     servingSize: { type: String },

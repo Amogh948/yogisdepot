@@ -10,6 +10,7 @@ import { enqueueEmail, sendEmail } from "./mailer.service";
 import {
   buildOrderConfirmationEmail,
   buildOrderStatusEmail,
+  buildStaffOrderNotifyEmail,
   type EmailBillInput,
 } from "./orderEmail.templates";
 
@@ -133,35 +134,68 @@ async function deliverOrderConfirmation(orderId: string): Promise<void> {
     if (!order) return;
 
     const recipient = await customerRecipient(order.customerId);
-    if (!recipient) {
+    const [deliveryLabel, card, settings] = await Promise.all([
+      deliveryLabelFor(order),
+      cardOnFile(order),
+      getPlatformSettings(),
+    ]);
+
+    if (recipient) {
+      const message = buildOrderConfirmationEmail({
+        orderNumber: order.orderNumber,
+        customerName: recipient.firstName,
+        items: order.items.map((item) => ({
+          name: item.productName,
+          variant: item.variantName,
+          quantity: item.quantity,
+          totalCents: item.totalAmountCents || 0,
+          productId: item.productId ? String(item.productId) : undefined,
+          parentProductId: item.parentProductId ? String(item.parentProductId) : undefined,
+        })),
+        bill: billFromOrder(order),
+        address: order.shippingAddress,
+        estimatedDelivery: deliveryLabel,
+        paymentMethod: order.paymentMethod,
+        cardLast4: card.last4,
+        cardBrand: card.brand,
+        orderUrl: orderPageUrl(String(order._id)),
+      });
+      const result = await sendEmail({ to: recipient.email, ...message });
+      logger.info("Order confirmation email finished", {
+        orderId,
+        orderNumber: order.orderNumber,
+        result,
+      });
+    } else {
       logger.warn("Order confirmation skipped; the account has no email", { orderId });
-      return;
     }
 
-    const [deliveryLabel, card] = await Promise.all([deliveryLabelFor(order), cardOnFile(order)]);
-    const message = buildOrderConfirmationEmail({
-      orderNumber: order.orderNumber,
-      customerName: recipient.firstName,
-      items: order.items.map((item) => ({
-        name: item.productName,
-        variant: item.variantName,
-        quantity: item.quantity,
-        totalCents: item.totalAmountCents || 0,
-      })),
-      bill: billFromOrder(order),
-      address: order.shippingAddress,
-      estimatedDelivery: deliveryLabel,
-      paymentMethod: order.paymentMethod,
-      cardLast4: card.last4,
-      cardBrand: card.brand,
-      orderUrl: orderPageUrl(String(order._id)),
-    });
-    const result = await sendEmail({ to: recipient.email, ...message });
-    logger.info("Order confirmation email finished", {
-      orderId,
-      orderNumber: order.orderNumber,
-      result,
-    });
+    const notifyEmails = [
+      ...new Set(
+        (settings.orderNotifyEmails || [])
+          .map((email) => email.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ].filter((email) => email !== recipient?.email);
+    if (notifyEmails.length) {
+      const staffMessage = buildStaffOrderNotifyEmail({
+        orderNumber: order.orderNumber,
+        customerName: recipient?.firstName,
+        customerEmail: recipient?.email,
+        totalCents: order.totalCents || 0,
+        itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
+        orderUrl: `${env.CLIENT_URL.replace(/\/$/, "")}/admin/orders/${orderId}`,
+      });
+      for (const email of notifyEmails) {
+        const staffResult = await sendEmail({ to: email, ...staffMessage });
+        logger.info("Order staff notify email finished", {
+          orderId,
+          orderNumber: order.orderNumber,
+          email,
+          result: staffResult,
+        });
+      }
+    }
   } catch (error) {
     logger.error("Order confirmation email failed", { orderId, message: errorMessage(error) });
   }

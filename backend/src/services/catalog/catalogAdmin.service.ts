@@ -110,6 +110,7 @@ export interface ProductStackUpdateInput {
   deliveryEstimateDays?: number;
   variants?: ProductStackVariantUpdate[];
   sellIndependently?: boolean;
+  addChildPricesToParent?: boolean;
   childProducts?: Array<{ productId: string; quantity: number }>;
   status?: ProductStatus;
   foodType?: string;
@@ -487,6 +488,7 @@ export const catalogAdminService = {
       imageUrls,
       variants,
       sellIndependently: product.sellIndependently !== false,
+      addChildPricesToParent: product.addChildPricesToParent !== false,
       childProducts: childLinks.map((link) => {
         const child = childById.get(String(link.productId));
         return {
@@ -539,6 +541,9 @@ export const catalogAdminService = {
     }
     if (input.sellIndependently !== undefined) {
       product.sellIndependently = input.sellIndependently;
+    }
+    if (input.addChildPricesToParent !== undefined) {
+      product.addChildPricesToParent = input.addChildPricesToParent;
     }
     if (input.status !== undefined) {
       product.status = input.status;
@@ -776,6 +781,96 @@ export const catalogAdminService = {
     if (input.isActive !== undefined) brand.isActive = input.isActive;
     await brand.save();
     return brand;
+  },
+
+  async cloneProduct(productId: string) {
+    const source = (await this.getProductStack(productId)) as Record<string, unknown>;
+    const variants = (Array.isArray(source.variants) ? source.variants : []) as Array<Record<string, unknown>>;
+    if (!variants.length) {
+      throw new BadRequestError("This product has no variants to clone");
+    }
+    if (!source.vendorId) {
+      throw new BadRequestError("This product has no vendor to clone");
+    }
+    const name = `Copy of ${String(source.name || "Product")}`;
+    const cloned = await this.createProductStack({
+      name,
+      brandId: source.brandId ? String(source.brandId) : undefined,
+      brandName: source.brandName ? String(source.brandName) : undefined,
+      categoryIds: Array.isArray(source.categoryIds) ? source.categoryIds.map(String) : undefined,
+      categoryId: source.categoryId ? String(source.categoryId) : undefined,
+      vendorId: String(source.vendorId),
+      description: String(source.description || name),
+      shortDescription: source.shortDescription ? String(source.shortDescription) : undefined,
+      manufacturer: source.manufacturer ? String(source.manufacturer) : undefined,
+      countryOfOrigin: source.countryOfOrigin ? String(source.countryOfOrigin) : undefined,
+      ingredients: source.ingredients ? String(source.ingredients) : undefined,
+      storageInstructions: source.storageInstructions ? String(source.storageInstructions) : undefined,
+      usageInstructions: source.usageInstructions ? String(source.usageInstructions) : undefined,
+      tags: Array.isArray(source.tags) ? source.tags.map(String) : undefined,
+      images: Array.isArray(source.imageUrls) ? source.imageUrls.map(String) : undefined,
+      festivalId: source.festivalId ? String(source.festivalId) : null,
+      returnWindowDays: typeof source.returnWindowDays === "number" ? source.returnWindowDays : undefined,
+      deliveryEstimateDays: typeof source.deliveryEstimateDays === "number" ? source.deliveryEstimateDays : undefined,
+      variants: variants.map((variant, index) => {
+        const pricing = (variant.pricing || {}) as Record<string, number | undefined>;
+        const inventory = (variant.inventory || {}) as Record<string, number | undefined>;
+        return {
+          name: String(variant.name || `Variant ${index + 1}`),
+          barcode: variant.barcode ? String(variant.barcode) : undefined,
+          taxCategoryId: variant.taxCategoryId ? String(variant.taxCategoryId) : undefined,
+          mrpCents: Number(pricing.mrpCents ?? 0),
+          costPriceCents: Number(pricing.costPriceCents ?? 0),
+          sellingPriceCents: Number(pricing.sellingPriceCents ?? 0),
+          availableQuantity: Number(inventory.availableQuantity ?? 0),
+          reorderLevel: Number(inventory.reorderLevel ?? 10),
+        };
+      }),
+    });
+
+    const childProducts = Array.isArray(source.childProducts)
+      ? (source.childProducts as Array<{ productId: string; quantity: number }>).map((link) => ({
+          productId: String(link.productId),
+          quantity: Math.max(1, Number(link.quantity) || 1),
+        }))
+      : [];
+
+    return this.updateProductStack(String(cloned._id), {
+      isActive: false,
+      isFeatured: Boolean(source.isFeatured),
+      isVegetarian: source.isVegetarian !== false,
+      isVegan: Boolean(source.isVegan),
+      unlimitedQuantity: source.unlimitedQuantity !== false,
+      sellIndependently: source.sellIndependently !== false,
+      addChildPricesToParent: source.addChildPricesToParent !== false,
+      childProducts,
+      foodType: source.foodType ? String(source.foodType) : undefined,
+      dietaryTags: Array.isArray(source.dietaryTags) ? source.dietaryTags.map(String) : undefined,
+      servingSize: source.servingSize ? String(source.servingSize) : undefined,
+      shelfLife: source.shelfLife ? String(source.shelfLife) : undefined,
+      unit: source.unit ? String(source.unit) : undefined,
+      weight: typeof source.weight === "number" ? source.weight : undefined,
+    });
+  },
+
+  async bulkDeleteProducts(productIds: string[]) {
+    const uniqueIds = [...new Set(productIds.filter((id) => Types.ObjectId.isValid(id)))];
+    if (!uniqueIds.length) throw new BadRequestError("Select at least one product");
+    const { productService } = await import("../products/product.service");
+    let deleted = 0;
+    const failed: Array<{ productId: string; message: string }> = [];
+    for (const id of uniqueIds) {
+      try {
+        await productService.remove(id);
+        deleted += 1;
+      } catch (error) {
+        failed.push({
+          productId: id,
+          message: error instanceof Error ? error.message : "Could not delete",
+        });
+      }
+    }
+    return { deleted, failed, total: uniqueIds.length };
   },
 
   async removeBrand(id: string) {

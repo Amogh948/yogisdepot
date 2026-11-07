@@ -179,6 +179,7 @@ export const settingsUpdateSchema = z.object({
   sameDayWeekdays: z.array(z.coerce.number().int().min(0).max(6)).max(7).optional(),
   sameDayPostalPrefixes: z.array(z.string().trim().min(1).max(12)).max(50).optional(),
   supportEmail: z.string().email().optional(),
+  orderNotifyEmails: z.array(z.string().email()).max(20).optional(),
 });
 
 export const adminSettingsController = {

@@ -105,9 +105,13 @@ function vendorName(value: Product["vendorId"]): string {
 }
 
 export function AdminProductsPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [csvBusy, setCsvBusy] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<{
@@ -138,9 +142,48 @@ export function AdminProductsPage() {
       await adminApi.deleteProduct(deleteId);
       toast("Product removed");
       setDeleteId(null);
+      setSelected((prev) => prev.filter((id) => id !== deleteId));
       await query.refetch();
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Could not delete product", "error");
+    }
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((row) => row !== id) : [...prev, id]));
+  };
+
+  const allSelected = items.length > 0 && items.every((product) => selected.includes(entityId(product)));
+
+  const bulkDelete = async () => {
+    if (!selected.length) return;
+    setBulkBusy(true);
+    try {
+      const result = await adminApi.bulkDeleteProducts(selected);
+      toast(
+        result.data.failed.length
+          ? `Deleted ${result.data.deleted} · ${result.data.failed.length} failed`
+          : `Deleted ${result.data.deleted} products`,
+      );
+      setSelected([]);
+      setBulkDeleteOpen(false);
+      await query.refetch();
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not delete products", "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const cloneProduct = async (id: string) => {
+    try {
+      const result = await adminApi.cloneProduct(id);
+      const clonedId = String(result.data.id || result.data._id || "");
+      toast("Product cloned — review and activate when ready");
+      if (clonedId) navigate(`/admin/products/${clonedId}/edit`);
+      else await query.refetch();
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not clone product", "error");
     }
   };
 
@@ -280,24 +323,59 @@ export function AdminProductsPage() {
           </div>
         ) : null}
       </section>
-      <div className="mb-4">
-        <Input
-          label="Search"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          placeholder="Name, brand, or SKU"
-        />
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="min-w-[12rem] flex-1">
+          <Input
+            label="Search"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Name, brand, or SKU"
+          />
+        </div>
+        {items.length ? (
+          <label className="mb-1 flex items-center gap-2 text-sm text-yd-ink">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => {
+                if (allSelected) {
+                  setSelected((prev) => prev.filter((id) => !items.some((product) => entityId(product) === id)));
+                } else {
+                  setSelected((prev) => [...new Set([...prev, ...items.map((product) => entityId(product))])]);
+                }
+              }}
+            />
+            Select page
+          </label>
+        ) : null}
       </div>
+      {selected.length ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-yd-border bg-white px-4 py-3 shadow-soft">
+          <p className="text-sm font-semibold text-yd-ink">{selected.length} selected</p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setSelected([])}>
+              Clear
+            </Button>
+            <Button type="button" variant="danger" size="sm" disabled={bulkBusy} onClick={() => setBulkDeleteOpen(true)}>
+              Delete selected
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {query.isLoading ? <Skeleton className="h-40" /> : null}
       {!query.isLoading && !items.length ? <EmptyState title="No products" body="Try another search or create a product." /> : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {items.map((product) => {
           const id = entityId(product);
+          const checked = selected.includes(id);
           return (
             <article key={product.slug} className="relative overflow-hidden rounded-2xl border border-yd-border/60 bg-white shadow-soft">
+              <label className="absolute left-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-white/95 shadow-soft">
+                <input type="checkbox" checked={checked} onChange={() => toggleSelected(id)} aria-label={`Select ${product.name}`} />
+              </label>
               <Link to={`/admin/products/${id}/edit`} className="block">
                 {adminCardImage(productThumb(product), product.name)}
                 <div className="space-y-1 p-3">
@@ -311,17 +389,30 @@ export function AdminProductsPage() {
                   <Badge tone={product.isActive ? "sage" : "muted"}>{product.isActive ? "Active" : "Inactive"}</Badge>
                 </div>
               </Link>
-              <button
-                type="button"
-                className="absolute right-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-yd-error shadow-soft"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setDeleteId(id);
-                }}
-              >
-                Delete
-              </button>
+              <div className="absolute right-2 top-2 flex flex-col gap-1">
+                <button
+                  type="button"
+                  className="rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-yd-green shadow-soft"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void cloneProduct(id);
+                  }}
+                >
+                  Clone
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-yd-error shadow-soft"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setDeleteId(id);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
             </article>
           );
         })}
@@ -351,6 +442,17 @@ export function AdminProductsPage() {
         confirmLabel="Delete"
         onClose={() => setDeleteId(null)}
         onConfirm={() => void remove()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Delete selected products"
+        body={`Permanently delete ${selected.length} product${selected.length === 1 ? "" : "s"} from the catalog? Existing orders keep their line-item snapshots.`}
+        confirmLabel="Delete"
+        confirmPending={bulkBusy}
+        onClose={() => {
+          if (!bulkBusy) setBulkDeleteOpen(false);
+        }}
+        onConfirm={() => void bulkDelete()}
       />
     </div>
   );
@@ -1944,22 +2046,47 @@ export function AdminOrderDetailPage() {
       />
       <section className="space-y-2">
         <h2 className="font-display text-lg">Items</h2>
-        {order.items.map((item, index) => (
-          <article key={`${item.productId}-${index}`} className="flex gap-3 rounded-2xl bg-white p-3 shadow-soft">
-            {item.productImage ? (
-              <img src={mediaUrl(item.productImage)} alt="" className="h-16 w-16 rounded-xl object-cover" />
-            ) : (
-              <div className="h-16 w-16 rounded-xl bg-yd-cream" />
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold">{item.productName}</p>
-              <p className="text-sm text-yd-muted">
-                × {item.quantity} · {formatCad(item.totalPrice)}
-              </p>
-              <p className="text-xs capitalize text-yd-muted">{item.fulfillmentStatus.replace(/_/g, " ")}</p>
+        {order.items
+          .filter((item) => !item.parentProductId)
+          .map((item, index) => (
+            <div key={`${item.productId}-${index}`} className="space-y-2">
+              <article className="flex gap-3 rounded-2xl bg-white p-3 shadow-soft">
+                {item.productImage ? (
+                  <img src={mediaUrl(item.productImage)} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                ) : (
+                  <div className="h-16 w-16 rounded-xl bg-yd-cream" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">{item.productName}</p>
+                  <p className="text-sm text-yd-muted">
+                    × {item.quantity} · {formatCad(item.totalPrice)}
+                  </p>
+                  <p className="text-xs capitalize text-yd-muted">{item.fulfillmentStatus.replace(/_/g, " ")}</p>
+                </div>
+              </article>
+              {order.items
+                .filter((child) => child.parentProductId === item.productId)
+                .map((child) => (
+                  <article
+                    key={`${item.productId}-${child.productId}`}
+                    className="ml-6 flex gap-3 rounded-2xl border border-dashed border-yd-border bg-yd-cream/40 p-3"
+                  >
+                    {child.productImage ? (
+                      <img src={mediaUrl(child.productImage)} alt="" className="h-12 w-12 rounded-xl object-cover" />
+                    ) : (
+                      <div className="h-12 w-12 rounded-xl bg-white" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold">{child.productName}</p>
+                      <p className="text-xs text-yd-muted">Included with {item.productName}</p>
+                      <p className="text-sm text-yd-muted">
+                        × {child.quantity} · {formatCad(child.totalPrice)}
+                      </p>
+                    </div>
+                  </article>
+                ))}
             </div>
-          </article>
-        ))}
+          ))}
       </section>
       {address ? (
         <section className="rounded-2xl bg-white p-4 shadow-soft text-sm">
@@ -2653,6 +2780,10 @@ export function AdminSettingsPage() {
           .split(/[\s,]+/)
           .map((item) => item.trim().toUpperCase())
           .filter(Boolean);
+        const orderNotifyEmails = String(form.get("orderNotifyEmails") || "")
+          .split(/[\s,;]+/)
+          .map((item) => item.trim().toLowerCase())
+          .filter((item) => item.includes("@"));
         await adminApi.updateSettings({
           siteName: String(form.get("siteName")),
           currency: String(form.get("currency")),
@@ -2665,6 +2796,7 @@ export function AdminSettingsPage() {
           lowStockDisplayThreshold: Number(form.get("lowStockDisplayThreshold")),
           inStockDisplayThreshold: Number(form.get("inStockDisplayThreshold")),
           supportEmail: String(form.get("supportEmail")),
+          orderNotifyEmails,
           sameDayDeliveryEnabled: form.get("sameDayDeliveryEnabled") === "on",
           sameDayCutoffTime: String(form.get("sameDayCutoffTime") || "16:00"),
           sameDayTimezone: String(form.get("sameDayTimezone") || "America/Edmonton"),
@@ -2706,6 +2838,22 @@ export function AdminSettingsPage() {
       <Input label="Small cart fee (cents)" name="smallCartFeeCents" type="number" defaultValue={String(settings.smallCartFeeCents ?? 199)} />
       <Input label="Small cart threshold (cents)" name="smallCartThresholdCents" type="number" defaultValue={String(settings.smallCartThresholdCents ?? 2500)} />
       <Input label="Support email" name="supportEmail" defaultValue={String(settings.supportEmail || "")} />
+
+      <div className="space-y-3 rounded-2xl border border-yd-border bg-white p-4 shadow-soft">
+        <h2 className="font-display text-lg text-yd-forest">Order notifications</h2>
+        <p className="text-xs text-yd-muted">
+          When a paid order is placed, these people also get an email (in addition to the customer confirmation). Separate
+          addresses with commas.
+        </p>
+        <Input
+          label="Notify emails"
+          name="orderNotifyEmails"
+          defaultValue={
+            Array.isArray(settings.orderNotifyEmails) ? (settings.orderNotifyEmails as string[]).join(", ") : ""
+          }
+          placeholder="you@example.com, suvarna@example.com"
+        />
+      </div>
 
       <div className="space-y-3 rounded-2xl border border-yd-border bg-white p-4 shadow-soft">
         <h2 className="font-display text-lg text-yd-forest">Product stock labels</h2>

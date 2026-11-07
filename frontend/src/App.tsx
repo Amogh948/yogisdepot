@@ -85,12 +85,12 @@ export default function App() {
         <Route path="account/addresses" element={<Navigate to="/addresses" replace />} />
         <Route path="account/notifications" element={<Navigate to="/profile" replace />} />
         <Route path="account/payments" element={<Navigate to="/profile" replace />} />
+        <Route path="cart" element={<CartPage />} />
         <Route element={<GuestRoute />}>
           <Route path="login" element={<LoginPage />} />
           <Route path="register" element={<RegisterPage />} />
         </Route>
         <Route element={<ProtectedRoute roles={["customer", "admin", "vendor"]} />}>
-          <Route path="cart" element={<CartPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="vendors/apply" element={<VendorApplyPage />} />
         </Route>

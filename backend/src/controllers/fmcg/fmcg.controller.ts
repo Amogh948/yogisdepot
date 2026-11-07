@@ -104,6 +104,7 @@ export const productStackUpdateSchema = z.object({
   deliveryEstimateDays: z.number().int().min(1).optional(),
   variants: z.array(stackVariantUpdateSchema).optional(),
   sellIndependently: z.boolean().optional(),
+  addChildPricesToParent: z.boolean().optional(),
   childProducts: z
     .array(
       z.object({
@@ -113,6 +114,10 @@ export const productStackUpdateSchema = z.object({
     )
     .max(30)
     .optional(),
+});
+
+export const productBulkDeleteSchema = z.object({
+  productIds: z.array(z.string().min(1)).min(1).max(200),
 });
 
 export const bulkBrandSchema = z.object({
@@ -143,6 +148,17 @@ export const adminFmcgController = {
       images: body.images as never,
     });
     sendSuccess(res, product, "Product updated");
+  }),
+
+  cloneProduct: asyncHandler(async (req: Request, res: Response) => {
+    const product = await catalogAdminService.cloneProduct(req.params.id);
+    sendSuccess(res, product, "Product cloned", 201);
+  }),
+
+  bulkDeleteProducts: asyncHandler(async (req: Request, res: Response) => {
+    const body = productBulkDeleteSchema.parse(req.body);
+    const result = await catalogAdminService.bulkDeleteProducts(body.productIds);
+    sendSuccess(res, result, "Products deleted");
   }),
 
   downloadProductCsvTemplate: asyncHandler(async (_req: Request, res: Response) => {

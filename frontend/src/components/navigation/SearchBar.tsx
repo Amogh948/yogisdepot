@@ -93,18 +93,23 @@ export function SearchBar({
     };
   }, [open, value, products.length, searching]);
 
+  const collapse = () => {
+    setOpen(false);
+    inputRef.current?.blur();
+  };
+
   const go = (q: string) => {
     const next = q.trim();
     if (!next) return;
     saveRecent(next);
     navigate(`/search?q=${encodeURIComponent(next)}`);
-    setOpen(false);
+    collapse();
   };
 
   const goProduct = (slug: string, name: string) => {
     saveRecent(name);
     navigate(`/products/${slug}`);
-    setOpen(false);
+    collapse();
   };
 
   const submit = (event: FormEvent) => {

@@ -47,6 +47,8 @@ export interface PlatformSettingsDocument extends Document {
   shippingFee?: number;
   freeShippingThreshold?: number;
   supportEmail: string;
+  /** People to notify when a paid order is placed (comma-separated emails in admin UI). */
+  orderNotifyEmails: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -96,6 +98,7 @@ const platformSettingsSchema = new Schema<PlatformSettingsDocument>(
     shippingFee: { type: Number, min: 0 },
     freeShippingThreshold: { type: Number, min: 0 },
     supportEmail: { type: String, default: "support@yogisdepot.com" },
+    orderNotifyEmails: { type: [String], default: [] },
   },
   { timestamps: true },
 );

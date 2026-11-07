@@ -14,11 +14,17 @@ export function AdminProductChildren({ productId }: { productId: string }) {
   const toast = useToastStore((s) => s.push);
   const stack = useQuery({
     queryKey: ["admin-product-stack", productId],
-    queryFn: async () => (await adminApi.productStack(productId)).data as { childProducts?: ChildLink[]; sellIndependently?: boolean },
+    queryFn: async () =>
+      (await adminApi.productStack(productId)).data as {
+        childProducts?: ChildLink[];
+        sellIndependently?: boolean;
+        addChildPricesToParent?: boolean;
+      },
     enabled: Boolean(productId),
   });
   const [links, setLinks] = useState<ChildLink[]>([]);
   const [sellIndependently, setSellIndependently] = useState(true);
+  const [addChildPricesToParent, setAddChildPricesToParent] = useState(true);
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -27,6 +33,7 @@ export function AdminProductChildren({ productId }: { productId: string }) {
     if (!data) return;
     setLinks(data.childProducts || []);
     setSellIndependently(data.sellIndependently !== false);
+    setAddChildPricesToParent(data.addChildPricesToParent !== false);
   }, [stack.data]);
 
   const results = useQuery({
@@ -47,6 +54,7 @@ export function AdminProductChildren({ productId }: { productId: string }) {
     try {
       await adminApi.updateProductStack(productId, {
         sellIndependently,
+        addChildPricesToParent,
         childProducts: links.map((link) => ({ productId: link.productId, quantity: link.quantity })),
       });
       toast("Included products saved");
@@ -62,9 +70,8 @@ export function AdminProductChildren({ productId }: { productId: string }) {
     <section className="space-y-3 rounded-2xl bg-white p-4 shadow-soft">
       <h2 className="font-display text-lg">Included products</h2>
       <p className="text-xs text-yd-muted">
-        When this product is added to the cart, these items are added under it. Customers can only change the parent.
-        The parent keeps its own price, and each included item is charged at its own price. Set the parent to $0 if the
-        kit price should only be the included items, or price a fee on the child if it should be added on top.
+        When this product is added to the cart, these items appear under it on the cart and invoice. Customers can only
+        change the parent quantity.
       </p>
       <label className="flex items-start gap-2 text-sm">
         <input
@@ -74,9 +81,26 @@ export function AdminProductChildren({ productId }: { productId: string }) {
           onChange={(event) => setSellIndependently(event.target.checked)}
         />
         <span>
-          <span className="font-medium">Can be sold on its own</span>
+          <span className="font-medium">Show in catalogue</span>
           <span className="mt-0.5 block text-xs text-yd-muted">
-            Turn this off for fees and kit contents that should only appear when a parent product is added.
+            Turn this off to hide the product from the storefront (e.g. CRF, Deposit). It stays active in the backend and
+            can still be added as an included child on other products.
+          </span>
+        </span>
+      </label>
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={addChildPricesToParent}
+          onChange={(event) => setAddChildPricesToParent(event.target.checked)}
+        />
+        <span>
+          <span className="font-medium">Add component cost to parent cost</span>
+          <span className="mt-0.5 block text-xs text-yd-muted">
+            On: child prices are charged on top of the parent price. Off: the parent price overrides component costs when
+            the parent is priced above $0 (children still show on the cart and invoice at $0). If the parent is $0,
+            child prices are always charged.
           </span>
         </span>
       </label>

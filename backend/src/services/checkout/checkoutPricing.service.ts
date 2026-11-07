@@ -207,6 +207,28 @@ export const checkoutPricingService = {
       }
     }
 
+    // Kit pricing: when a parent opts out of adding child prices, zero the child charges
+    // if the parent itself has a selling price. Children remain on the invoice for display.
+    const parentIds = [
+      ...new Set(lines.map((line) => line.parentProductId).filter(Boolean) as string[]),
+    ];
+    if (parentIds.length) {
+      const parents = await Product.find({ _id: { $in: parentIds } }).select("addChildPricesToParent");
+      const chargeChildren = new Map(
+        parents.map((parent) => [String(parent._id), parent.addChildPricesToParent !== false]),
+      );
+      for (const line of lines) {
+        if (!line.parentProductId) continue;
+        if (chargeChildren.get(line.parentProductId) !== false) continue;
+        const parentLine = lines.find((row) => row.productId === line.parentProductId && !row.parentProductId);
+        if ((parentLine?.unitPriceCents || 0) <= 0) continue;
+        line.unitPriceCents = 0;
+        line.lineTotalCents = 0;
+        line.lineProductDiscountCents = 0;
+        line.mrpCents = 0;
+      }
+    }
+
     const subtotalCents = lines.reduce((s, l) => s + l.lineTotalCents, 0);
     const productDiscountCents = lines.reduce((s, l) => s + l.lineProductDiscountCents, 0);
 

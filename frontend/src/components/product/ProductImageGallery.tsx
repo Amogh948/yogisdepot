@@ -212,13 +212,21 @@ export function ProductImageGallery({
         <div
           ref={trackRef}
           className={`flex aspect-square snap-x snap-mandatory no-scrollbar ${
-            zoomed ? "overflow-hidden touch-none" : "overflow-x-auto scroll-smooth touch-pan-x"
+            zoomed
+              ? "overflow-hidden touch-none"
+              : isDesktop
+                ? "overflow-hidden"
+                : "overflow-x-auto scroll-smooth touch-pan-x"
           } ${zoomed ? (dragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
           onDoubleClick={onDoubleClick}
+          onWheel={(event) => {
+            // Never trap vertical page scroll when the cursor is over the gallery.
+            if (!zoomed && Math.abs(event.deltaY) >= Math.abs(event.deltaX)) return;
+          }}
         >
           {slides.map((src, index) => (
             <div

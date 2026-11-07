@@ -123,6 +123,11 @@ export const adminApi = {
   updateProduct: (id: string, payload: Record<string, unknown>) => unwrap<Product>(api.put(`/admin/products/${id}`, payload)),
   productStatus: (id: string, isActive: boolean) => unwrap<Product>(api.patch(`/admin/products/${id}/status`, { isActive })),
   deleteProduct: (id: string) => unwrap<Product>(api.delete(`/admin/products/${id}`)),
+  bulkDeleteProducts: (productIds: string[]) =>
+    unwrap<{ deleted: number; failed: Array<{ productId: string; message: string }>; total: number }>(
+      api.post("/admin/products/bulk-delete", { productIds }),
+    ),
+  cloneProduct: (id: string) => unwrap<Record<string, unknown>>(api.post(`/admin/products/${id}/clone`)),
   downloadProductCsvTemplate: async () => {
     const response = await api.get("/admin/products/csv-template", { responseType: "blob" });
     return response.data as Blob;

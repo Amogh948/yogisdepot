@@ -5,6 +5,9 @@ export type EmailLineItem = {
   variant?: string;
   quantity: number;
   totalCents: number;
+  /** Present when this line was included by a parent/kit product. */
+  parentProductId?: string;
+  productId?: string;
 };
 
 export type EmailAddress = {
@@ -283,8 +286,12 @@ export function buildOrderConfirmationEmail(input: OrderConfirmationContent): {
   const itemRows = input.items
     .map((item) => {
       const variant = item.variant ? ` · ${esc(item.variant)}` : "";
+      const indent = item.parentProductId ? "padding-left:16px;" : "";
+      const included = item.parentProductId
+        ? `<br /><span style="color:#6F6A63;font-size:12px;">Included with kit</span>`
+        : "";
       return `<tr>
-        <td style="padding:10px 0;border-bottom:1px solid #E7DED2;">${esc(item.name)}${variant}<br /><span style="color:#6F6A63;">Qty ${esc(item.quantity)}</span></td>
+        <td style="padding:10px 0;border-bottom:1px solid #E7DED2;${indent}">${esc(item.name)}${variant}${included}<br /><span style="color:#6F6A63;">Qty ${esc(item.quantity)}</span></td>
         <td style="padding:10px 0;border-bottom:1px solid #E7DED2;text-align:right;white-space:nowrap;">${esc(formatCadCents(item.totalCents))}</td>
       </tr>`;
     })
@@ -325,7 +332,8 @@ export function buildOrderConfirmationEmail(input: OrderConfirmationContent): {
   const textItems = input.items
     .map((item) => {
       const variant = item.variant ? ` (${item.variant})` : "";
-      return `- ${item.name}${variant} × ${item.quantity} — ${formatCadCents(item.totalCents)}`;
+      const prefix = item.parentProductId ? "  · included: " : "- ";
+      return `${prefix}${item.name}${variant} × ${item.quantity} — ${formatCadCents(item.totalCents)}`;
     })
     .join("\n");
   const textBill = rows.map((row) => `${row.label}: ${moneyText(row.cents, row.tone)}`).join("\n");
@@ -350,6 +358,41 @@ export function buildOrderConfirmationEmail(input: OrderConfirmationContent): {
     addressLines(input.address).join("\n"),
     "",
     `View your order: ${input.orderUrl}`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+export function buildStaffOrderNotifyEmail(input: {
+  orderNumber: string;
+  customerName?: string;
+  customerEmail?: string;
+  totalCents: number;
+  itemCount: number;
+  orderUrl: string;
+}): { subject: string; html: string; text: string } {
+  const subject = `New order ${input.orderNumber}`;
+  const who = [input.customerName, input.customerEmail].filter(Boolean).join(" · ") || "Customer";
+  const html = layout({
+    preheader: `New paid order ${input.orderNumber}`,
+    title: "New order placed",
+    innerHtml: `
+      <p style="margin:0 0 12px;">A customer just placed a paid order.</p>
+      <p style="margin:0 0 4px;"><strong>Order ${esc(input.orderNumber)}</strong></p>
+      <p style="margin:0 0 4px;">Customer: ${esc(who)}</p>
+      <p style="margin:0 0 4px;">Items: ${esc(input.itemCount)}</p>
+      <p style="margin:0 0 18px;">Total: ${esc(formatCadCents(input.totalCents))}</p>
+      ${button(input.orderUrl, "Open order")}
+    `,
+  });
+  const text = [
+    "A customer just placed a paid order.",
+    "",
+    `Order ${input.orderNumber}`,
+    `Customer: ${who}`,
+    `Items: ${input.itemCount}`,
+    `Total: ${formatCadCents(input.totalCents)}`,
+    "",
+    `Open order: ${input.orderUrl}`,
   ].join("\n");
   return { subject, html, text };
 }

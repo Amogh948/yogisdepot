@@ -396,17 +396,40 @@ export function OrderDetailPage() {
       </section>
 
       <div className="space-y-3">
-        {order.items.map((item) => (
-          <article key={item.productId} className="flex gap-3 rounded-card border border-yd-border bg-white p-3">
-            {item.productImage ? <img src={mediaUrl(item.productImage)} alt="" className="h-16 w-16 rounded-xl object-cover" /> : null}
-            <div className="flex-1">
-              <p className="font-semibold">{item.productName}</p>
-              <p className="text-sm text-yd-muted">
-                {formatCad(item.unitPrice)} × {item.quantity}
-              </p>
+        {order.items
+          .filter((item) => !item.parentProductId)
+          .map((item) => (
+            <div key={item.productId} className="space-y-2">
+              <article className="flex gap-3 rounded-card border border-yd-border bg-white p-3">
+                {item.productImage ? <img src={mediaUrl(item.productImage)} alt="" className="h-16 w-16 rounded-xl object-cover" /> : null}
+                <div className="flex-1">
+                  <p className="font-semibold">{item.productName}</p>
+                  <p className="text-sm text-yd-muted">
+                    {formatCad(item.unitPrice)} × {item.quantity}
+                  </p>
+                </div>
+              </article>
+              {order.items
+                .filter((child) => child.parentProductId === item.productId)
+                .map((child) => (
+                  <article
+                    key={`${item.productId}-${child.productId}`}
+                    className="ml-6 flex gap-3 rounded-card border border-dashed border-yd-border bg-yd-cream/40 p-3"
+                  >
+                    {child.productImage ? (
+                      <img src={mediaUrl(child.productImage)} alt="" className="h-12 w-12 rounded-xl object-cover" />
+                    ) : null}
+                    <div className="flex-1">
+                      <p className="font-semibold">{child.productName}</p>
+                      <p className="text-xs text-yd-muted">Included with {item.productName}</p>
+                      <p className="text-sm text-yd-muted">
+                        {formatCad(child.unitPrice)} × {child.quantity}
+                      </p>
+                    </div>
+                  </article>
+                ))}
             </div>
-          </article>
-        ))}
+          ))}
       </div>
 
       {["pending", "confirmed"].includes(order.orderStatus) ? (
