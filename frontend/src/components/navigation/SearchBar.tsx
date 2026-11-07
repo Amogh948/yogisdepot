@@ -1,8 +1,7 @@
 import { FormEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { TRENDING_SEARCHES } from "../../content/navigation";
 import { productsApi } from "../../services/api/products.api";
 import { entityId } from "../../types";
 import { formatCad, formatCadFromCents } from "../../utils/money";
@@ -11,6 +10,8 @@ import { productImageUrl } from "../../utils/productImage";
 const RECENTS_KEY = "yd_recent_searches";
 const LIVE_SEARCH_MIN = 2;
 const MOBILE_BREAKPOINT_PX = 1024;
+/** Ignore focus→open for a beat after an intentional collapse (mobile keyboard / autofocus races). */
+const SUPPRESS_OPEN_MS = 500;
 
 export function getRecentSearches(): string[] {
   try {
@@ -34,31 +35,45 @@ function useDebouncedValue(value: string, delayMs: number) {
   return debounced;
 }
 
+function dismissKeyboard(input: HTMLInputElement | null) {
+  input?.blur();
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active !== document.body) {
+    active.blur();
+  }
+}
+
 export function SearchBar({
   autoFocus = false,
   size = "md",
   placeholder = "Search snacks, tea, spices, groceries…",
+  initialQuery = "",
 }: {
   autoFocus?: boolean;
   size?: "md" | "lg";
   placeholder?: string;
+  /** Prefill from the URL without opening the suggestions panel. */
+  initialQuery?: string;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const listboxId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState("");
+  const suppressOpenUntil = useRef(0);
+  const [value, setValue] = useState(initialQuery);
   const [open, setOpen] = useState(false);
   const [mobilePanelTop, setMobilePanelTop] = useState<number | null>(null);
   const typedQuery = value.trim();
   const debouncedQuery = useDebouncedValue(typedQuery, 250);
   const liveQuery = debouncedQuery.length >= LIVE_SEARCH_MIN ? debouncedQuery : "";
   const showLiveResults = typedQuery.length >= LIVE_SEARCH_MIN;
-  const suggestions = getRecentSearches();
+  /** Only show the suggestions panel while the user is typing a query — never empty history/trending. */
+  const panelOpen = open && showLiveResults;
 
   const liveSearch = useQuery({
     queryKey: ["products", "live-search", liveQuery],
     queryFn: () => productsApi.list({ search: liveQuery, limit: 8, sort: "popular" }),
-    enabled: Boolean(liveQuery) && open,
+    enabled: Boolean(liveQuery) && panelOpen,
     placeholderData: (previous) => previous,
     staleTime: 15_000,
   });
@@ -70,8 +85,28 @@ export function SearchBar({
     return formatCad(product.price);
   };
 
+  useEffect(() => {
+    setValue(initialQuery);
+  }, [initialQuery]);
+
+  // When this SearchBar stays mounted across routes (header), close panel + keyboard on navigation.
+  // Skip the first mount so intentional autoFocus on empty /search still works.
+  const routeKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${location.pathname}?${location.search}`;
+    if (routeKeyRef.current === null) {
+      routeKeyRef.current = key;
+      return;
+    }
+    if (routeKeyRef.current === key) return;
+    routeKeyRef.current = key;
+    suppressOpenUntil.current = Date.now() + SUPPRESS_OPEN_MS;
+    setOpen(false);
+    dismissKeyboard(inputRef.current);
+  }, [location.pathname, location.search]);
+
   useLayoutEffect(() => {
-    if (!open) {
+    if (!panelOpen) {
       setMobilePanelTop(null);
       return;
     }
@@ -91,25 +126,26 @@ export function SearchBar({
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
     };
-  }, [open, value, products.length, searching]);
+  }, [panelOpen, value, products.length, searching]);
 
   const collapse = () => {
+    suppressOpenUntil.current = Date.now() + SUPPRESS_OPEN_MS;
     setOpen(false);
-    inputRef.current?.blur();
+    dismissKeyboard(inputRef.current);
   };
 
   const go = (q: string) => {
     const next = q.trim();
     if (!next) return;
     saveRecent(next);
-    navigate(`/search?q=${encodeURIComponent(next)}`);
     collapse();
+    navigate(`/search?q=${encodeURIComponent(next)}`);
   };
 
   const goProduct = (slug: string, name: string) => {
     saveRecent(name);
-    navigate(`/products/${slug}`);
     collapse();
+    navigate(`/products/${slug}`);
   };
 
   const submit = (event: FormEvent) => {
@@ -128,33 +164,58 @@ export function SearchBar({
       <input
         ref={inputRef}
         id="site-search"
+        type="search"
+        enterKeyHint="search"
+        inputMode="search"
         value={value}
         autoFocus={autoFocus}
         autoComplete="off"
         role="combobox"
-        aria-expanded={open}
+        aria-expanded={panelOpen}
         aria-controls={listboxId}
         aria-autocomplete="list"
-        onFocus={() => setOpen(true)}
-        onBlur={() => window.setTimeout(() => setOpen(false), 180)}
+        onFocus={() => {
+          if (Date.now() < suppressOpenUntil.current) {
+            dismissKeyboard(inputRef.current);
+            setOpen(false);
+            return;
+          }
+          // Focus alone must not open local history — only reopen if a live query is already typed.
+          setOpen(typedQuery.length >= LIVE_SEARCH_MIN);
+        }}
+        onBlur={() => {
+          window.setTimeout(() => setOpen(false), 180);
+        }}
         onChange={(event) => {
-          setValue(event.target.value);
-          setOpen(true);
+          const next = event.target.value;
+          setValue(next);
+          if (Date.now() < suppressOpenUntil.current) return;
+          setOpen(next.trim().length >= LIVE_SEARCH_MIN);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            go(value);
+          }
         }}
         placeholder={placeholder}
-        className={`${height} w-full rounded-full border border-yd-border bg-white pl-10 pr-10 text-sm text-yd-ink outline-none ring-yd-green/40 placeholder:text-yd-muted focus:ring-2`}
+        className={`${height} w-full rounded-full border border-yd-border bg-white pl-10 pr-10 text-sm text-yd-ink outline-none ring-yd-green/40 placeholder:text-yd-muted focus:ring-2 [&::-webkit-search-cancel-button]:hidden`}
       />
       {value ? (
         <button
           type="button"
           className="absolute right-3 top-1/2 -translate-y-1/2 touch-target grid place-items-center"
           aria-label="Clear search"
-          onClick={() => setValue("")}
+          onClick={() => {
+            setValue("");
+            setOpen(false);
+            inputRef.current?.focus();
+          }}
         >
           <X className="h-4 w-4 text-yd-muted" />
         </button>
       ) : null}
-      {open ? (
+      {panelOpen ? (
         <div
           id={listboxId}
           role="listbox"
@@ -169,119 +230,65 @@ export function SearchBar({
               : "absolute z-30 mt-2 max-h-[min(70vh,28rem)] w-full overflow-y-auto rounded-card border border-yd-border bg-white p-2 shadow-card"
           }
         >
-          {showLiveResults ? (
-            <div>
-              <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-yd-muted">
-                Products
-              </p>
-              {searching && !products.length ? (
-                <p className="px-3 py-3 text-sm text-yd-muted">Searching…</p>
-              ) : null}
-              {products.length ? (
-                <ul>
-                  {products.map((product) => {
-                    const src = productImageUrl(product);
-                    return (
-                      <li key={entityId(product) || product.slug}>
-                        <button
-                          type="button"
-                          role="option"
-                          className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-yd-bg"
-                          onMouseDown={(event) => {
-                            event.preventDefault();
-                            goProduct(product.slug, product.name);
-                          }}
-                        >
-                          {src ? (
-                            <img
-                              src={src}
-                              alt=""
-                              className="h-11 w-11 shrink-0 rounded-lg bg-yd-cream object-cover"
-                            />
-                          ) : (
-                            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-yd-cream text-xs text-yd-muted">
-                              —
-                            </span>
-                          )}
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-yd-ink">
-                              {product.name}
-                            </span>
-                            <span className="mt-0.5 block truncate text-xs text-yd-muted">
-                              {product.brand || "Yogi's Depot"} · {priceLabel(product)}
-                            </span>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : null}
-              {!searching && liveQuery && !products.length ? (
-                <p className="px-3 py-3 text-sm text-yd-muted">No products match “{typedQuery}”.</p>
-              ) : null}
-              <button
-                type="button"
-                className="mt-1 w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-yd-green hover:bg-yd-bg"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  go(typedQuery);
-                }}
-              >
-                See all results for “{typedQuery}” →
-              </button>
-            </div>
-          ) : (
-            <>
-              {suggestions.length > 0 ? (
-                <div className="mb-2">
-                  <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-yd-muted">
-                    Recent
-                  </p>
-                  <ul>
-                    {suggestions.map((item) => (
-                      <li key={item}>
-                        <button
-                          type="button"
-                          className="w-full rounded-xl px-3 py-2.5 text-left text-sm hover:bg-yd-bg"
-                          onMouseDown={(event) => {
-                            event.preventDefault();
-                            go(item);
-                          }}
-                        >
-                          {item}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-yd-muted">
-                Trending
-              </p>
-              <ul>
-                {TRENDING_SEARCHES.map((item) => (
-                  <li key={item}>
+          <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-yd-muted">
+            Products
+          </p>
+          {searching && !products.length ? (
+            <p className="px-3 py-3 text-sm text-yd-muted">Searching…</p>
+          ) : null}
+          {products.length ? (
+            <ul>
+              {products.map((product) => {
+                const src = productImageUrl(product);
+                return (
+                  <li key={entityId(product) || product.slug}>
                     <button
                       type="button"
-                      className="w-full rounded-xl px-3 py-2.5 text-left text-sm hover:bg-yd-bg"
-                      onMouseDown={(event) => {
+                      role="option"
+                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-yd-bg"
+                      onPointerDown={(event) => {
                         event.preventDefault();
-                        go(item);
+                        goProduct(product.slug, product.name);
                       }}
                     >
-                      {item}
+                      {src ? (
+                        <img
+                          src={src}
+                          alt=""
+                          className="h-11 w-11 shrink-0 rounded-lg bg-yd-cream object-cover"
+                        />
+                      ) : (
+                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-yd-cream text-xs text-yd-muted">
+                          —
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-yd-ink">
+                          {product.name}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-yd-muted">
+                          {product.brand || "Yogi's Depot"} · {priceLabel(product)}
+                        </span>
+                      </span>
                     </button>
                   </li>
-                ))}
-              </ul>
-              {typedQuery.length > 0 && typedQuery.length < LIVE_SEARCH_MIN ? (
-                <p className="mt-1 px-3 py-2 text-xs text-yd-muted">
-                  Type at least {LIVE_SEARCH_MIN} characters to see products
-                </p>
-              ) : null}
-            </>
-          )}
+                );
+              })}
+            </ul>
+          ) : null}
+          {!searching && liveQuery && !products.length ? (
+            <p className="px-3 py-3 text-sm text-yd-muted">No products match “{typedQuery}”.</p>
+          ) : null}
+          <button
+            type="button"
+            className="mt-1 w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-yd-green hover:bg-yd-bg"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              go(typedQuery);
+            }}
+          >
+            See all results for “{typedQuery}” →
+          </button>
         </div>
       ) : null}
     </form>

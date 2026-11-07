@@ -166,7 +166,8 @@ export function ProductListingPage({ mode }: { mode: "all" | "search" | "categor
 
       {mode === "search" ? (
         <div className="mb-4 w-full space-y-4">
-          <SearchBar autoFocus />
+          {/* Only autofocus empty search — submitting with a query must not reopen the keyboard/history. */}
+          <SearchBar autoFocus={!query} initialQuery={query} />
           {!query ? (
             <div className="rounded-card border border-yd-border bg-white p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-yd-muted">Trending searches</p>
