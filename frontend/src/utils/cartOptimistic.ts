@@ -5,8 +5,18 @@ export function emptyCart(): Cart {
   return { id: "optimistic", items: [], subtotal: 0, itemCount: 0 };
 }
 
-function childCartLine(parentId: string, child: NonNullable<Product["childProducts"]>[number], quantity: number) {
-  const price = child.price ?? 0;
+function childChargePrice(parent: Product, childPrice: number): number {
+  if (parent.addChildPricesToParent === false && (parent.price ?? 0) > 0) return 0;
+  return childPrice;
+}
+
+function childCartLine(
+  parent: Product,
+  parentId: string,
+  child: NonNullable<Product["childProducts"]>[number],
+  quantity: number,
+) {
+  const price = childChargePrice(parent, child.price ?? 0);
   return {
     productId: child.productId,
     parentProductId: parentId,
@@ -61,7 +71,7 @@ export function applyOptimisticCart(cart: Cart, product: Product, quantity: numb
     if (children.length) {
       for (const child of children) {
         const per = Math.max(1, Math.floor(child.quantity) || 1);
-        items.push(childCartLine(id, child, quantity * per));
+        items.push(childCartLine(product, id, child, quantity * per));
       }
     } else {
       items.push(...cart.items.filter((item) => item.parentProductId === id));

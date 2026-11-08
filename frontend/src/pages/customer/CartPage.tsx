@@ -143,19 +143,31 @@ export function CartPage() {
 
   if (user && cart.isLoading && !cart.data) return <Skeleton className="h-48" />;
 
+  const guestUnitPrice = (item: (typeof guestItems)[number]) => {
+    if (!item.parentProductId) return item.price ?? 0;
+    const parent = guestItems.find((row) => row.productId === item.parentProductId && !row.parentProductId);
+    if (parent && parent.addChildPricesToParent === false && (parent.price ?? 0) > 0) return 0;
+    return item.price ?? 0;
+  };
+
   const data = user
     ? cart.data?.data
     : {
-        items: guestItems.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          lineTotal: (item.price ?? 0) * item.quantity,
-          inStock: true,
-          parentProductId: item.parentProductId,
-          locked: Boolean(item.parentProductId),
-          product: guestAsProduct(item, guestItems),
-        })),
-        subtotal: guestItems.reduce((sum, item) => sum + (item.price ?? 0) * item.quantity, 0),
+        items: guestItems.map((item) => {
+          const unit = guestUnitPrice(item);
+          const product = guestAsProduct(item, guestItems);
+          product.price = unit;
+          return {
+            productId: item.productId,
+            quantity: item.quantity,
+            lineTotal: unit * item.quantity,
+            inStock: true,
+            parentProductId: item.parentProductId,
+            locked: Boolean(item.parentProductId),
+            product,
+          };
+        }),
+        subtotal: guestItems.reduce((sum, item) => sum + guestUnitPrice(item) * item.quantity, 0),
         itemCount: guestItems.reduce((sum, item) => sum + item.quantity, 0),
       };
 

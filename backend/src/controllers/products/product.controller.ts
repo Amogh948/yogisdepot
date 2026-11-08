@@ -71,6 +71,7 @@ async function attachChildProductSummaries(products: ProductDocument[], jsons: R
     const product = products[index];
     const links = product?.childProducts || [];
     json.sellIndependently = product?.sellIndependently !== false;
+    json.addChildPricesToParent = product?.addChildPricesToParent !== false;
     json.childProducts = links.map((link) => {
       const child = byId.get(String(link.productId));
       const firstImage = child?.images?.[0];

@@ -141,6 +141,37 @@ export const cartService = {
       }
     }
 
+    // Kit pricing: when a parent opts out of adding child prices, zero child charges
+    // if the parent itself has a selling price. Children remain visible in the cart.
+    const parentIds = [
+      ...new Set(items.map((item) => item.parentProductId).filter(Boolean) as string[]),
+    ];
+    if (parentIds.length) {
+      const parents = await Product.find({ _id: { $in: parentIds } }).select("addChildPricesToParent");
+      const chargeChildren = new Map(
+        parents.map((parent) => [String(parent._id), parent.addChildPricesToParent !== false]),
+      );
+      for (const item of items) {
+        if (!item.parentProductId) continue;
+        if (chargeChildren.get(item.parentProductId) !== false) continue;
+        const parentLine = items.find((row) => row.productId === item.parentProductId && !row.parentProductId);
+        const parentUnitCents =
+          parentLine && "offer" in parentLine && parentLine.offer
+            ? Number((parentLine.offer as { sellingPriceCents?: number }).sellingPriceCents || 0)
+            : Math.round(Number(parentLine?.product?.price ?? 0) * 100);
+        if (parentUnitCents <= 0) continue;
+        item.lineTotal = 0;
+        item.lineTotalCents = 0;
+        if (item.product && typeof item.product === "object") {
+          (item.product as { price?: number }).price = 0;
+        }
+        if (item.offer && typeof item.offer === "object") {
+          (item.offer as { price?: number; sellingPriceCents?: number }).price = 0;
+          (item.offer as { sellingPriceCents?: number }).sellingPriceCents = 0;
+        }
+      }
+    }
+
     const subtotalCents = items.reduce((sum, item) => sum + (item.lineTotalCents || 0), 0);
     return {
       id: cart.id,

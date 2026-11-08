@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type TouchEvent } from "react";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { mediaUrl } from "../../types";
 
@@ -6,6 +6,8 @@ const AUTOPLAY_MS = 4000;
 const ZOOM_MIN = 1;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.5;
+/** Horizontal swipe must beat this (px) and dominate vertical movement to change slides. */
+const SWIPE_THRESHOLD_PX = 40;
 
 function clampPan(
   x: number,
@@ -39,6 +41,7 @@ export function ProductImageGallery({
     originX: number;
     originY: number;
   } | null>(null);
+  const swipeRef = useRef<{ x: number; y: number } | null>(null);
 
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -69,6 +72,15 @@ export function ProductImageGallery({
     setPan((prev) => clampPan(prev.x, prev.y, next, width, height));
   };
 
+  const goTo = (index: number, behavior: ScrollBehavior = "smooth") => {
+    const el = trackRef.current;
+    if (!el || !slides.length) return;
+    const total = slides.length;
+    const next = ((index % total) + total) % total;
+    el.scrollTo({ left: next * el.clientWidth, behavior });
+    setActive(next);
+  };
+
   useEffect(() => {
     setActive(0);
     resetZoom();
@@ -89,30 +101,6 @@ export function ProductImageGallery({
   }, []);
 
   useEffect(() => {
-    const el = trackRef.current;
-    if (!el || zoomed) return;
-
-    const onScroll = () => {
-      const width = el.clientWidth;
-      if (!width) return;
-      const next = Math.round(el.scrollLeft / width);
-      setActive(Math.min(Math.max(next, 0), Math.max(slides.length - 1, 0)));
-    };
-
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [slides.length, zoomed]);
-
-  const goTo = (index: number, behavior: ScrollBehavior = "smooth") => {
-    const el = trackRef.current;
-    if (!el || !slides.length) return;
-    const total = slides.length;
-    const next = ((index % total) + total) % total;
-    el.scrollTo({ left: next * el.clientWidth, behavior });
-    setActive(next);
-  };
-
-  useEffect(() => {
     if (!isDesktop || paused || zoomed || slides.length <= 1) return;
     const reduced =
       typeof window.matchMedia === "function" &&
@@ -126,6 +114,7 @@ export function ProductImageGallery({
       const current = Math.round(el.scrollLeft / width);
       const next = (current + 1) % slides.length;
       el.scrollTo({ left: next * width, behavior: "smooth" });
+      setActive(next);
     }, AUTOPLAY_MS);
     return () => window.clearInterval(timer);
   }, [isDesktop, paused, zoomed, slides.length]);
@@ -170,6 +159,28 @@ export function ProductImageGallery({
     }
   };
 
+  const onTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    if (zoomed || event.touches.length !== 1) {
+      swipeRef.current = null;
+      return;
+    }
+    swipeRef.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+  };
+
+  const onTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    if (!start || zoomed || slides.length <= 1) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    // Vertical (or diagonal-vertical) gestures must scroll the page, not the gallery.
+    if (Math.abs(dx) < SWIPE_THRESHOLD_PX || Math.abs(dx) <= Math.abs(dy)) return;
+    if (dx < 0) goTo(active + 1);
+    else goTo(active - 1);
+  };
+
   const onDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     const el = stageRef.current;
     if (!el) return;
@@ -211,22 +222,17 @@ export function ProductImageGallery({
       >
         <div
           ref={trackRef}
-          className={`flex aspect-square snap-x snap-mandatory no-scrollbar ${
-            zoomed
-              ? "overflow-hidden touch-none"
-              : isDesktop
-                ? "overflow-hidden"
-                : "overflow-x-auto scroll-smooth touch-pan-x"
-          } ${zoomed ? (dragging ? "cursor-grabbing" : "cursor-grab") : ""}`}
+          className={`flex aspect-square snap-x snap-mandatory overflow-hidden no-scrollbar ${
+            zoomed ? (dragging ? "cursor-grabbing touch-none" : "cursor-grab touch-none") : ""
+          }`}
+          style={{ touchAction: zoomed ? "none" : "pan-y" }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
           onDoubleClick={onDoubleClick}
-          onWheel={(event) => {
-            // Never trap vertical page scroll when the cursor is over the gallery.
-            if (!zoomed && Math.abs(event.deltaY) >= Math.abs(event.deltaX)) return;
-          }}
         >
           {slides.map((src, index) => (
             <div

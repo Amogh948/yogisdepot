@@ -224,8 +224,19 @@ export function useCommerceActions() {
           image: productImageUrl(product),
           name: product.name,
           price: product.price,
+          addChildPricesToParent: product.addChildPricesToParent !== false,
         });
-        syncGuestChildren(id, previousQty + quantity, product.childProducts || []);
+        syncGuestChildren(
+          id,
+          previousQty + quantity,
+          (product.childProducts || []).map((child) => ({
+            ...child,
+            price:
+              product.addChildPricesToParent === false && (product.price ?? 0) > 0
+                ? 0
+                : child.price,
+          })),
+        );
         return { guest: true as const };
       }
 
@@ -298,8 +309,19 @@ export function useCommerceActions() {
           image: productImageUrl(product),
           name: product.name,
           price: product.price,
+          addChildPricesToParent: product.addChildPricesToParent !== false,
         });
-        syncGuestChildren(id, quantity, product.childProducts || []);
+        syncGuestChildren(
+          id,
+          quantity,
+          (product.childProducts || []).map((child) => ({
+            ...child,
+            price:
+              product.addChildPricesToParent === false && (product.price ?? 0) > 0
+                ? 0
+                : child.price,
+          })),
+        );
         return { guest: true as const };
       }
 

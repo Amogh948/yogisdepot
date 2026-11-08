@@ -8,6 +8,8 @@ export interface GuestCartItemMeta {
   /** Unit price in dollars — used for guest free-delivery threshold checks. */
   price?: number;
   parentProductId?: string;
+  /** Copied from parent product when this is a standalone kit line. */
+  addChildPricesToParent?: boolean;
 }
 
 export interface GuestCartItem extends GuestCartItemMeta {
@@ -42,6 +44,9 @@ function applyMeta(item: GuestCartItem, meta?: GuestCartItemMeta) {
   if (meta.name) item.name = meta.name;
   if (typeof meta.price === "number" && Number.isFinite(meta.price)) item.price = meta.price;
   if (meta.parentProductId) item.parentProductId = meta.parentProductId;
+  if (typeof meta.addChildPricesToParent === "boolean") {
+    item.addChildPricesToParent = meta.addChildPricesToParent;
+  }
 }
 
 interface GuestCartState {
