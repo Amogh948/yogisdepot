@@ -1034,7 +1034,10 @@ export function CheckoutPage() {
       <aside className="h-fit rounded-[14px] border border-yd-border bg-white p-4 shadow-soft lg:sticky lg:top-28">
         <h2 className="font-display text-xl text-yd-forest">Order summary</h2>
         <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
-          {cartData.items.slice(0, 4).map((item) => {
+          {cartData.items
+            .filter((item) => !item.parentProductId)
+            .slice(0, 4)
+            .map((item) => {
             const src = mediaUrl(item.product.thumbnail || item.product.images[0]);
             const qty = Math.max(1, Number(item.quantity) || 1);
             return (

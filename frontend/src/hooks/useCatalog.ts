@@ -48,12 +48,16 @@ export function useCartQuantity(productId: string): number {
   return guestItems.find((item) => item.productId === productId && !item.parentProductId)?.quantity ?? 0;
 }
 
+function parentGuestCount(items: { quantity: number; parentProductId?: string }[]): number {
+  return items.filter((item) => !item.parentProductId).reduce((sum, item) => sum + item.quantity, 0);
+}
+
 export function useCartItemCount(): number {
   const user = useAuthStore((s) => s.user);
   const cart = useCart();
   const guestItems = useGuestCartStore((s) => s.items);
   if (user) return cart.data?.data.itemCount ?? 0;
-  return guestItems.reduce((sum, item) => sum + item.quantity, 0);
+  return parentGuestCount(guestItems);
 }
 
 export interface ViewCartSummary {
@@ -81,7 +85,13 @@ export function useCartSubtotal(): { ready: boolean; subtotal: number } {
 
   return {
     ready: true,
-    subtotal: guestItems.reduce((sum, item) => sum + (item.price ?? 0) * item.quantity, 0),
+    subtotal: guestItems.reduce((sum, item) => {
+      if (item.parentProductId) {
+        const parent = guestItems.find((row) => row.productId === item.parentProductId && !row.parentProductId);
+        if (parent && parent.addChildPricesToParent === false && (parent.price ?? 0) > 0) return sum;
+      }
+      return sum + (item.price ?? 0) * item.quantity;
+    }, 0),
   };
 }
 
@@ -106,6 +116,7 @@ export function useViewCartSummary(): ViewCartSummary {
       ready: true,
       itemCount: data?.itemCount ?? 0,
       thumbnails: items
+        .filter((item) => !item.parentProductId)
         .map((item) => productImageUrl(item.product))
         .filter(Boolean)
         .slice(0, 3),
@@ -115,8 +126,12 @@ export function useViewCartSummary(): ViewCartSummary {
 
   return {
     ready: true,
-    itemCount: guestItems.reduce((sum, item) => sum + item.quantity, 0),
-    thumbnails: guestItems.map((item) => item.image || "").filter(Boolean).slice(0, 3),
+    itemCount: parentGuestCount(guestItems),
+    thumbnails: guestItems
+      .filter((item) => !item.parentProductId)
+      .map((item) => item.image || "")
+      .filter(Boolean)
+      .slice(0, 3),
     subtotal: null,
   };
 }

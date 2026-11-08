@@ -14,6 +14,9 @@ import { Skeleton, SectionHeader } from "../../components/ui/Feedback";
 import { useCommerceActions } from "../../hooks/useCommerceActions";
 import { HomeFestivalStoreSection } from "../../components/discovery/HomeFestivalStoreSection";
 import { SameDayDeliveryBanner } from "../../components/commerce/SameDayDeliveryBanner";
+import { useFreeDeliveryThreshold } from "../../hooks/useSettings";
+import { formatCad } from "../../utils/money";
+
 const TRUST_DESKTOP = [
   { icon: Leaf, label: "Authentic & Fresh" },
   { icon: ShieldCheck, label: "Trusted Local Makers" },
@@ -33,6 +36,7 @@ const SECTION_SEE_ALL: Partial<Record<"bestsellers" | "deals" | "featured" | "ne
 };
 
 export function HomePage() {
+  const { ready: thresholdReady, threshold: freeDeliveryThreshold } = useFreeDeliveryThreshold();
   const homeSections = useQuery({
     queryKey: ["home-sections"],
     queryFn: () => homeSectionsApi.list(),
@@ -226,7 +230,13 @@ export function HomePage() {
       <div className="rounded-[14px] bg-yd-saffron px-5 py-5 text-center text-white sm:flex sm:items-center sm:justify-between sm:text-left">
         <div>
           <p className="font-display text-xl sm:text-2xl">Wholesome food. Happier homes.</p>
-          <p className="mt-0.5 text-sm text-white/90">Free delivery on orders over $75</p>
+          <p className="mt-0.5 text-sm text-white/90">
+            {!thresholdReady
+              ? "Free delivery available"
+              : freeDeliveryThreshold <= 0
+                ? "Free delivery on all orders"
+                : `Free delivery on orders over ${formatCad(freeDeliveryThreshold)}`}
+          </p>
         </div>
         <Link to="/products" className="mt-3 inline-flex min-h-10 items-center rounded-full bg-yd-green px-5 text-sm font-bold text-white hover:bg-yd-green-dark sm:mt-0">
           Shop Now

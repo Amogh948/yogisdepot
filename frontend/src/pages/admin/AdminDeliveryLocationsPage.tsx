@@ -83,16 +83,18 @@ export function AdminDeliveryLocationsPage() {
         }
       />
       <p className="mb-4 text-sm text-yd-muted">
-        Configure postal codes, covered area names, and standard + Superfast delivery fees. Checkout matches the
-        customer postal code and applies that area&apos;s fees.
+        Configure postal codes, covered area names, delivery fees, and same-day cutoffs. Checkout matches the customer
+        postal code and applies that area&apos;s fee (including tax). Same-day timers use each area&apos;s cutoff.
       </p>
       <section className="mb-5 rounded-2xl border border-yd-border/60 bg-white p-4 shadow-soft sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="font-semibold text-yd-ink">Import from CSV</p>
             <p className="mt-0.5 text-sm text-yd-muted">
-              Fees are in cents. Separate area names with a pipe, for example Woodbine|Woodlands. A matching postal
-              prefix is updated.
+              Template columns: Area Names, Zip Code, Delivery Fee (cents), Same-Day Delivery Cutoff (HH:mm), plus
+              optional same-day enabled, superfast fee, city, province, and active. Separate area names with a pipe
+              (Woodbine|Woodlands). Matching zip prefixes are updated; blank fee or cutoff cells keep the existing
+              values. New areas require a delivery fee; blank cutoff defaults to 16:00.
             </p>
           </div>
           <button
@@ -169,6 +171,12 @@ export function AdminDeliveryLocationsPage() {
                     · {formatCadFromCents(item.superfastDeliveryFeeCents ?? 999)} Superfast
                   </span>
                 </p>
+                <p className="text-xs text-yd-muted">
+                  Same-day cutoff{" "}
+                  {item.sameDayEnabled === false
+                    ? "off"
+                    : item.sameDayCutoffTime || "16:00"}
+                </p>
                 <Badge tone={item.isActive ? "sage" : "muted"}>{item.isActive ? "Active" : "Inactive"}</Badge>
               </Link>
               <button
@@ -224,12 +232,16 @@ export function AdminDeliveryLocationFormPage() {
     areaNames: string[];
     deliveryFeeCents: number | "";
     superfastDeliveryFeeCents: number | "";
+    sameDayEnabled: boolean;
+    sameDayCutoffTime: string;
     isActive: boolean;
   }>({
     postalCodePrefix: "",
     areaNames: [""],
     deliveryFeeCents: 499,
     superfastDeliveryFeeCents: 999,
+    sameDayEnabled: true,
+    sameDayCutoffTime: "16:00",
     isActive: true,
   });
 
@@ -241,6 +253,8 @@ export function AdminDeliveryLocationFormPage() {
       areaNames: data.areaNames?.length ? [...data.areaNames] : [""],
       deliveryFeeCents: data.deliveryFeeCents ?? 499,
       superfastDeliveryFeeCents: data.superfastDeliveryFeeCents ?? 999,
+      sameDayEnabled: data.sameDayEnabled !== false,
+      sameDayCutoffTime: data.sameDayCutoffTime || "16:00",
       isActive: data.isActive !== false,
     });
   }, [existing.data]);
@@ -284,11 +298,18 @@ export function AdminDeliveryLocationFormPage() {
     }
     setSaving(true);
     try {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(form.sameDayCutoffTime.trim())) {
+        toast("Same-day cutoff must use HH:mm (24-hour)", "error");
+        setSaving(false);
+        return;
+      }
       const payload = {
         postalCodePrefix: form.postalCodePrefix.trim().toUpperCase(),
         areaNames: cleanedAreaNames,
         deliveryFeeCents: feeCents,
         superfastDeliveryFeeCents: superfastFeeCents,
+        sameDayEnabled: form.sameDayEnabled,
+        sameDayCutoffTime: form.sameDayCutoffTime.trim(),
         province: "AB",
         city: "Calgary",
         country: "Canada",
@@ -394,6 +415,27 @@ export function AdminDeliveryLocationFormPage() {
           Added on top of the standard fee (or free-shipping base) for this postal area. Preview:{" "}
           {form.superfastDeliveryFeeCents === "" ? "—" : formatCadFromCents(superfastFeeCents)}
         </p>
+        <div className="space-y-2 rounded-xl border border-yd-border/70 bg-yd-cream/40 p-3">
+          <p className="text-sm font-semibold text-yd-ink">Same-day cutoff for this postal code</p>
+          <p className="text-xs text-yd-muted">
+            Order-by time for same-day vs next-day promises in this postal area (America/Edmonton).
+          </p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.sameDayEnabled}
+              onChange={(e) => setForm((p) => ({ ...p, sameDayEnabled: e.target.checked }))}
+            />
+            Enable same-day delivery for this area
+          </label>
+          <Input
+            label="Cutoff time (24h HH:mm)"
+            value={form.sameDayCutoffTime}
+            onChange={(e) => setForm((p) => ({ ...p, sameDayCutoffTime: e.target.value }))}
+            placeholder="16:00"
+            disabled={!form.sameDayEnabled}
+          />
+        </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.isActive} onChange={(e) => setForm((p) => ({ ...p, isActive: e.target.checked }))} />{" "}
           Active

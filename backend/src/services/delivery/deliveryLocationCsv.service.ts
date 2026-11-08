@@ -2,15 +2,62 @@ import { parse } from "csv-parse/sync";
 import { BadRequestError } from "../../errors/AppError";
 import { deliveryLocationService } from "./deliveryLocation.service";
 
+/** Canonical column keys used after header normalization. */
 export const DELIVERY_CSV_HEADERS = [
-  "postalCodePrefix",
   "areaNames",
+  "postalCodePrefix",
   "deliveryFeeCents",
+  "sameDayCutoffTime",
+  "sameDayEnabled",
   "superfastDeliveryFeeCents",
   "city",
   "province",
   "isActive",
 ] as const;
+
+export type DeliveryCsvHeader = (typeof DELIVERY_CSV_HEADERS)[number];
+
+/** Human-readable headers written to the downloadable template. */
+export const DELIVERY_CSV_TEMPLATE_HEADERS = [
+  "Area Names",
+  "Zip Code",
+  "Delivery Fee (cents)",
+  "Same-Day Delivery Cutoff",
+  "Same-Day Enabled",
+  "Superfast Delivery Fee (cents)",
+  "City",
+  "Province",
+  "Active",
+] as const;
+
+/**
+ * Maps normalized (lowercase, alphanumeric-only) header labels to canonical keys.
+ * Accepts both the template labels and legacy camelCase column names.
+ */
+const HEADER_ALIASES: Record<string, DeliveryCsvHeader> = {
+  areanames: "areaNames",
+  areaname: "areaNames",
+  area: "areaNames",
+  postalcodeprefix: "postalCodePrefix",
+  postalcode: "postalCodePrefix",
+  zipcode: "postalCodePrefix",
+  zip: "postalCodePrefix",
+  deliveryfeecents: "deliveryFeeCents",
+  deliveryfee: "deliveryFeeCents",
+  samedaycutofftime: "sameDayCutoffTime",
+  samedaydeliverycutoff: "sameDayCutoffTime",
+  samedaycutoff: "sameDayCutoffTime",
+  cutoff: "sameDayCutoffTime",
+  samedayenabled: "sameDayEnabled",
+  sameday: "sameDayEnabled",
+  superfastdeliveryfeecents: "superfastDeliveryFeeCents",
+  superfastdeliveryfee: "superfastDeliveryFeeCents",
+  superfastfee: "superfastDeliveryFeeCents",
+  city: "city",
+  province: "province",
+  isactive: "isActive",
+  active: "isActive",
+};
 
 type CsvRow = Record<string, string>;
 
@@ -21,6 +68,16 @@ export type DeliveryCsvRowResult = {
   ok: boolean;
   errors: string[];
 };
+
+function normalizeHeaderKey(header: string): string {
+  return header.trim().replace(/^\uFEFF/, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function normalizeHeader(header: string): string {
+  const trimmed = header.trim().replace(/^\uFEFF/, "");
+  const alias = HEADER_ALIASES[normalizeHeaderKey(trimmed)];
+  return alias || trimmed;
+}
 
 function parseBool(value: string | undefined, fallback: boolean): boolean {
   if (value == null || value.trim() === "") return fallback;
@@ -45,10 +102,14 @@ function areaNames(value: string | undefined): string[] {
   return [...new Set(value.split("|").map((part) => part.trim()).filter(Boolean))];
 }
 
+function rowValue(row: CsvRow, key: DeliveryCsvHeader): string | undefined {
+  return row[key];
+}
+
 export const deliveryLocationCsvService = {
   templateCsv() {
-    return `${DELIVERY_CSV_HEADERS.join(",")}
-T2W,Woodbine|Woodlands,499,999,Calgary,AB,true
+    return `${DELIVERY_CSV_TEMPLATE_HEADERS.join(",")}
+Woodbine|Woodlands,T2W,499,16:00,true,999,Calgary,AB,true
 `;
   },
 
@@ -56,7 +117,7 @@ T2W,Woodbine|Woodlands,499,999,Calgary,AB,true
     let records: CsvRow[];
     try {
       records = parse(buffer, {
-        columns: (header: string[]) => header.map((column) => column.trim()),
+        columns: (header: string[]) => header.map(normalizeHeader),
         skip_empty_lines: true,
         trim: true,
         bom: true,
@@ -67,7 +128,9 @@ T2W,Woodbine|Woodlands,499,999,Calgary,AB,true
     if (!records.length) throw new BadRequestError("The CSV has no data rows");
     const headers = Object.keys(records[0] || {});
     if (!headers.includes("postalCodePrefix") || !headers.includes("areaNames")) {
-      throw new BadRequestError("CSV must include postalCodePrefix and areaNames columns");
+      throw new BadRequestError(
+        "CSV must include Zip Code (postalCodePrefix) and Area Names (areaNames) columns",
+      );
     }
 
     const results: DeliveryCsvRowResult[] = [];
@@ -82,17 +145,32 @@ T2W,Woodbine|Woodlands,499,999,Calgary,AB,true
       const row = records[index];
       const rowNumber = index + 2;
       const errors: string[] = [];
-      const postalCodePrefix = row.postalCodePrefix?.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-      const names = areaNames(row.areaNames);
-      const deliveryFeeCents = parseCents(row.deliveryFeeCents, "deliveryFeeCents", errors);
-      const superfastDeliveryFeeCents = parseCents(row.superfastDeliveryFeeCents, "superfastDeliveryFeeCents", errors);
-      if (!postalCodePrefix) errors.push("postalCodePrefix is required");
+      const postalCodePrefix = rowValue(row, "postalCodePrefix")
+        ?.trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
+      const names = areaNames(rowValue(row, "areaNames"));
+      const deliveryFeeCents = parseCents(rowValue(row, "deliveryFeeCents"), "deliveryFeeCents", errors);
+      const superfastDeliveryFeeCents = parseCents(
+        rowValue(row, "superfastDeliveryFeeCents"),
+        "superfastDeliveryFeeCents",
+        errors,
+      );
+      const sameDayCutoffRaw = rowValue(row, "sameDayCutoffTime")?.trim() || "";
+      if (sameDayCutoffRaw && !/^([01]\d|2[0-3]):[0-5]\d$/.test(sameDayCutoffRaw)) {
+        errors.push("sameDayCutoffTime must use HH:mm 24-hour time (e.g. 16:00)");
+      }
+      if (!postalCodePrefix) errors.push("postalCodePrefix (Zip Code) is required");
       if (!names.length) errors.push("areaNames is required. Separate names with |");
 
       const existing = postalCodePrefix ? existingByPrefix.get(postalCodePrefix) : undefined;
       if (!existing) {
-        if (deliveryFeeCents == null) errors.push("deliveryFeeCents is required for a new area");
-        if (superfastDeliveryFeeCents == null) errors.push("superfastDeliveryFeeCents is required for a new area");
+        if (deliveryFeeCents == null) {
+          errors.push("deliveryFeeCents (Delivery Fee) is required for a new area");
+        }
+        if (superfastDeliveryFeeCents == null) {
+          errors.push("superfastDeliveryFeeCents is required for a new area");
+        }
       }
 
       if (errors.length || !postalCodePrefix) {
@@ -102,13 +180,18 @@ T2W,Woodbine|Woodlands,499,999,Calgary,AB,true
       }
 
       const action = existing ? "update" : "create";
+      const sameDayEnabledRaw = rowValue(row, "sameDayEnabled");
+      const cityRaw = rowValue(row, "city");
+      const provinceRaw = rowValue(row, "province");
+      const isActiveRaw = rowValue(row, "isActive");
+
       if (!options.commit) {
         if (action === "create") {
           created += 1;
           existingByPrefix.set(postalCodePrefix, {
             _id: `preview-${postalCodePrefix}`,
             postalCodePrefix,
-            isActive: parseBool(row.isActive, true),
+            isActive: parseBool(isActiveRaw, true),
           } as never);
         } else updated += 1;
         results.push({ rowNumber, action, postalCodePrefix, ok: true, errors: [] });
@@ -117,14 +200,19 @@ T2W,Woodbine|Woodlands,499,999,Calgary,AB,true
 
       try {
         if (existing) {
+          // Blank optional cells keep the existing area values (fee, cutoff, flags).
           await deliveryLocationService.update(String(existing._id), {
             postalCodePrefix,
             areaNames: names,
             ...(deliveryFeeCents != null ? { deliveryFeeCents } : {}),
             ...(superfastDeliveryFeeCents != null ? { superfastDeliveryFeeCents } : {}),
-            ...(row.city?.trim() ? { city: row.city.trim() } : {}),
-            ...(row.province?.trim() ? { province: row.province.trim() } : {}),
-            isActive: parseBool(row.isActive, existing.isActive),
+            ...(sameDayCutoffRaw ? { sameDayCutoffTime: sameDayCutoffRaw } : {}),
+            ...(sameDayEnabledRaw != null && sameDayEnabledRaw.trim() !== ""
+              ? { sameDayEnabled: parseBool(sameDayEnabledRaw, true) }
+              : {}),
+            ...(cityRaw?.trim() ? { city: cityRaw.trim() } : {}),
+            ...(provinceRaw?.trim() ? { province: provinceRaw.trim() } : {}),
+            isActive: parseBool(isActiveRaw, existing.isActive),
           });
           updated += 1;
         } else {
@@ -133,9 +221,11 @@ T2W,Woodbine|Woodlands,499,999,Calgary,AB,true
             areaNames: names,
             deliveryFeeCents: deliveryFeeCents!,
             superfastDeliveryFeeCents: superfastDeliveryFeeCents!,
-            city: row.city?.trim() || undefined,
-            province: row.province?.trim() || undefined,
-            isActive: parseBool(row.isActive, true),
+            sameDayCutoffTime: sameDayCutoffRaw || "16:00",
+            sameDayEnabled: parseBool(sameDayEnabledRaw, true),
+            city: cityRaw?.trim() || undefined,
+            province: provinceRaw?.trim() || undefined,
+            isActive: parseBool(isActiveRaw, true),
           });
           existingByPrefix.set(postalCodePrefix, createdRow);
           created += 1;

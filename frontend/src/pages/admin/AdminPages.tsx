@@ -10,7 +10,7 @@ import { Badge, EmptyState, Skeleton } from "../../components/ui/Feedback";
 import { entityId, mediaUrl, type Category, type Coupon, type OrderStatus, type Product } from "../../types";
 import { useToastStore } from "../../store/toast.store";
 import { ConfirmDialog, Modal } from "../../components/ui/Overlay";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../services/api/client";
 import { formatCad, formatCadFromCents } from "../../utils/money";
 import { Download } from "lucide-react";
@@ -113,6 +113,8 @@ export function AdminProductsPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [csvBusy, setCsvBusy] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const importLockRef = useRef(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<{
     total: number;
@@ -135,6 +137,7 @@ export function AdminProductsPage() {
   const toast = useToastStore((s) => s.push);
   const items = query.data?.items || [];
   const pagination = query.data?.pagination;
+  const csvActionsDisabled = csvBusy || isImporting;
 
   const remove = async () => {
     if (!deleteId) return;
@@ -231,17 +234,27 @@ export function AdminProductsPage() {
       toast("Choose a CSV file first", "error");
       return;
     }
+    if (importLockRef.current || isImporting || csvBusy) return;
+    importLockRef.current = true;
+    setIsImporting(true);
     setCsvBusy(true);
     try {
       const result = await adminApi.importProductCsv(csvFile);
       setCsvPreview(result.data);
-      toast(
-        `Import finished · ${result.data.created} created, ${result.data.updated} updated, ${result.data.failed} failed`,
-      );
+      if (result.data.failed) {
+        toast(
+          `Import finished with errors · ${result.data.created} created, ${result.data.updated} updated, ${result.data.failed} failed`,
+          "error",
+        );
+      } else {
+        toast(`Import finished · ${result.data.created} created, ${result.data.updated} updated`);
+      }
       await query.refetch();
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "CSV import failed", "error");
     } finally {
+      importLockRef.current = false;
+      setIsImporting(false);
       setCsvBusy(false);
     }
   };
@@ -261,14 +274,17 @@ export function AdminProductsPage() {
           <div>
             <p className="font-semibold text-yd-ink">Bulk import</p>
             <p className="mt-0.5 text-sm text-yd-muted">
-              Update existing products or add new ones from a CSV. Download the template to get every product
-              field. Separate images, categories, tags, allergens, and included products with a pipe (|). Included
-              products use <span className="font-medium text-yd-ink">productCode:quantity</span>.
+              Rows upsert by <span className="font-medium text-yd-ink">productId</span>, then{" "}
+              <span className="font-medium text-yd-ink">productCode</span>, then{" "}
+              <span className="font-medium text-yd-ink">skuCode</span> (name is not a match key). Keep those
+              columns stable when re-importing. Separate images, categories, tags, allergens, and included
+              products with a pipe (|). Included products use{" "}
+              <span className="font-medium text-yd-ink">productCode:quantity</span>.
             </p>
           </div>
           <button
             type="button"
-            disabled={csvBusy}
+            disabled={csvActionsDisabled}
             onClick={() => void downloadCsvTemplate()}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-yd-green hover:underline disabled:opacity-50"
           >
@@ -279,7 +295,7 @@ export function AdminProductsPage() {
 
         <CsvDropzone
           file={csvFile}
-          disabled={csvBusy}
+          disabled={csvActionsDisabled}
           onFile={(next) => {
             setCsvFile(next);
             setCsvPreview(null);
@@ -288,11 +304,11 @@ export function AdminProductsPage() {
 
         {csvFile ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={csvBusy} onClick={() => void previewCsv()}>
-              {csvBusy ? "Working…" : "Preview"}
+            <Button type="button" variant="outline" disabled={csvActionsDisabled} onClick={() => void previewCsv()}>
+              {csvBusy && !isImporting ? "Working…" : "Preview"}
             </Button>
-            <Button type="button" disabled={csvBusy} onClick={() => void importCsv()}>
-              Import
+            <Button type="button" disabled={csvActionsDisabled} onClick={() => void importCsv()}>
+              {isImporting ? "Importing…" : "Import"}
             </Button>
           </div>
         ) : null}
@@ -2748,24 +2764,11 @@ export function AdminReviewsPage() {
   );
 }
 
-const SAME_DAY_WEEKDAY_OPTIONS = [
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-  { value: 0, label: "Sun" },
-] as const;
-
 export function AdminSettingsPage() {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["settings"], queryFn: () => adminApi.settings() });
   const toast = useToastStore((s) => s.push);
   const settings = (query.data?.data || {}) as Record<string, unknown>;
-  const defaultWeekdays = Array.isArray(settings.sameDayWeekdays)
-    ? (settings.sameDayWeekdays as number[])
-    : [1, 2, 3, 4, 5, 6];
   if (query.isLoading) return <Skeleton className="h-40" />;
   return (
     <form
@@ -2773,13 +2776,6 @@ export function AdminSettingsPage() {
       onSubmit={async (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
-        const weekdays = SAME_DAY_WEEKDAY_OPTIONS.map((d) => d.value).filter((value) =>
-          form.getAll("sameDayWeekdays").includes(String(value)),
-        );
-        const prefixes = String(form.get("sameDayPostalPrefixes") || "")
-          .split(/[\s,]+/)
-          .map((item) => item.trim().toUpperCase())
-          .filter(Boolean);
         const orderNotifyEmails = String(form.get("orderNotifyEmails") || "")
           .split(/[\s,;]+/)
           .map((item) => item.trim().toLowerCase())
@@ -2797,11 +2793,6 @@ export function AdminSettingsPage() {
           inStockDisplayThreshold: Number(form.get("inStockDisplayThreshold")),
           supportEmail: String(form.get("supportEmail")),
           orderNotifyEmails,
-          sameDayDeliveryEnabled: form.get("sameDayDeliveryEnabled") === "on",
-          sameDayCutoffTime: String(form.get("sameDayCutoffTime") || "16:00"),
-          sameDayTimezone: String(form.get("sameDayTimezone") || "America/Edmonton"),
-          sameDayWeekdays: weekdays.length ? weekdays : [1, 2, 3, 4, 5, 6],
-          sameDayPostalPrefixes: prefixes,
         });
         toast("Settings saved");
         await query.refetch();
@@ -2826,13 +2817,16 @@ export function AdminSettingsPage() {
       </Select>
       <Input label="Default delivery fee (cents)" name="deliveryFeeCents" type="number" defaultValue={String(settings.deliveryFeeCents ?? 499)} />
       <p className="-mt-1 text-xs text-yd-muted">
-        Fallback when no delivery area matches. Per-area standard and Superfast fees are set under{" "}
+        Used only before an address is chosen, or if no delivery areas exist. Once the customer postal code matches a{" "}
         <Link to="/admin/delivery-locations" className="font-semibold text-yd-green">
-          Delivery areas
+          Delivery area
         </Link>
-        .
+        , that area&apos;s fee is used for checkout and tax — not this default.
       </p>
       <Input label="Free shipping threshold (cents)" name="freeShippingThresholdCents" type="number" defaultValue={String(settings.freeShippingThresholdCents ?? 7500)} />
+      <p className="-mt-1 text-xs text-yd-muted">
+        Cart merchandise at or above this amount gets free standard delivery. Set to 0 for free delivery on every order.
+      </p>
       <Input label="Platform fee (cents)" name="platformFeeCents" type="number" defaultValue={String(settings.platformFeeCents ?? 99)} />
       <Input label="Handling fee (cents)" name="handlingFeeCents" type="number" defaultValue={String(settings.handlingFeeCents ?? 49)} />
       <Input label="Small cart fee (cents)" name="smallCartFeeCents" type="number" defaultValue={String(settings.smallCartFeeCents ?? 199)} />
@@ -2878,98 +2872,13 @@ export function AdminSettingsPage() {
         />
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-yd-border bg-white p-4 shadow-soft">
-        <h2 className="font-display text-lg text-yd-forest">Same-day delivery cutoff</h2>
-        <p className="text-xs text-yd-muted">
-          Shows a countdown on the homepage, product pages, cart, and checkout. Separate from Superfast Delivery
-          (paid surcharge) — this is the order-by time for same-day vs next-day promises.
-        </p>
-        <label className="flex items-center gap-2 text-sm font-medium text-yd-ink">
-          <input
-            type="checkbox"
-            name="sameDayDeliveryEnabled"
-            defaultChecked={settings.sameDayDeliveryEnabled !== false}
-            className="accent-yd-green"
-          />
-          Enable same-day delivery timer
-        </label>
-        <Input
-          label="Cutoff time (24h HH:mm)"
-          name="sameDayCutoffTime"
-          defaultValue={String(settings.sameDayCutoffTime || "16:00")}
-          placeholder="16:00"
-        />
-        <Select
-          label="Timezone"
-          name="sameDayTimezone"
-          defaultValue={String(settings.sameDayTimezone || "America/Edmonton")}
-        >
-          {[
-            { value: "America/St_Johns", label: "Newfoundland (St. John’s)" },
-            { value: "America/Halifax", label: "Atlantic (Halifax)" },
-            { value: "America/Glace_Bay", label: "Atlantic (Cape Breton)" },
-            { value: "America/Moncton", label: "Atlantic (Moncton)" },
-            { value: "America/Goose_Bay", label: "Atlantic (Happy Valley–Goose Bay)" },
-            { value: "America/Blanc-Sablon", label: "Atlantic — no DST (Blanc-Sablon, QC)" },
-            { value: "America/Toronto", label: "Eastern (Toronto / Ottawa)" },
-            { value: "America/Iqaluit", label: "Eastern (Iqaluit)" },
-            { value: "America/Nipigon", label: "Eastern (Nipigon, ON)" },
-            { value: "America/Thunder_Bay", label: "Eastern (Thunder Bay)" },
-            { value: "America/Pangnirtung", label: "Eastern (Pangnirtung)" },
-            { value: "America/Winnipeg", label: "Central (Winnipeg)" },
-            { value: "America/Rainy_River", label: "Central (Rainy River)" },
-            { value: "America/Resolute", label: "Central (Resolute)" },
-            { value: "America/Rankin_Inlet", label: "Central (Rankin Inlet)" },
-            { value: "America/Regina", label: "Central — no DST (Saskatchewan)" },
-            { value: "America/Swift_Current", label: "Central — no DST (Swift Current)" },
-            { value: "America/Edmonton", label: "Mountain (Edmonton / Calgary)" },
-            { value: "America/Cambridge_Bay", label: "Mountain (Cambridge Bay)" },
-            { value: "America/Yellowknife", label: "Mountain (Yellowknife)" },
-            { value: "America/Inuvik", label: "Mountain (Inuvik)" },
-            { value: "America/Creston", label: "Mountain — no DST (Creston, BC)" },
-            { value: "America/Dawson_Creek", label: "Mountain — no DST (Dawson Creek)" },
-            { value: "America/Fort_Nelson", label: "Mountain — no DST (Fort Nelson)" },
-            { value: "America/Whitehorse", label: "Mountain — no DST (Whitehorse)" },
-            { value: "America/Dawson", label: "Mountain — no DST (Dawson City)" },
-            { value: "America/Vancouver", label: "Pacific (Vancouver)" },
-          ].map((tz) => (
-            <option key={tz.value} value={tz.value}>
-              {tz.label}
-            </option>
-          ))}
-        </Select>
-        <div>
-          <p className="mb-2 text-sm font-medium text-yd-ink">Applicable days</p>
-          <div className="flex flex-wrap gap-2">
-            {SAME_DAY_WEEKDAY_OPTIONS.map((day) => (
-              <label
-                key={day.value}
-                className="inline-flex items-center gap-1.5 rounded-full border border-yd-border px-3 py-1.5 text-xs font-semibold"
-              >
-                <input
-                  type="checkbox"
-                  name="sameDayWeekdays"
-                  value={day.value}
-                  defaultChecked={defaultWeekdays.includes(day.value)}
-                  className="accent-yd-green"
-                />
-                {day.label}
-              </label>
-            ))}
-          </div>
-        </div>
-        <Input
-          label="Applicable postal prefixes (optional)"
-          name="sameDayPostalPrefixes"
-          defaultValue={
-            Array.isArray(settings.sameDayPostalPrefixes)
-              ? (settings.sameDayPostalPrefixes as string[]).join(", ")
-              : ""
-          }
-          placeholder="T2W, T2X, T3A"
-        />
-        <p className="-mt-1 text-xs text-yd-muted">Leave blank for all delivery areas. Use FSA prefixes like T2W.</p>
-      </div>
+      <p className="text-xs text-yd-muted">
+        Same-day delivery cutoffs are configured per postal code under{" "}
+        <Link to="/admin/delivery-locations" className="font-semibold text-yd-green">
+          Delivery areas
+        </Link>
+        .
+      </p>
 
       <Button>Save</Button>
     </form>

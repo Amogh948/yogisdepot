@@ -61,6 +61,8 @@ export type AdminDeliveryLocation = {
   areaNames?: string[];
   deliveryFeeCents?: number;
   superfastDeliveryFeeCents?: number;
+  sameDayEnabled?: boolean;
+  sameDayCutoffTime?: string;
   isActive: boolean;
   sortOrder: number;
 };

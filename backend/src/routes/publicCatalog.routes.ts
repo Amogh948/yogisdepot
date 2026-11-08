@@ -33,15 +33,9 @@ export const publicSettingsController = {
         siteName: settings.siteName,
         currency: settings.currency || "CAD",
         supportEmail: settings.supportEmail,
-        sameDayDeliveryEnabled: settings.sameDayDeliveryEnabled !== false,
-        sameDayCutoffTime: settings.sameDayCutoffTime || "16:00",
-        sameDayTimezone: settings.sameDayTimezone || "America/Edmonton",
-        sameDayWeekdays: Array.isArray(settings.sameDayWeekdays) ? settings.sameDayWeekdays : [1, 2, 3, 4, 5, 6],
-        sameDayPostalPrefixes: Array.isArray(settings.sameDayPostalPrefixes)
-          ? settings.sameDayPostalPrefixes
-          : [],
         lowStockDisplayThreshold: settings.lowStockDisplayThreshold ?? 5,
         inStockDisplayThreshold: settings.inStockDisplayThreshold ?? 10,
+        freeShippingThresholdCents: settings.freeShippingThresholdCents ?? 0,
       },
       "Settings fetched",
     );

@@ -81,7 +81,7 @@ export function applyOptimisticCart(cart: Cart, product: Product, quantity: numb
   return {
     ...cart,
     items,
-    itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+    itemCount: items.filter((item) => !item.parentProductId).reduce((sum, item) => sum + item.quantity, 0),
     subtotal: items.reduce((sum, item) => sum + item.lineTotal, 0),
   };
 }

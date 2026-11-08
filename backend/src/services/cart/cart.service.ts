@@ -173,12 +173,16 @@ export const cartService = {
     }
 
     const subtotalCents = items.reduce((sum, item) => sum + (item.lineTotalCents || 0), 0);
+    // Badge / "N items" count parents only — bundled kit children stay on the line list.
+    const itemCount = items
+      .filter((item) => !item.parentProductId)
+      .reduce((sum, item) => sum + item.quantity, 0);
     return {
       id: cart.id,
       items,
       subtotal: subtotalCents / 100,
       subtotalCents,
-      itemCount: items.reduce((s, i) => s + i.quantity, 0),
+      itemCount,
       currency: "CAD",
     };
   },

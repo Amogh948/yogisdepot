@@ -1,12 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Clock3, Truck } from "lucide-react";
-import { usePublicSettings } from "../../hooks/useSettings";
+import { deliveryApi } from "../../services/api/commerce.api";
 import { useDeliveryPreferenceStore } from "../../store/deliveryPreference.store";
 import {
   formatCountdown,
   getSameDayStatus,
+  normalizePostalPrefix,
   type SameDayStatus,
 } from "../../utils/sameDayDelivery";
+
+/** Calgary / Edmonton store timezone for same-day promises. */
+export const SAME_DAY_TIMEZONE = "America/Edmonton";
+const SAME_DAY_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
 
 type SameDayDeliveryBannerProps = {
   /** Compact strip for product/cart; default is home-friendly. */
@@ -15,8 +21,12 @@ type SameDayDeliveryBannerProps = {
 };
 
 function useSameDayTicker(): SameDayStatus | null {
-  const settings = usePublicSettings();
   const preference = useDeliveryPreferenceStore((s) => s.preference);
+  const locations = useQuery({
+    queryKey: ["delivery-locations"],
+    queryFn: () => deliveryApi.locations(),
+    staleTime: 60_000,
+  });
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -24,18 +34,81 @@ function useSameDayTicker(): SameDayStatus | null {
     return () => window.clearInterval(timer);
   }, []);
 
-  if (!settings.data) return null;
+  const matchedArea = useMemo(() => {
+    const postal = preference?.postalCode;
+    const areas = locations.data?.data || [];
+    if (!postal || !areas.length) return null;
+    const needle = normalizePostalPrefix(postal);
+    const matches = areas
+      .filter((area) => {
+        const prefix = normalizePostalPrefix(area.postalCodePrefix || "");
+        return prefix && needle.startsWith(prefix);
+      })
+      .sort(
+        (a, b) =>
+          normalizePostalPrefix(b.postalCodePrefix || "").length -
+          normalizePostalPrefix(a.postalCodePrefix || "").length,
+      );
+    return matches[0] || null;
+  }, [locations.data, preference?.postalCode]);
+
+  if (locations.isLoading) return null;
+
+  // No postal selected yet — use the earliest active area cutoff as a generic storefront timer.
+  if (!preference?.postalCode) {
+    const areas = (locations.data?.data || []).filter((area) => area.sameDayEnabled !== false);
+    const cutoff =
+      areas.map((area) => area.sameDayCutoffTime).find((time) => Boolean(time)) || "16:00";
+    return getSameDayStatus(
+      {
+        enabled: areas.length > 0,
+        cutoffTime: cutoff,
+        timezone: SAME_DAY_TIMEZONE,
+        weekdays: SAME_DAY_WEEKDAYS,
+        postalPrefixes: [],
+      },
+      now,
+    );
+  }
+
+  if (!matchedArea) {
+    return {
+      enabled: true,
+      sameDayAvailable: false,
+      msRemaining: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+      cutoffLabel: "",
+      nextCutoffAt: null,
+      mode: "unavailable_area",
+    };
+  }
+
+  if (matchedArea.sameDayEnabled === false) {
+    return {
+      enabled: true,
+      sameDayAvailable: false,
+      msRemaining: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+      cutoffLabel: matchedArea.sameDayCutoffTime || "16:00",
+      nextCutoffAt: null,
+      mode: "unavailable_area",
+    };
+  }
 
   return getSameDayStatus(
     {
-      enabled: settings.data.sameDayDeliveryEnabled !== false,
-      cutoffTime: settings.data.sameDayCutoffTime || "16:00",
-      timezone: settings.data.sameDayTimezone || "America/Edmonton",
-      weekdays: settings.data.sameDayWeekdays || [1, 2, 3, 4, 5, 6],
-      postalPrefixes: settings.data.sameDayPostalPrefixes || [],
+      enabled: true,
+      cutoffTime: matchedArea.sameDayCutoffTime || "16:00",
+      timezone: SAME_DAY_TIMEZONE,
+      weekdays: SAME_DAY_WEEKDAYS,
+      postalPrefixes: [],
     },
     now,
-    { postalCode: preference?.postalCode },
+    { postalCode: preference.postalCode },
   );
 }
 
@@ -90,10 +163,7 @@ export function SameDayDeliveryBanner({ compact = false, className = "" }: SameD
         <p className="text-sm font-semibold text-yd-ink">Order now for next-day delivery</p>
         <p className="text-xs text-yd-muted">
           Same-day cutoff ({status.cutoffLabel}) has passed
-          {status.nextCutoffAt
-            ? ` · next window opens on the next delivery day`
-            : ""}
-          . Subject to stock.
+          {status.nextCutoffAt ? ` · next window opens on the next delivery day` : ""}. Subject to stock.
         </p>
       </div>
     </div>

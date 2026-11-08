@@ -6,7 +6,7 @@ import { Category } from "../../models/Category";
 import { Inventory } from "../../models/Inventory";
 import { MerchandisingCollection } from "../../models/MerchandisingCollection";
 import { Pricing } from "../../models/Pricing";
-import { Product, type ProductStatus } from "../../models/Product";
+import { Product, type ProductDocument, type ProductStatus } from "../../models/Product";
 import { Sku } from "../../models/Sku";
 import { TaxCategory } from "../../models/TaxCategory";
 import { Vendor } from "../../models/Vendor";
@@ -165,6 +165,67 @@ function productImageUrls(product: {
 
 function text(row: CsvRow, key: string) {
   return hasValue(row, key) ? row[key].trim() : undefined;
+}
+
+/**
+ * Upsert match order (unique keys only — name is not unique):
+ * 1) productId (Mongo ObjectId)
+ * 2) productCode
+ * 3) skuCode via Sku collection
+ * 4) skuCode via Product.sku
+ */
+async function findExistingProduct(input: {
+  productId?: string;
+  productCode?: string;
+  skuCode?: string;
+  batchById: Map<string, ProductDocument>;
+  batchByCode: Map<string, ProductDocument>;
+  batchBySku: Map<string, ProductDocument>;
+}): Promise<ProductDocument | null> {
+  const { productId, productCode, skuCode, batchById, batchByCode, batchBySku } = input;
+
+  if (productId && Types.ObjectId.isValid(productId)) {
+    const fromBatch = batchById.get(productId);
+    if (fromBatch) return fromBatch;
+    const byId = await Product.findById(productId);
+    if (byId) return byId;
+  }
+
+  if (productCode) {
+    const code = productCode.toUpperCase();
+    const fromBatch = batchByCode.get(code);
+    if (fromBatch) return fromBatch;
+    const byCode = await Product.findOne({ productCode: code });
+    if (byCode) return byCode;
+  }
+
+  if (skuCode) {
+    const fromBatch = batchBySku.get(skuCode);
+    if (fromBatch) return fromBatch;
+    const sku = await Sku.findOne({ skuCode });
+    if (sku) {
+      const bySkuRow = await Product.findById(sku.productId);
+      if (bySkuRow) return bySkuRow;
+    }
+    const byProductSku = await Product.findOne({ sku: skuCode });
+    if (byProductSku) return byProductSku;
+  }
+
+  return null;
+}
+
+function rememberBatchProduct(
+  product: ProductDocument,
+  keys: { productCode?: string; skuCode?: string },
+  batchById: Map<string, ProductDocument>,
+  batchByCode: Map<string, ProductDocument>,
+  batchBySku: Map<string, ProductDocument>,
+) {
+  batchById.set(String(product._id), product);
+  const code = (keys.productCode || product.productCode || "").toUpperCase();
+  if (code) batchByCode.set(code, product);
+  const sku = (keys.skuCode || product.sku || "").toUpperCase();
+  if (sku) batchBySku.set(sku, product);
 }
 
 async function includedProducts(value: string | undefined, errors: string[]) {
@@ -359,29 +420,30 @@ export const productCsvService = {
     let created = 0;
     let updated = 0;
     let failed = 0;
+    // Track products touched earlier in this CSV so later rows upsert instead of duplicating.
+    const batchById = new Map<string, ProductDocument>();
+    const batchByCode = new Map<string, ProductDocument>();
+    const batchBySku = new Map<string, ProductDocument>();
 
     for (let index = 0; index < records.length; index++) {
       const row = records[index];
       const rowNumber = index + 2; // header is row 1
       const errors: string[] = [];
       const productId = row.productId?.trim();
-      const productCode = row.productCode?.trim();
-      const skuCode = row.skuCode?.trim().toUpperCase();
+      const productCode = row.productCode?.trim().toUpperCase() || undefined;
+      const skuCode = row.skuCode?.trim().toUpperCase() || undefined;
       const name = row.name?.trim();
 
       if (!name) errors.push("name is required");
 
-      let existing =
-        productId && Types.ObjectId.isValid(productId)
-          ? await Product.findById(productId)
-          : null;
-      if (!existing && productCode) {
-        existing = await Product.findOne({ productCode });
-      }
-      if (!existing && skuCode) {
-        const sku = await Sku.findOne({ skuCode });
-        if (sku) existing = await Product.findById(sku.productId);
-      }
+      let existing = await findExistingProduct({
+        productId,
+        productCode,
+        skuCode,
+        batchById,
+        batchByCode,
+        batchBySku,
+      });
 
       const categorySlugs = splitList(row.categorySlugs);
       const categoryIds = categorySlugs
@@ -501,8 +563,23 @@ export const productCsvService = {
           ok: true,
           errors: [],
         });
-        if (action === "create") created += 1;
-        else updated += 1;
+        if (action === "create") {
+          created += 1;
+          // Preview-only placeholder so later rows in the same file resolve as updates.
+          const previewId = `preview-${skuCode || productCode || rowNumber}`;
+          const placeholder = {
+            _id: previewId,
+            productCode: productCode || previewId,
+            sku: skuCode,
+            variants: [],
+          } as unknown as ProductDocument;
+          rememberBatchProduct(placeholder, { productCode, skuCode }, batchById, batchByCode, batchBySku);
+        } else {
+          updated += 1;
+          if (existing) {
+            rememberBatchProduct(existing, { productCode, skuCode }, batchById, batchByCode, batchBySku);
+          }
+        }
         continue;
       }
 
@@ -567,6 +644,7 @@ export const productCsvService = {
                 ]
               : undefined,
           });
+          rememberBatchProduct(existing, { productCode, skuCode }, batchById, batchByCode, batchBySku);
           updated += 1;
           results.push({
             rowNumber,
@@ -595,6 +673,7 @@ export const productCsvService = {
             nutritionalInformation: hasNutrition ? filledNutrition : undefined,
             allergenInformation: hasValue(row, "allergens") ? splitList(row.allergens) : undefined,
             festivalId,
+            productCode,
             returnWindowDays,
             deliveryEstimateDays,
             variants: [
@@ -635,6 +714,7 @@ export const productCsvService = {
               ? [{ variantId: createdProduct.variants[0].variantId, status: variantStatus }]
               : undefined,
           });
+          rememberBatchProduct(createdProduct, { productCode, skuCode }, batchById, batchByCode, batchBySku);
           created += 1;
           results.push({
             rowNumber,

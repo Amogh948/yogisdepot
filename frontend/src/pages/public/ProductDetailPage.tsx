@@ -87,7 +87,7 @@ export function ProductDetailPage() {
         : "text-yd-success";
   const stockBadgeTone =
     stockDisplay.tone === "red" ? "red" : stockDisplay.tone === "yellow" ? "saffron" : "sage";
-  const deliveryTimeZone = publicSettings.data?.sameDayTimezone || "America/Edmonton";
+  const deliveryTimeZone = "America/Edmonton";
   const estimatedDeliveryLabel = resolveEstimatedDeliveryLabel({
     status: sameDayStatus,
     timeZone: deliveryTimeZone,

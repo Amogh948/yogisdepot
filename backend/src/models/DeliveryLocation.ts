@@ -16,6 +16,13 @@ export interface DeliveryLocationDocument extends Document {
   deliveryFeeCents: number;
   /** Superfast surcharge for this area in CAD cents (added on top of standard / free base). */
   superfastDeliveryFeeCents: number;
+  /** When false, same-day promises are off for this postal area. */
+  sameDayEnabled?: boolean;
+  /**
+   * Same-day order-by time for this area (24h HH:mm).
+   * When empty, the storefront falls back to the global settings cutoff.
+   */
+  sameDayCutoffTime?: string;
   isActive: boolean;
   sortOrder: number;
   createdAt: Date;
@@ -36,6 +43,16 @@ const deliveryLocationSchema = new Schema<DeliveryLocationDocument>(
       required: true,
       min: 0,
       default: DEFAULT_SUPERFAST_DELIVERY_FEE_CENTS,
+    },
+    sameDayEnabled: { type: Boolean, default: true },
+    sameDayCutoffTime: {
+      type: String,
+      trim: true,
+      default: "16:00",
+      validate: {
+        validator: (value: string) => !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(value),
+        message: "Use HH:mm 24-hour time",
+      },
     },
     isActive: { type: Boolean, default: true },
     sortOrder: { type: Number, default: 0 },

@@ -60,6 +60,8 @@ export interface ProductWizardInput {
   images?: Array<string | ProductImage>;
   /** Optional Festival Store merchandising collection id. */
   festivalId?: string | null;
+  /** When set (e.g. CSV import), reuse this product code if unused. */
+  productCode?: string;
   returnWindowDays?: number;
   deliveryEstimateDays?: number;
   variants: WizardVariantInput[];
@@ -224,15 +226,24 @@ export const catalogAdminService = {
     const brandId = await resolveBrandId(input);
     const festivalId = await resolveFestivalId(input.festivalId);
     const categoryIds = resolveCategoryIds(input);
-    const productCode = await nextProductCode();
+    const requestedCode = input.productCode?.trim().toUpperCase() || "";
+    if (requestedCode) {
+      const codeTaken = await Product.findOne({ productCode: requestedCode }).select("_id");
+      if (codeTaken) {
+        throw new BadRequestError(`Product code ${requestedCode} is already in use.`);
+      }
+    }
+    const productCode = requestedCode || (await nextProductCode());
     const images = normalizeImages(input.images);
     const taxCategoryId = input.variants[0].taxCategoryId || (await skuOfferService.ensureTaxCategory());
 
     const variants: ProductVariant[] = [];
+    const plannedSkuCodes: string[] = [];
     for (const v of input.variants) {
+      const variantCode = await nextVariantCode();
       variants.push({
         variantId: randomUUID(),
-        variantCode: await nextVariantCode(),
+        variantCode,
         name: v.name,
         size:
           v.sizeValue != null && v.sizeUnit
@@ -244,6 +255,27 @@ export const catalogAdminService = {
         images: [],
         status: "active",
       });
+      plannedSkuCodes.push(
+        v.skuCode?.trim().toUpperCase() ||
+          buildSkuCode([input.brandName || "GEN", input.name.slice(0, 8), variantCode.slice(-4)]),
+      );
+    }
+
+    // Reject duplicate SKUs before inserting a product row (avoids orphan products on conflict).
+    const seenSkuCodes = new Set<string>();
+    for (const skuCode of plannedSkuCodes) {
+      if (seenSkuCodes.has(skuCode)) {
+        throw new BadRequestError(`SKU code ${skuCode} is repeated in this product.`);
+      }
+      seenSkuCodes.add(skuCode);
+      const existingSku = await Sku.findOne({ skuCode }).select("_id");
+      if (existingSku) {
+        throw new BadRequestError(`SKU code ${skuCode} is already in use. Choose a different SKU code.`);
+      }
+      const productWithSku = await Product.findOne({ sku: skuCode }).select("_id");
+      if (productWithSku) {
+        throw new BadRequestError(`SKU code ${skuCode} is already in use. Choose a different SKU code.`);
+      }
     }
 
     const product = await Product.create({
@@ -286,18 +318,11 @@ export const catalogAdminService = {
     for (let i = 0; i < input.variants.length; i++) {
       const v = input.variants[i];
       const variant = product.variants[i];
-      const skuCode =
-        v.skuCode?.trim().toUpperCase() ||
-        buildSkuCode([input.brandName || "GEN", input.name.slice(0, 8), variant.variantCode.slice(-4)]);
+      const skuCode = plannedSkuCodes[i];
 
       // Verify variant belongs to product (server-owned ids)
       if (!product.variants.some((pv) => pv.variantId === variant.variantId)) {
         throw new BadRequestError("Variant does not belong to product");
-      }
-
-      const existingSku = await Sku.findOne({ skuCode }).select("_id");
-      if (existingSku) {
-        throw new BadRequestError(`SKU code ${skuCode} is already in use. Choose a different SKU code.`);
       }
 
       const barcode = v.barcode?.trim() || undefined;

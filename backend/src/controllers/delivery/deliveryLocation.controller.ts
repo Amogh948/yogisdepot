@@ -26,6 +26,13 @@ export const deliveryLocationSchema = z.object({
   areaNames: areaNamesSchema,
   deliveryFeeCents: z.coerce.number().int().min(0),
   superfastDeliveryFeeCents: z.coerce.number().int().min(0),
+  sameDayEnabled: z.boolean().optional(),
+  sameDayCutoffTime: z
+    .string()
+    .trim()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:mm 24-hour time")
+    .optional()
+    .or(z.literal("")),
   name: z.string().min(1).max(80).optional(),
   country: z.string().optional(),
   province: z.enum(CA_PROVINCES).optional(),

@@ -20,7 +20,6 @@ import {
   useCartSyncPending,
   useCommerceActions,
 } from "../../hooks/useCommerceActions";
-import { usePublicSettings } from "../../hooks/useSettings";
 import { useDeliveryCoverage } from "../../hooks/useDeliveryCoverage";
 import { DeliveryCoverageNotice } from "../../components/commerce/DeliveryCoverageNotice";
 import { formatCad } from "../../utils/money";
@@ -77,10 +76,9 @@ export function CartPage() {
   const { addToCart, setCartQuantity } = useCommerceActions();
   const cartSyncPending = useCartSyncPending();
   const [checkoutStarting, setCheckoutStarting] = useState(false);
-  const publicSettings = usePublicSettings();
   const coverage = useDeliveryCoverage();
   const sameDayStatus = useSameDayDeliveryStatus();
-  const deliveryTimeZone = publicSettings.data?.sameDayTimezone || "America/Edmonton";
+  const deliveryTimeZone = "America/Edmonton";
 
   const goToCheckout = async () => {
     if (checkoutStarting) return;
@@ -168,7 +166,9 @@ export function CartPage() {
           };
         }),
         subtotal: guestItems.reduce((sum, item) => sum + guestUnitPrice(item) * item.quantity, 0),
-        itemCount: guestItems.reduce((sum, item) => sum + item.quantity, 0),
+        itemCount: guestItems
+          .filter((item) => !item.parentProductId)
+          .reduce((sum, item) => sum + item.quantity, 0),
       };
 
   if (!data?.items.length) {
@@ -274,15 +274,22 @@ export function CartPage() {
         <aside className="min-w-0 rounded-[14px] border border-yd-border bg-white p-4 shadow-soft lg:flex lg:h-full lg:flex-col">
           <h2 className="font-display text-xl text-yd-forest">Order summary</h2>
           <ul className="mt-3 space-y-3 text-sm">
-            {data.items.map((item) => (
-              <li key={`${item.parentProductId || "own"}-${item.productId}`} className={`flex items-start justify-between gap-3 ${item.parentProductId ? "pl-3" : ""}`}>
-                <span className="min-w-0 text-yd-ink">
-                  <span className="line-clamp-2 font-medium">{item.product.name}</span>
-                  <span className="text-yd-muted"> × {item.quantity}</span>
-                </span>
-                <span className="shrink-0 font-semibold tabular-nums text-yd-ink">{formatCad(item.lineTotal)}</span>
-              </li>
-            ))}
+            {data.items
+              .filter((item) => !item.parentProductId)
+              .map((item) => {
+                const children = data.items.filter((child) => child.parentProductId === item.productId);
+                const lineTotal =
+                  item.lineTotal + children.reduce((sum, child) => sum + child.lineTotal, 0);
+                return (
+                  <li key={item.productId} className="flex items-start justify-between gap-3">
+                    <span className="min-w-0 text-yd-ink">
+                      <span className="line-clamp-2 font-medium">{item.product.name}</span>
+                      <span className="text-yd-muted"> × {item.quantity}</span>
+                    </span>
+                    <span className="shrink-0 font-semibold tabular-nums text-yd-ink">{formatCad(lineTotal)}</span>
+                  </li>
+                );
+              })}
           </ul>
           <div className="mt-4 flex justify-between border-t border-yd-border pt-3 text-base font-semibold">
             <span>Subtotal</span>

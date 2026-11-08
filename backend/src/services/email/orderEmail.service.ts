@@ -78,19 +78,20 @@ async function cardOnFile(order: OrderDocument): Promise<{ last4?: string; brand
 
 async function deliveryLabelFor(order: OrderDocument): Promise<string> {
   try {
-    const settings = await getPlatformSettings();
+    const { deliveryLocationService } = await import("../delivery/deliveryLocation.service");
+    const match = order.shippingAddress
+      ? await deliveryLocationService.findMatchingLocation(order.shippingAddress)
+      : null;
+    const areaEnabled = match ? match.sameDayEnabled !== false : true;
     return estimatedDeliveryLabel({
       placedAt: order.createdAt || new Date(),
       postalCode: order.shippingAddress?.postalCode,
       config: {
-        enabled: settings.sameDayDeliveryEnabled !== false,
-        cutoffTime: settings.sameDayCutoffTime || "16:00",
-        timezone: settings.sameDayTimezone || "America/Edmonton",
-        weekdays:
-          Array.isArray(settings.sameDayWeekdays) && settings.sameDayWeekdays.length
-            ? settings.sameDayWeekdays.map(Number)
-            : [1, 2, 3, 4, 5, 6],
-        postalPrefixes: Array.isArray(settings.sameDayPostalPrefixes) ? settings.sameDayPostalPrefixes : [],
+        enabled: areaEnabled,
+        cutoffTime: match?.sameDayCutoffTime || "16:00",
+        timezone: "America/Edmonton",
+        weekdays: [0, 1, 2, 3, 4, 5, 6],
+        postalPrefixes: [],
       },
     });
   } catch (error) {

@@ -34,6 +34,8 @@ export type DeliveryLocationInput = {
   areaNames: string[];
   deliveryFeeCents: number;
   superfastDeliveryFeeCents: number;
+  sameDayEnabled?: boolean;
+  sameDayCutoffTime?: string | null;
   name?: string;
   country?: string;
   province?: string;
@@ -41,6 +43,15 @@ export type DeliveryLocationInput = {
   isActive?: boolean;
   sortOrder?: number;
 };
+
+function normalizeCutoff(value?: string | null): string | undefined {
+  const raw = String(value || "").trim();
+  if (!raw) return undefined;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
+    throw new BadRequestError("Same-day cutoff must use HH:mm 24-hour time");
+  }
+  return raw;
+}
 
 function normalizeCountry(value?: string) {
   return String(value || "")
@@ -131,6 +142,8 @@ export const deliveryLocationService = {
       areaNames,
       deliveryFeeCents: Math.round(input.deliveryFeeCents),
       superfastDeliveryFeeCents: Math.round(input.superfastDeliveryFeeCents),
+      sameDayEnabled: input.sameDayEnabled !== false,
+      sameDayCutoffTime: normalizeCutoff(input.sameDayCutoffTime) || "16:00",
       isActive: input.isActive ?? true,
       sortOrder: input.sortOrder ?? 0,
     });
@@ -158,6 +171,10 @@ export const deliveryLocationService = {
         throw new BadRequestError("Superfast delivery fee must be zero or greater");
       }
       row.superfastDeliveryFeeCents = Math.round(input.superfastDeliveryFeeCents);
+    }
+    if (input.sameDayEnabled !== undefined) row.sameDayEnabled = input.sameDayEnabled;
+    if (input.sameDayCutoffTime !== undefined) {
+      row.sameDayCutoffTime = normalizeCutoff(input.sameDayCutoffTime) || "16:00";
     }
     if (input.name !== undefined) row.name = input.name.trim() || row.postalCodePrefix;
     if (input.province !== undefined) row.province = assertProvince(input.province);

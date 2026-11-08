@@ -275,14 +275,22 @@ export const checkoutPricingService = {
       subtotalCents - couponDiscountCents - scratchDiscountCents,
     );
 
+    // Delivery fee comes from the matched postal area whenever a destination is known.
+    // Global settings.deliveryFeeCents is only a pre-address / no-areas fallback.
     let standardDeliveryFeeCents = settings.deliveryFeeCents ?? 0;
     let locationSuperfastFeeCents: number | undefined;
     if (input.shippingDestination) {
       const match = await deliveryLocationService.findMatchingLocation(input.shippingDestination);
       if (match) {
-        standardDeliveryFeeCents = match.deliveryFeeCents ?? standardDeliveryFeeCents;
+        standardDeliveryFeeCents = Number(match.deliveryFeeCents ?? 0);
         if (match.superfastDeliveryFeeCents != null) {
-          locationSuperfastFeeCents = match.superfastDeliveryFeeCents;
+          locationSuperfastFeeCents = Number(match.superfastDeliveryFeeCents);
+        }
+      } else {
+        const activeAreas = await deliveryLocationService.listActive();
+        if (activeAreas.length) {
+          // Destination provided but not in any delivery area — do not invent a global fee.
+          standardDeliveryFeeCents = 0;
         }
       }
     }

@@ -107,12 +107,22 @@ export function AdminBrandsPage() {
   const query = useQuery({ queryKey: ["admin-brands"], queryFn: () => adminApi.brands() });
   const queryClient = useQueryClient();
   const toast = useToastStore((s) => s.push);
+  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [productPrompt, setProductPrompt] = useState(false);
   const [brandPromptIds, setBrandPromptIds] = useState<string[] | null>(null);
-  const items = (query.data?.data || []) as AdminBrand[];
-  const allSelected = items.length > 0 && selected.length === items.length;
+  const allItems = (query.data?.data || []) as AdminBrand[];
+  const needle = search.trim().toLowerCase();
+  const items = needle
+    ? allItems.filter(
+        (brand) =>
+          brand.name.toLowerCase().includes(needle) ||
+          brand.slug.toLowerCase().includes(needle) ||
+          (brand.description || "").toLowerCase().includes(needle),
+      )
+    : allItems;
+  const allSelected = items.length > 0 && items.every((brand) => selected.includes(entityId(brand)));
 
   const toggle = (id: string) => {
     setSelected((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
@@ -156,19 +166,40 @@ export function AdminBrandsPage() {
       <p className="mb-4 text-sm text-yd-muted">
         Select brands to delete their products, or to delete the brands with or without those products.
       </p>
-      {items.length ? (
-        <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-yd-ink">
-          <input
-            type="checkbox"
-            className="accent-yd-green"
-            checked={allSelected}
-            onChange={() => setSelected(allSelected ? [] : items.map((brand) => entityId(brand)))}
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="min-w-[12rem] flex-1">
+          <Input
+            label="Search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Name or slug"
           />
-          Select all
-        </label>
-      ) : null}
+        </div>
+        {items.length ? (
+          <label className="mb-1 flex items-center gap-2 text-sm text-yd-ink">
+            <input
+              type="checkbox"
+              className="accent-yd-green"
+              checked={allSelected}
+              onChange={() => {
+                if (allSelected) {
+                  setSelected((prev) => prev.filter((id) => !items.some((brand) => entityId(brand) === id)));
+                } else {
+                  setSelected((prev) => [...new Set([...prev, ...items.map((brand) => entityId(brand))])]);
+                }
+              }}
+            />
+            Select all
+          </label>
+        ) : null}
+      </div>
       {query.isLoading ? <Skeleton className="h-40" /> : null}
-      {!query.isLoading && !items.length ? <EmptyState title="No brands" body="Create a brand to organize products." /> : null}
+      {!query.isLoading && !allItems.length ? (
+        <EmptyState title="No brands" body="Create a brand to organize products." />
+      ) : null}
+      {!query.isLoading && allItems.length > 0 && !items.length ? (
+        <EmptyState title="No matching brands" body="Try a different search." />
+      ) : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {items.map((brand) => {
           const id = entityId(brand);
@@ -217,7 +248,7 @@ export function AdminBrandsPage() {
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-yd-border bg-white/95 p-3 backdrop-blur sm:static sm:mt-4 sm:rounded-2xl sm:border sm:shadow-soft">
           <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2">
             <p className="mr-auto text-sm font-semibold text-yd-ink">
-              {selected.length} selected · {productTotal(items, selected)} products
+              {selected.length} selected · {productTotal(allItems, selected)} products
             </p>
             <Button variant="outline" type="button" disabled={pending} onClick={() => setSelected([])}>
               Clear
@@ -234,7 +265,7 @@ export function AdminBrandsPage() {
       <Modal open={productPrompt} title="Delete products" onClose={() => { if (!pending) setProductPrompt(false); }}>
         <p className="text-sm text-yd-muted">
           Delete all products assigned to {selected.length === 1 ? "the selected brand" : `${selected.length} selected brands`} (
-          {productTotal(items, selected)} products). The brands stay in the catalog.
+          {productTotal(allItems, selected)} products). The brands stay in the catalog.
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="outline" type="button" disabled={pending} onClick={() => setProductPrompt(false)}>
@@ -253,7 +284,7 @@ export function AdminBrandsPage() {
       <BrandDeleteDialog
         open={Boolean(brandPromptIds?.length)}
         brandCount={brandPromptIds?.length || 0}
-        productCount={productTotal(items, brandPromptIds || [])}
+        productCount={productTotal(allItems, brandPromptIds || [])}
         pending={pending}
         onClose={() => {
           if (!pending) setBrandPromptIds(null);

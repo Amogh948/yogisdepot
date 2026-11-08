@@ -36,21 +36,26 @@ export const addressApi = {
   remove: (id: string) => unwrap<null>(api.delete(`/addresses/${id}`)),
 };
 
+export type PublicDeliveryLocation = {
+  id?: string;
+  _id?: string;
+  name: string;
+  province: string;
+  city?: string;
+  postalCodePrefix?: string;
+  areaNames?: string[];
+  deliveryFeeCents?: number;
+  superfastDeliveryFeeCents?: number;
+  sameDayEnabled?: boolean;
+  sameDayCutoffTime?: string;
+};
+
 export const deliveryApi = {
-  locations: () =>
-    unwrap<
-      Array<{
-        id?: string;
-        _id?: string;
-        name: string;
-        province: string;
-        city?: string;
-        postalCodePrefix?: string;
-        areaNames?: string[];
-      }>
-    >(api.get("/delivery-locations")),
+  locations: () => unwrap<PublicDeliveryLocation[]>(api.get("/delivery-locations")),
   check: (payload: { country: string; state: string; city?: string; postalCode?: string }) =>
-    unwrap<{ deliverable: boolean; message: string | null }>(api.post("/delivery-locations/check", payload)),
+    unwrap<{ deliverable: boolean; message: string | null; deliveryFeeCents?: number | null }>(
+      api.post("/delivery-locations/check", payload),
+    ),
 };
 
 export const ordersApi = {

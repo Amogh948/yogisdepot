@@ -7,5 +7,8 @@ export const TRENDING_SEARCHES = [
   "Namkeen",
 ] as const;
 
-/** Display fallback only — authoritative threshold comes from server settings/quote. */
+/**
+ * @deprecated Prefer useFreeDeliveryThreshold() from hooks/useSettings — admin-configured value.
+ * Kept as a last-resort display fallback only.
+ */
 export const FREE_DELIVERY_THRESHOLD = 75;

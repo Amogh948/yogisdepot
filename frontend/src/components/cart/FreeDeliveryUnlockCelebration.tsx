@@ -1,8 +1,8 @@
 import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { Truck } from "lucide-react";
-import { FREE_DELIVERY_THRESHOLD } from "../../content/navigation";
 import { useCartSubtotal } from "../../hooks/useCatalog";
+import { useFreeDeliveryThreshold } from "../../hooks/useSettings";
 import {
   clearFreeDeliveryUnlockCelebrated,
   hasCelebratedFreeDeliveryUnlock,
@@ -21,23 +21,27 @@ function prefersReducedMotion(): boolean {
 
 /** Watches cart subtotal globally and opens the celebration once per unlock cycle. */
 export function FreeDeliveryUnlockWatcher() {
-  const { ready, subtotal } = useCartSubtotal();
+  const { ready: cartReady, subtotal } = useCartSubtotal();
+  const { ready: thresholdReady, threshold } = useFreeDeliveryThreshold();
   const show = useFreeDeliveryUiStore((s) => s.show);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!cartReady || !thresholdReady) return;
 
-    const unlocked = subtotal >= FREE_DELIVERY_THRESHOLD;
+    const unlocked = subtotal >= threshold;
     if (!unlocked) {
       clearFreeDeliveryUnlockCelebrated();
       return;
     }
 
+    // Threshold 0 means always free — don't fire a celebration on every empty-cart load.
+    if (threshold <= 0) return;
+
     if (hasCelebratedFreeDeliveryUnlock()) return;
 
     markFreeDeliveryUnlockCelebrated();
     show();
-  }, [ready, subtotal, show]);
+  }, [cartReady, thresholdReady, subtotal, threshold, show]);
 
   return null;
 }
@@ -45,6 +49,7 @@ export function FreeDeliveryUnlockWatcher() {
 export function FreeDeliveryUnlockCelebration() {
   const open = useFreeDeliveryUiStore((s) => s.open);
   const dismiss = useFreeDeliveryUiStore((s) => s.dismiss);
+  const { threshold } = useFreeDeliveryThreshold();
   const [mounted, setMounted] = useState(false);
   const titleId = useId();
   const reduced = prefersReducedMotion();
@@ -124,7 +129,11 @@ export function FreeDeliveryUnlockCelebration() {
         <p id={titleId} className="relative font-display text-3xl leading-tight text-yd-forest sm:text-4xl" aria-live="assertive">
           Yay! You have unlocked free delivery.
         </p>
-        <p className="relative mt-3 text-sm text-yd-muted">Free delivery on orders over {formatCad(FREE_DELIVERY_THRESHOLD)}</p>
+        <p className="relative mt-3 text-sm text-yd-muted">
+          {threshold > 0
+            ? `Free delivery on orders over ${formatCad(threshold)}`
+            : "Free delivery on all orders"}
+        </p>
         <button
           type="button"
           className="relative mt-7 inline-flex min-h-11 items-center justify-center rounded-full bg-yd-green px-6 text-sm font-bold text-white transition hover:bg-yd-green-dark active:scale-[0.98]"
