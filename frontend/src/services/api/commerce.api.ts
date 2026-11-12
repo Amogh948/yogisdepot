@@ -84,6 +84,8 @@ export const ordersApi = {
   },
   get: (id: string) => unwrap<Order>(api.get(`/orders/${id}`)),
   cancel: (id: string) => unwrap<Order>(api.post(`/orders/${id}/cancel`)),
+  requestRefund: (id: string, payload?: { reason?: string }) =>
+    unwrap<Order>(api.post(`/orders/${id}/refund-request`, payload || {})),
   cancellationFeedback: (
     id: string,
     payload: {

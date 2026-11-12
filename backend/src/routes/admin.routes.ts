@@ -41,7 +41,7 @@ import { validate } from "../middleware/validation.middleware";
 import { categorySchema, categoryUpdateSchema } from "../schemas/categories/category.schema";
 import { vendorStatusSchema, vendorListQuerySchema, adminVendorCreateSchema, vendorUpdateSchema } from "../schemas/vendors/vendor.schema";
 import { createProductSchema, productStatusSchema, updateProductSchema } from "../schemas/products/product.schema";
-import { orderStatusSchema } from "../schemas/orders/order.schema";
+import { adminRefundDecisionSchema, orderStatusSchema } from "../schemas/orders/order.schema";
 import { couponSchema, couponUpdateSchema } from "../schemas/coupons/coupon.schema";
 import { reviewModerationSchema } from "../schemas/reviews/review.schema";
 import { uploadCsv, uploadImage } from "../middleware/upload.middleware";
@@ -119,6 +119,16 @@ router.get("/orders/export", adminOrderController.exportDaily);
 router.get("/orders", adminOrderController.list);
 router.get("/orders/:id", adminOrderController.get);
 router.patch("/orders/:id/status", validate(orderStatusSchema), adminOrderController.updateStatus);
+router.post(
+  "/orders/:id/refund-request/approve",
+  validate(adminRefundDecisionSchema),
+  adminOrderController.approveRefund,
+);
+router.post(
+  "/orders/:id/refund-request/reject",
+  validate(adminRefundDecisionSchema),
+  adminOrderController.rejectRefund,
+);
 
 router.get("/coupons", adminCouponController.list);
 router.post("/coupons", validate(couponSchema), adminCouponController.create);

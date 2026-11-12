@@ -108,7 +108,25 @@ export const DEFAULT_COUNTRY = "Canada";
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const ALLOWED_IMAGE_MIME = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-export const CANCELLABLE_STATUSES: OrderStatus[] = ["pending", "confirmed"];
+/** Customer may cancel immediately only while Order Placed. */
+export const CANCELLABLE_STATUSES: OrderStatus[] = ["pending"];
+
+/** Customer may request a refund (admin approval) for these fulfillment stages. */
+export const REFUND_REQUESTABLE_STATUSES: OrderStatus[] = [
+  "confirmed",
+  "processing",
+  "packed",
+  "shipped",
+];
+
+/** No cancel / refund request once out for delivery or later. */
+export const CANCEL_BLOCKED_STATUSES: OrderStatus[] = ["out_for_delivery", "delivered"];
+
+export const CANCEL_BLOCKED_MESSAGE =
+  "Your order is already out for delivery and is on its way; hence, it cannot be cancelled.";
+
+export const REFUND_REQUEST_STATUSES = ["requested", "approved", "rejected"] as const;
+export type RefundRequestStatus = (typeof REFUND_REQUEST_STATUSES)[number];
 
 /** Optional customer cancellation feedback reasons (COD flow). */
 export const CANCELLATION_REASONS = [

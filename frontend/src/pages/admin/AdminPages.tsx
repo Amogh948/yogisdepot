@@ -1829,7 +1829,15 @@ function edmontonToday(): string {
 
 export function AdminOrdersPage() {
   const toast = useToastStore((s) => s.push);
-  const query = useQuery({ queryKey: ["admin-orders"], queryFn: () => adminApi.orders({ limit: 40 }) });
+  const [listFilter, setListFilter] = useState<"all" | "refund_requested">("all");
+  const query = useQuery({
+    queryKey: ["admin-orders", listFilter],
+    queryFn: () =>
+      adminApi.orders({
+        limit: 40,
+        ...(listFilter === "refund_requested" ? { refundRequest: "requested" } : {}),
+      }),
+  });
   const items = query.data?.items || [];
   const [reportDate, setReportDate] = useState(edmontonToday);
   const [exporting, setExporting] = useState(false);
@@ -1873,8 +1881,36 @@ export function AdminOrdersPage() {
           </div>
         }
       />
+      <div className="mb-4 flex gap-2">
+        {(
+          [
+            ["all", "All orders"],
+            ["refund_requested", "Refund requested"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setListFilter(value)}
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${
+              listFilter === value ? "bg-yd-forest text-white" : "border border-yd-border bg-white text-yd-ink"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       {query.isLoading ? <Skeleton className="h-40" /> : null}
-      {!query.isLoading && !items.length ? <EmptyState title="No orders" body="Customer orders will appear here." /> : null}
+      {!query.isLoading && !items.length ? (
+        <EmptyState
+          title={listFilter === "refund_requested" ? "No refund requests" : "No orders"}
+          body={
+            listFilter === "refund_requested"
+              ? "Pending customer refund requests will appear here."
+              : "Customer orders will appear here."
+          }
+        />
+      ) : null}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((order) => (
           <Link
@@ -1890,7 +1926,10 @@ export function AdminOrdersPage() {
                 {order.items.length} item{order.items.length === 1 ? "" : "s"}
                 {order.createdAt ? ` · ${new Date(order.createdAt).toLocaleDateString("en-CA")}` : ""}
               </p>
-              <Badge>{ADMIN_ORDER_STATUS_LABEL[order.orderStatus] || order.orderStatus.replace(/_/g, " ")}</Badge>
+              <div className="flex flex-wrap gap-1">
+                <Badge>{ADMIN_ORDER_STATUS_LABEL[order.orderStatus] || order.orderStatus.replace(/_/g, " ")}</Badge>
+                {order.refundRequestStatus === "requested" ? <Badge tone="saffron">Refund requested</Badge> : null}
+              </div>
             </div>
           </Link>
         ))}
@@ -1997,6 +2036,125 @@ function AdminOrderFulfillment({
   );
 }
 
+function AdminRefundRequestPanel({
+  orderId,
+  refundRequestStatus,
+  refundRequestedAt,
+  refundRequestReason,
+  refundRequestResolvedAt,
+  refundRequestAdminNote,
+  onUpdated,
+}: {
+  orderId: string;
+  refundRequestStatus?: "requested" | "approved" | "rejected";
+  refundRequestedAt?: string;
+  refundRequestReason?: string;
+  refundRequestResolvedAt?: string;
+  refundRequestAdminNote?: string;
+  onUpdated: () => Promise<void>;
+}) {
+  const toast = useToastStore((s) => s.push);
+  const [adminNote, setAdminNote] = useState("");
+  const [pending, setPending] = useState<"approve" | "reject" | null>(null);
+
+  if (!refundRequestStatus) return null;
+
+  const decide = async (decision: "approve" | "reject") => {
+    setPending(decision);
+    try {
+      if (decision === "approve") {
+        await adminApi.approveRefundRequest(orderId, {
+          adminNote: adminNote.trim() || undefined,
+        });
+        toast("Refund approved and order cancelled");
+      } else {
+        await adminApi.rejectRefundRequest(orderId, {
+          adminNote: adminNote.trim() || undefined,
+        });
+        toast("Refund request rejected");
+      }
+      setAdminNote("");
+      await onUpdated();
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not update refund request", "error");
+    } finally {
+      setPending(null);
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-yd-border bg-white p-4 shadow-soft">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-display text-lg text-yd-forest">Refund request</h2>
+        <Badge
+          tone={
+            refundRequestStatus === "requested"
+              ? "saffron"
+              : refundRequestStatus === "approved"
+                ? "sage"
+                : "red"
+          }
+        >
+          {refundRequestStatus === "requested"
+            ? "Refund requested"
+            : refundRequestStatus === "approved"
+              ? "Approved"
+              : "Rejected"}
+        </Badge>
+      </div>
+      {refundRequestedAt ? (
+        <p className="mt-2 text-sm text-yd-muted">
+          Requested {new Date(refundRequestedAt).toLocaleString("en-CA")}
+        </p>
+      ) : null}
+      {refundRequestReason ? (
+        <p className="mt-1 text-sm text-yd-ink">Customer reason: {refundRequestReason}</p>
+      ) : null}
+      {refundRequestStatus !== "requested" && refundRequestResolvedAt ? (
+        <p className="mt-1 text-sm text-yd-muted">
+          Resolved {new Date(refundRequestResolvedAt).toLocaleString("en-CA")}
+        </p>
+      ) : null}
+      {refundRequestStatus !== "requested" && refundRequestAdminNote ? (
+        <p className="mt-1 text-sm text-yd-muted">Admin note: {refundRequestAdminNote}</p>
+      ) : null}
+      {refundRequestStatus === "requested" ? (
+        <div className="mt-4 space-y-3">
+          <Textarea
+            label="Admin note (optional)"
+            value={adminNote}
+            onChange={(event) => setAdminNote(event.target.value)}
+            placeholder="Internal note for this decision"
+            maxLength={500}
+          />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              type="button"
+              loading={pending === "approve"}
+              disabled={pending !== null}
+              onClick={() => void decide("approve")}
+            >
+              Approve &amp; refund
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              loading={pending === "reject"}
+              disabled={pending !== null}
+              onClick={() => void decide("reject")}
+            >
+              Reject request
+            </Button>
+          </div>
+          <p className="text-xs text-yd-muted">
+            Approving cancels the order, releases stock, and refunds any paid online payment.
+          </p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function AdminOrderDetailPage() {
   const { id = "" } = useParams();
   const queryClient = useQueryClient();
@@ -2007,6 +2165,10 @@ export function AdminOrderDetailPage() {
     return <EmptyState title="Order not found" body="This order may have been removed." />;
   }
   const address = order.shippingAddress;
+  const refreshOrder = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["admin-order", id] });
+    await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+  };
   return (
     <div className="w-full space-y-4">
       <PageHeader
@@ -2015,7 +2177,10 @@ export function AdminOrderDetailPage() {
       />
       <div className="rounded-2xl bg-white p-4 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Badge>{ADMIN_ORDER_STATUS_LABEL[order.orderStatus] || order.orderStatus.replace(/_/g, " ")}</Badge>
+          <div className="flex flex-wrap gap-1">
+            <Badge>{ADMIN_ORDER_STATUS_LABEL[order.orderStatus] || order.orderStatus.replace(/_/g, " ")}</Badge>
+            {order.refundRequestStatus === "requested" ? <Badge tone="saffron">Refund requested</Badge> : null}
+          </div>
           <p className="font-display text-xl">{formatCad(order.total)}</p>
         </div>
         <p className="mt-2 text-sm text-yd-muted">
@@ -2028,6 +2193,15 @@ export function AdminOrderDetailPage() {
           </p>
         ) : null}
       </div>
+      <AdminRefundRequestPanel
+        orderId={entityId(order)}
+        refundRequestStatus={order.refundRequestStatus}
+        refundRequestedAt={order.refundRequestedAt}
+        refundRequestReason={order.refundRequestReason}
+        refundRequestResolvedAt={order.refundRequestResolvedAt}
+        refundRequestAdminNote={order.refundRequestAdminNote}
+        onUpdated={refreshOrder}
+      />
       {order.orderStatus === "cancelled" && order.cancellationReason ? (
         <section className="rounded-2xl border border-yd-border bg-white p-4 shadow-soft">
           <h2 className="font-display text-lg text-yd-forest">Cancellation feedback</h2>
@@ -2055,10 +2229,7 @@ export function AdminOrderDetailPage() {
         orderStatus={order.orderStatus}
         trackingNumber={order.trackingNumber}
         trackingUrl={order.trackingUrl}
-        onUpdated={async () => {
-          await queryClient.invalidateQueries({ queryKey: ["admin-order", id] });
-          await queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
-        }}
+        onUpdated={refreshOrder}
       />
       <section className="space-y-2">
         <h2 className="font-display text-lg">Items</h2>

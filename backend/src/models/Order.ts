@@ -120,6 +120,12 @@ export interface OrderDocument extends Document {
   cancellationReason?: CancellationReason;
   cancellationBetterDealDetails?: string;
   cancellationFeedbackAt?: Date;
+  /** Customer refund request while order is confirmed→shipped (admin approval). */
+  refundRequestStatus?: "requested" | "approved" | "rejected";
+  refundRequestedAt?: Date;
+  refundRequestReason?: string;
+  refundRequestResolvedAt?: Date;
+  refundRequestAdminNote?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -221,6 +227,11 @@ const orderSchema = new Schema<OrderDocument>(
     cancellationReason: { type: String, enum: CANCELLATION_REASONS },
     cancellationBetterDealDetails: { type: String, maxlength: 500 },
     cancellationFeedbackAt: { type: Date },
+    refundRequestStatus: { type: String, enum: ["requested", "approved", "rejected"] },
+    refundRequestedAt: { type: Date },
+    refundRequestReason: { type: String, maxlength: 500 },
+    refundRequestResolvedAt: { type: Date },
+    refundRequestAdminNote: { type: String, maxlength: 500 },
   },
   { timestamps: true },
 );
@@ -228,6 +239,7 @@ const orderSchema = new Schema<OrderDocument>(
 orderSchema.index({ orderNumber: 1 }, { unique: true });
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
+orderSchema.index({ refundRequestStatus: 1, createdAt: -1 });
 orderSchema.index({ "items.vendorId": 1, createdAt: -1 });
 
 orderSchema.set("toJSON", {

@@ -32,9 +32,18 @@ export const orderQuerySchema = z.object({
   limit: z.coerce.number().optional(),
   status: z.string().optional(),
   search: z.string().optional(),
+  refundRequest: z.enum(["requested", "approved", "rejected"]).optional(),
 });
 
 export const cancellationFeedbackSchema = z.object({
   reason: z.enum(CANCELLATION_REASONS),
   betterDealDetails: z.string().trim().max(500).optional(),
+});
+
+export const refundRequestSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+});
+
+export const adminRefundDecisionSchema = z.object({
+  adminNote: z.string().trim().max(500).optional(),
 });

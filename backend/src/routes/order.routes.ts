@@ -6,6 +6,7 @@ import { validate } from "../middleware/validation.middleware";
 import {
   cancellationFeedbackSchema,
   createOrderSchema,
+  refundRequestSchema,
   squareVerifySchema,
 } from "../schemas/orders/order.schema";
 
@@ -18,6 +19,7 @@ router.post("/:id/pay/verify", validate(squareVerifySchema), customerOrderContro
 router.get("/", customerOrderController.list);
 router.get("/:id", customerOrderController.get);
 router.post("/:id/cancel", customerOrderController.cancel);
+router.post("/:id/refund-request", validate(refundRequestSchema), customerOrderController.requestRefund);
 router.post(
   "/:id/cancellation-feedback",
   validate(cancellationFeedbackSchema),

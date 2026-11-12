@@ -12,6 +12,7 @@ import { ApiError } from "../../services/api/client";
 import { useMemo, useState } from "react";
 import { formatCad } from "../../utils/money";
 import { BackLink } from "../../components/navigation/BackLink";
+import { getCustomerOrderAction } from "../../utils/orderActions";
 
 type CancellationReason =
   | "changed_my_mind"
@@ -28,8 +29,9 @@ const CANCEL_REASONS: Array<{ value: CancellationReason; label: string }> = [
   { value: "other", label: "Other" },
 ];
 
-type CancelDialog =
-  | { kind: "confirm" }
+type OrderActionDialog =
+  | { kind: "confirm_cancel" }
+  | { kind: "confirm_refund" }
   | { kind: "feedback"; showRefundNote: boolean }
   | null;
 
@@ -284,9 +286,10 @@ export function OrderDetailPage() {
   const { id = "" } = useParams();
   const toast = useToastStore((s) => s.push);
   const queryClient = useQueryClient();
-  const [cancelDialog, setCancelDialog] = useState<CancelDialog>(null);
+  const [actionDialog, setActionDialog] = useState<OrderActionDialog>(null);
   const [cancelReason, setCancelReason] = useState<CancellationReason | "">("");
   const [betterDealDetails, setBetterDealDetails] = useState("");
+  const [refundReason, setRefundReason] = useState("");
   const query = useQuery({ queryKey: ["order", id], queryFn: () => ordersApi.get(id), enabled: Boolean(id) });
   const cancel = useMutation({
     mutationFn: () => ordersApi.cancel(id),
@@ -298,11 +301,28 @@ export function OrderDetailPage() {
       const showRefundNote =
         cancelled.paymentMethod !== "cod" &&
         (cancelled.paymentStatus === "refunded" || cancelled.paymentStatus === "paid");
-      setCancelDialog({ kind: "feedback", showRefundNote });
+      setActionDialog({ kind: "feedback", showRefundNote });
     },
     onError: (error) => {
-      setCancelDialog(null);
+      setActionDialog(null);
       toast(error instanceof ApiError ? error.message : "Cannot cancel", "error");
+    },
+  });
+  const requestRefund = useMutation({
+    mutationFn: () =>
+      ordersApi.requestRefund(id, {
+        reason: refundReason.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      setActionDialog(null);
+      setRefundReason("");
+      toast("Refund request submitted. We'll review it shortly.");
+      await queryClient.invalidateQueries({ queryKey: ["order", id] });
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+    onError: (error) => {
+      setActionDialog(null);
+      toast(error instanceof ApiError ? error.message : "Could not submit refund request", "error");
     },
   });
   const feedback = useMutation({
@@ -316,7 +336,7 @@ export function OrderDetailPage() {
       }),
     onSuccess: async () => {
       toast("Thanks for your feedback");
-      setCancelDialog(null);
+      setActionDialog(null);
       setCancelReason("");
       setBetterDealDetails("");
       await queryClient.invalidateQueries({ queryKey: ["order", id] });
@@ -326,6 +346,7 @@ export function OrderDetailPage() {
   if (query.isLoading) return <Skeleton className="h-64" />;
   if (query.isError || !query.data) return <ErrorState message="Order not found" />;
   const order = query.data.data;
+  const customerAction = getCustomerOrderAction(order);
   const statusForTrack =
     order.orderStatus === "processing" || order.orderStatus === "shipped"
       ? order.orderStatus === "processing"
@@ -432,32 +453,98 @@ export function OrderDetailPage() {
           ))}
       </div>
 
-      {["pending", "confirmed"].includes(order.orderStatus) ? (
-        <Button variant="danger" loading={cancel.isPending} onClick={() => setCancelDialog({ kind: "confirm" })}>
+      {customerAction.kind === "cancel" ? (
+        <Button
+          variant="danger"
+          loading={cancel.isPending}
+          onClick={() => setActionDialog({ kind: "confirm_cancel" })}
+        >
           Cancel order
         </Button>
       ) : null}
+      {customerAction.kind === "request_refund" ? (
+        <Button
+          variant="danger"
+          loading={requestRefund.isPending}
+          onClick={() => setActionDialog({ kind: "confirm_refund" })}
+        >
+          Request refund
+        </Button>
+      ) : null}
+      {customerAction.kind === "refund_pending" ? (
+        <p className="rounded-card border border-yd-border bg-yd-cream/50 p-3 text-sm text-yd-ink">
+          Your refund request is pending admin review.
+          {order.refundRequestedAt
+            ? ` Submitted ${new Date(order.refundRequestedAt).toLocaleString("en-CA")}.`
+            : ""}
+        </p>
+      ) : null}
+      {customerAction.kind === "blocked" ? (
+        <p className="rounded-card border border-yd-border bg-yd-cream/50 p-3 text-sm text-yd-ink">
+          {customerAction.message}
+        </p>
+      ) : null}
 
       <ConfirmDialog
-        open={cancelDialog?.kind === "confirm"}
+        open={actionDialog?.kind === "confirm_cancel"}
         title="Cancel order"
         body="Do you want to cancel this order?"
         confirmLabel="Yes"
         cancelLabel="No"
         confirmPending={cancel.isPending}
         onClose={() => {
-          if (!cancel.isPending) setCancelDialog(null);
+          if (!cancel.isPending) setActionDialog(null);
         }}
         onConfirm={() => cancel.mutate()}
       />
 
       <Modal
-        open={cancelDialog?.kind === "feedback"}
+        open={actionDialog?.kind === "confirm_refund"}
+        title="Request refund"
+        onClose={() => {
+          if (!requestRefund.isPending) {
+            setActionDialog(null);
+            setRefundReason("");
+          }
+        }}
+      >
+        <p className="text-sm text-yd-ink">
+          Your request will be reviewed by our team. If approved, the order will be cancelled and any payment refunded.
+        </p>
+        <div className="mt-4">
+          <Input
+            label="Reason (optional)"
+            value={refundReason}
+            onChange={(e) => setRefundReason(e.target.value)}
+            placeholder="Tell us why you need a refund"
+            maxLength={500}
+          />
+        </div>
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button
+            variant="outline"
+            className="sm:flex-1"
+            disabled={requestRefund.isPending}
+            onClick={() => {
+              setActionDialog(null);
+              setRefundReason("");
+            }}
+          >
+            Back
+          </Button>
+          <Button className="sm:flex-1" loading={requestRefund.isPending} onClick={() => requestRefund.mutate()}>
+            Submit request
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={actionDialog?.kind === "feedback"}
         title="Order cancelled"
-        onClose={() => setCancelDialog(null)}
+        onClose={() => setActionDialog(null)}
       >
         <p className="text-sm text-yd-ink">Your order has been cancelled successfully.</p>
-        {cancelDialog?.kind === "feedback" && cancelDialog.showRefundNote ? (
+        {actionDialog?.kind === "feedback" && actionDialog.showRefundNote ? (
           <p className="mt-3 text-sm text-yd-muted">
             If any money was debited from your account, it will be refunded within 3–5 business days.
           </p>
@@ -494,7 +581,7 @@ export function OrderDetailPage() {
           </div>
         ) : null}
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" className="sm:flex-1" onClick={() => setCancelDialog(null)}>
+          <Button variant="outline" className="sm:flex-1" onClick={() => setActionDialog(null)}>
             Skip
           </Button>
           <Button

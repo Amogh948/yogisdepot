@@ -222,6 +222,11 @@ export interface Order {
     | "other";
   cancellationBetterDealDetails?: string;
   cancellationFeedbackAt?: string;
+  refundRequestStatus?: "requested" | "approved" | "rejected";
+  refundRequestedAt?: string;
+  refundRequestReason?: string;
+  refundRequestResolvedAt?: string;
+  refundRequestAdminNote?: string;
   createdAt: string;
 }
 

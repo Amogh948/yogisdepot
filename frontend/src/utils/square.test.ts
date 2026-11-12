@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   assertVerificationDetails,
+  canAttemptApplePay,
   centsToSquareAmount,
   squareSdkUrl,
   tokenizeCard,
   tokenizeFailureMessage,
+  tokenizeWallet,
   toSquareCountryCode,
   type SquareVerificationDetails,
 } from "./square";
@@ -85,6 +87,29 @@ describe("assertVerificationDetails / tokenizeFailureMessage", () => {
   });
 
   it("classifies cancel statuses", () => {
-    expect(tokenizeFailureMessage({ status: "Cancel" })).toMatch(/cancell?ed/i);
+    expect(tokenizeFailureMessage({ status: "Cancel" })).toBe("Card verification was cancelled");
+    expect(tokenizeFailureMessage({ status: "Cancel" }, "wallet")).toBe("Transaction was cancelled");
+  });
+});
+
+describe("tokenizeWallet", () => {
+  it("returns a sourceId for Apple/Google Pay tokens", async () => {
+    const tokenize = vi.fn().mockResolvedValue({ status: "OK", token: "cnon:wallet" });
+    await expect(tokenizeWallet({ tokenize }, "Apple Pay")).resolves.toEqual({ sourceId: "cnon:wallet" });
+  });
+
+  it("maps cancelled wallet sheets to Transaction was cancelled", async () => {
+    const tokenize = vi.fn().mockResolvedValue({ status: "Cancel" });
+    await expect(tokenizeWallet({ tokenize }, "Google Pay")).rejects.toThrow("Transaction was cancelled");
+  });
+});
+
+describe("canAttemptApplePay", () => {
+  it("requires Safari on a public HTTPS host", () => {
+    const safari = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+    const chrome = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    expect(canAttemptApplePay("yogisdepot.com", "https:", safari)).toBe(true);
+    expect(canAttemptApplePay("localhost", "http:", safari)).toBe(false);
+    expect(canAttemptApplePay("yogisdepot.com", "https:", chrome)).toBe(false);
   });
 });

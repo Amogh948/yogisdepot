@@ -126,12 +126,26 @@ export function waitForCartSync(queryClient?: QueryClient): Promise<void> {
   });
 }
 
+export type EnsureCartSyncedOptions = {
+  /**
+   * When false, only wait for in-flight qty/add sync — do not GET /cart or
+   * invalidate quote/eligible. Use on the payment step so wallets are not blocked
+   * by a redundant hydrate round-trip (cart page already refreshed on entry).
+   */
+  refresh?: boolean;
+};
+
 /**
- * Await pending cart sync, then pull the authoritative server cart into cache.
+ * Await pending cart sync, then optionally pull the authoritative server cart.
  * Uses cartApi.get() + setQueryData (not invalidate/refetch) to avoid queryFn recursion.
  */
-export async function ensureCartSynced(queryClient: QueryClient): Promise<void> {
+export async function ensureCartSynced(
+  queryClient: QueryClient,
+  options: EnsureCartSyncedOptions = {},
+): Promise<void> {
+  const refresh = options.refresh !== false;
   await waitForCartSync(queryClient);
+  if (!refresh) return;
   try {
     const fresh = await cartApi.get();
     queryClient.setQueryData(["cart"], fresh);

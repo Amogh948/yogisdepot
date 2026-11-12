@@ -1,11 +1,14 @@
 import mongoose from "mongoose";
 import {
   CANCELLABLE_STATUSES,
+  CANCEL_BLOCKED_MESSAGE,
+  CANCEL_BLOCKED_STATUSES,
   CancellationReason,
   ORDER_STATUSES,
   OrderStatus,
   PAYMENT_METHODS,
   PaymentMethod,
+  REFUND_REQUESTABLE_STATUSES,
 } from "../../config/constants";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../errors/AppError";
 import { Address } from "../../models/Address";
@@ -476,58 +479,52 @@ export const orderService = {
     return order;
   },
 
-  async cancel(userId: string, id: string) {
-    const order = await this.getForCustomer(userId, id);
-    if (!CANCELLABLE_STATUSES.includes(order.orderStatus)) {
-      throw new BadRequestError("This order can no longer be cancelled");
-    }
-    const wasUnpaid = order.paymentStatus !== "paid";
-    let refundSucceeded = false;
-
-    // Attempt provider refund before mutating fulfillment so a hard failure can still
-    // leave the order cancellable with a soft refund outcome.
-    if (order.paymentStatus === "paid") {
-      if (order.paymentMethod === "square" || order.paymentMethod === "mock_online") {
-        const method = order.paymentMethod;
-        const refundRef =
-          method === "square" ? order.transactionId || order.paymentReference : order.paymentReference;
-        if (refundRef) {
-          const amount = order.totalCents ? order.totalCents / 100 : order.total || 0;
-          try {
-            await PaymentService.refundPayment(method, refundRef, amount);
-            refundSucceeded = true;
-          } catch (error) {
-            logger.warn("Order cancel refund failed; cancelling order anyway", {
-              orderId: String(order._id),
-              orderNumber: order.orderNumber,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        } else {
-          logger.warn("Order cancel skipped refund — missing payment reference", {
-            orderId: String(order._id),
-            orderNumber: order.orderNumber,
-          });
-        }
-      } else {
-        // COD paid is unexpected; treat cancel as refunded locally.
-        refundSucceeded = true;
+  async attemptProviderRefund(order: OrderDocument): Promise<boolean> {
+    if (order.paymentStatus !== "paid") return false;
+    if (order.paymentMethod === "square" || order.paymentMethod === "mock_online") {
+      const method = order.paymentMethod;
+      const refundRef =
+        method === "square" ? order.transactionId || order.paymentReference : order.paymentReference;
+      if (!refundRef) {
+        logger.warn("Order refund skipped — missing payment reference", {
+          orderId: String(order._id),
+          orderNumber: order.orderNumber,
+        });
+        return false;
+      }
+      const amount = order.totalCents ? order.totalCents / 100 : order.total || 0;
+      try {
+        await PaymentService.refundPayment(method, refundRef, amount);
+        return true;
+      } catch (error) {
+        logger.warn("Order refund failed", {
+          orderId: String(order._id),
+          orderNumber: order.orderNumber,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
       }
     }
+    // COD paid is unexpected; treat as refunded locally.
+    return true;
+  },
 
+  async finalizeCancellation(
+    order: OrderDocument,
+    options: { userId: string; refundSucceeded: boolean; wasUnpaid: boolean },
+  ) {
     await this.releaseStock(order);
     order.orderStatus = "cancelled";
     order.cancelledAt = new Date();
     if (order.paymentStatus === "paid") {
-      // Only claim refunded when the provider accepted the refund (or local COD path).
-      order.paymentStatus = refundSucceeded ? "refunded" : "paid";
+      order.paymentStatus = options.refundSucceeded ? "refunded" : "paid";
     } else {
       order.paymentStatus = "failed";
     }
     await order.save();
-    if (wasUnpaid) {
+    if (options.wasUnpaid) {
       await cartService.restoreIfEmpty(
-        userId,
+        options.userId,
         order.items.map((item) => ({
           skuId: item.skuId,
           productId: item.productId,
@@ -537,12 +534,114 @@ export const orderService = {
       );
     }
     await notificationService.notify({
-      userId,
+      userId: options.userId,
       type: "order_cancelled",
       title: "Order cancelled",
       body: `Order ${order.orderNumber} was cancelled.`,
     });
     queueOrderStatusEmail(String(order._id), "cancelled");
+    return order;
+  },
+
+  async cancel(userId: string, id: string) {
+    const order = await this.getForCustomer(userId, id);
+    if (CANCEL_BLOCKED_STATUSES.includes(order.orderStatus)) {
+      throw new BadRequestError(CANCEL_BLOCKED_MESSAGE);
+    }
+    if (!CANCELLABLE_STATUSES.includes(order.orderStatus)) {
+      if (REFUND_REQUESTABLE_STATUSES.includes(order.orderStatus)) {
+        throw new BadRequestError(
+          "This order can no longer be cancelled directly. Please request a refund instead.",
+        );
+      }
+      throw new BadRequestError("This order can no longer be cancelled");
+    }
+    if (order.refundRequestStatus === "requested") {
+      throw new BadRequestError("A refund request is already pending for this order");
+    }
+    const wasUnpaid = order.paymentStatus !== "paid";
+    const refundSucceeded = await this.attemptProviderRefund(order);
+    return this.finalizeCancellation(order, { userId, refundSucceeded, wasUnpaid });
+  },
+
+  async requestRefund(userId: string, id: string, input?: { reason?: string }) {
+    const order = await this.getForCustomer(userId, id);
+    if (CANCEL_BLOCKED_STATUSES.includes(order.orderStatus)) {
+      throw new BadRequestError(CANCEL_BLOCKED_MESSAGE);
+    }
+    if (CANCELLABLE_STATUSES.includes(order.orderStatus)) {
+      throw new BadRequestError("You can cancel this order directly instead of requesting a refund");
+    }
+    if (!REFUND_REQUESTABLE_STATUSES.includes(order.orderStatus)) {
+      throw new BadRequestError("A refund cannot be requested for this order");
+    }
+    if (order.refundRequestStatus === "requested") {
+      throw new BadRequestError("A refund request is already pending for this order");
+    }
+    if (order.refundRequestStatus === "approved" || order.orderStatus === "cancelled") {
+      throw new BadRequestError("This order has already been refunded or cancelled");
+    }
+    order.refundRequestStatus = "requested";
+    order.refundRequestedAt = new Date();
+    order.refundRequestReason = input?.reason?.trim() || undefined;
+    await order.save();
+    await Order.updateOne(
+      { _id: order._id },
+      { $unset: { refundRequestResolvedAt: 1, refundRequestAdminNote: 1 } },
+    );
+    order.refundRequestResolvedAt = undefined;
+    order.refundRequestAdminNote = undefined;
+    await notificationService.notify({
+      userId,
+      type: "order_refund_requested",
+      title: "Refund requested",
+      body: `We received your refund request for order ${order.orderNumber}.`,
+    });
+    return order;
+  },
+
+  async approveRefundRequest(orderId: string, adminNote?: string) {
+    const order = await this.getById(orderId);
+    if (order.refundRequestStatus !== "requested") {
+      throw new BadRequestError("There is no pending refund request for this order");
+    }
+    if (CANCEL_BLOCKED_STATUSES.includes(order.orderStatus)) {
+      throw new BadRequestError(CANCEL_BLOCKED_MESSAGE);
+    }
+    const wasUnpaid = order.paymentStatus !== "paid";
+    const refundSucceeded = await this.attemptProviderRefund(order);
+    order.refundRequestStatus = "approved";
+    order.refundRequestResolvedAt = new Date();
+    if (adminNote?.trim()) order.refundRequestAdminNote = adminNote.trim();
+    await this.finalizeCancellation(order, {
+      userId: String(order.customerId),
+      refundSucceeded,
+      wasUnpaid,
+    });
+    await notificationService.notify({
+      userId: String(order.customerId),
+      type: "order_refund_approved",
+      title: "Refund approved",
+      body: `Your refund for order ${order.orderNumber} has been approved.`,
+    });
+    return order;
+  },
+
+  async rejectRefundRequest(orderId: string, adminNote?: string) {
+    const order = await this.getById(orderId);
+    if (order.refundRequestStatus !== "requested") {
+      throw new BadRequestError("There is no pending refund request for this order");
+    }
+    order.refundRequestStatus = "rejected";
+    order.refundRequestResolvedAt = new Date();
+    if (adminNote?.trim()) order.refundRequestAdminNote = adminNote.trim();
+    await order.save();
+    await notificationService.notify({
+      userId: String(order.customerId),
+      type: "order_refund_rejected",
+      title: "Refund request update",
+      body: `Your refund request for order ${order.orderNumber} was not approved.`,
+    });
     return order;
   },
 
@@ -566,10 +665,19 @@ export const orderService = {
     return order;
   },
 
-  async listAll(query: { page?: number; limit?: number; status?: string; search?: string }) {
+  async listAll(query: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+    refundRequest?: string;
+  }) {
     const { page, limit, skip } = parsePagination(query);
     const filter: Record<string, unknown> = {};
     if (query.status) filter.orderStatus = query.status;
+    if (query.refundRequest === "requested" || query.refundRequest === "approved" || query.refundRequest === "rejected") {
+      filter.refundRequestStatus = query.refundRequest;
+    }
     if (query.search) filter.orderNumber = { $regex: query.search, $options: "i" };
     const [data, total] = await Promise.all([
       Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).populate("customerId", "firstName lastName email"),

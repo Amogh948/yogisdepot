@@ -231,6 +231,10 @@ export const adminApi = {
     const payload = typeof statusOrPayload === "string" ? { status: statusOrPayload } : statusOrPayload;
     return unwrap<Order>(api.patch(`/admin/orders/${id}/status`, payload));
   },
+  approveRefundRequest: (id: string, payload?: { adminNote?: string }) =>
+    unwrap<Order>(api.post(`/admin/orders/${id}/refund-request/approve`, payload || {})),
+  rejectRefundRequest: (id: string, payload?: { adminNote?: string }) =>
+    unwrap<Order>(api.post(`/admin/orders/${id}/refund-request/reject`, payload || {})),
   coupons: async () => {
     const result = await unwrap<Coupon[]>(api.get("/admin/coupons"));
     return result.data;

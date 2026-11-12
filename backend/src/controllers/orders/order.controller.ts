@@ -43,6 +43,11 @@ export const customerOrderController = {
     sendSuccess(res, order, "Order cancelled successfully");
   }),
 
+  requestRefund: asyncHandler(async (req: Request, res: Response) => {
+    const order = await orderService.requestRefund(req.user!.id, req.params.id, req.body);
+    sendSuccess(res, order, "Refund request submitted");
+  }),
+
   cancellationFeedback: asyncHandler(async (req: Request, res: Response) => {
     const order = await orderService.submitCancellationFeedback(req.user!.id, req.params.id, req.body);
     sendSuccess(res, order, "Cancellation feedback saved");
@@ -92,5 +97,15 @@ export const adminOrderController = {
   updateStatus: asyncHandler(async (req: Request, res: Response) => {
     const order = await orderService.updateStatus(req.params.id, req.body);
     sendSuccess(res, order, "Order status updated");
+  }),
+
+  approveRefund: asyncHandler(async (req: Request, res: Response) => {
+    const order = await orderService.approveRefundRequest(req.params.id, req.body?.adminNote);
+    sendSuccess(res, order, "Refund request approved");
+  }),
+
+  rejectRefund: asyncHandler(async (req: Request, res: Response) => {
+    const order = await orderService.rejectRefundRequest(req.params.id, req.body?.adminNote);
+    sendSuccess(res, order, "Refund request rejected");
   }),
 };

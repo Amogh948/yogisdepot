@@ -36,6 +36,24 @@ img {
   height: auto;
 }
 
+/* Square Apple Pay button — only renders in supported Safari / Apple environments. */
+.apple-pay-button {
+  display: inline-block;
+  width: 100%;
+  height: 48px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-appearance: -apple-pay-button;
+  -apple-pay-button-type: plain;
+  -apple-pay-button-style: black;
+}
+
+.apple-pay-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -358,7 +376,7 @@ button {
   }
 }
 
-/* Checkout quote loading — bike loops until tax/totals API settles */
+/* Checkout quote / payment loading — bike loops until APIs settle */
 .yd-checkout-bike--loop {
   animation: yd-checkout-bike-loop 2200ms linear infinite;
 }
@@ -377,12 +395,56 @@ button {
   animation: yd-order-road-scroll 900ms linear infinite;
 }
 
+.yd-checkout-basket-svg {
+  display: block;
+  filter: drop-shadow(0 4px 8px rgba(24, 60, 43, 0.12));
+}
+
+.yd-checkout-destination {
+  animation: yd-checkout-pin-pulse 1400ms ease-in-out infinite;
+}
+
+.yd-checkout-pack-item {
+  margin-left: -1.25rem;
+  animation: yd-checkout-pack-drop 1600ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  animation-delay: var(--pack-delay, 0ms);
+}
+
 @keyframes yd-checkout-bike-loop {
   0% {
     transform: translate3d(-110%, -50%, 0);
   }
   100% {
     transform: translate3d(118%, -50%, 0);
+  }
+}
+
+@keyframes yd-checkout-pack-drop {
+  0% {
+    opacity: 0;
+    transform: translate3d(calc(-50% + 28px), -12px, 0) scale(0.7) rotate(-8deg);
+  }
+  18% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 1;
+    transform: translate3d(-50%, 42px, 0) scale(1) rotate(0deg);
+  }
+  75%,
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, 48px, 0) scale(0.85) rotate(4deg);
+  }
+}
+
+@keyframes yd-checkout-pin-pulse {
+  0%,
+  100% {
+    transform: translateY(-60%) scale(1);
+  }
+  50% {
+    transform: translateY(calc(-60% - 3px)) scale(1.04);
   }
 }
 
@@ -397,7 +459,9 @@ button {
   .yd-checkout-bike--loop .yd-order-bike-wheel,
   .yd-checkout-bike--loop .yd-order-bike-box,
   .yd-checkout-bike--loop .yd-order-bike-rider,
-  .yd-checkout-road--loop {
+  .yd-checkout-road--loop,
+  .yd-checkout-pack-item,
+  .yd-checkout-destination {
     animation: none !important;
   }
 
@@ -409,6 +473,11 @@ button {
 
   .yd-order-confetti {
     opacity: 0 !important;
+  }
+
+  .yd-checkout-pack-item {
+    opacity: 0.85;
+    transform: translate3d(-50%, 36px, 0);
   }
 }
 
